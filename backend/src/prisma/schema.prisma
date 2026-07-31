@@ -1,8 +1,10 @@
-// Minimal Prisma configuration for task 1.2 (backend project bootstrap).
-// The full data model (tasks / deliveries / events / recurring_task_templates /
-// non_business_days / users) is defined in task 1.3 — this file intentionally
-// contains only the generator/datasource blocks so `prisma generate` and other
-// tooling do not error while the schema is still empty.
+// Full domain data model for task 1.3 (Requirements: 9.1, 9.3).
+// Physical shape follows design.md "Physical Data Model" exactly (table/column
+// names, indexes, unique constraints). `non_business_days.date_active_key` is a
+// MySQL STORED GENERATED COLUMN that Prisma cannot express natively, so it is
+// modeled as Unsupported() here; the actual column + unique index are added by
+// hand-editing the generated migration SQL (see design.md Physical Data Model
+// and research.md for the MySQL partial-unique-index workaround).
 
 generator client {
   provider = "prisma-client-js"
@@ -11,4 +13,155 @@ generator client {
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
+}
+
+enum TaskStatus {
+  not_started
+  in_progress
+  done
+  on_hold
+}
+
+enum Priority {
+  high
+  medium
+  low
+}
+
+enum RecurrenceKind {
+  fixed_interval
+  delivery_relative
+}
+
+enum IntervalUnit {
+  day
+  week
+  month
+}
+
+enum NonBusinessDayPolicy {
+  as_is
+  skip
+  next_business_day
+  previous_business_day
+}
+
+enum NonBusinessDaySource {
+  manual
+  external_api
+}
+
+model User {
+  id        String    @id @default(uuid())
+  name      String
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  tasks  Task[]
+  events Event[]
+
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model Delivery {
+  id        String    @id @default(uuid())
+  name      String
+  dueDate   DateTime  @map("due_date")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  tasks           Task[]
+  events          Event[]
+  boundTemplates  RecurringTaskTemplate[]
+
+  @@index([deletedAt])
+  @@map("deliveries")
+}
+
+model Task {
+  id                    String     @id @default(uuid())
+  title                 String
+  status                TaskStatus @default(not_started)
+  priority              Priority
+  memo                  String?    @db.Text
+  deliveryId            String?    @map("delivery_id")
+  isRequiredForDelivery Boolean    @default(false) @map("is_required_for_delivery")
+  parentTaskId          String?    @map("parent_task_id")
+  assigneeUserId        String?    @map("assignee_user_id")
+  sourceTemplateId      String?    @map("source_template_id")
+  scheduledDate         DateTime?  @map("scheduled_date") @db.Date
+  completedAt           DateTime?  @map("completed_at")
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
+  deletedAt             DateTime?  @map("deleted_at")
+
+  delivery       Delivery?               @relation(fields: [deliveryId], references: [id])
+  parentTask     Task?                   @relation("TaskChildren", fields: [parentTaskId], references: [id])
+  childTasks     Task[]                  @relation("TaskChildren")
+  assigneeUser   User?                   @relation(fields: [assigneeUserId], references: [id])
+  sourceTemplate RecurringTaskTemplate?  @relation(fields: [sourceTemplateId], references: [id])
+
+  @@unique([sourceTemplateId, scheduledDate])
+  @@index([deliveryId])
+  @@index([parentTaskId])
+  @@index([completedAt])
+  @@index([deletedAt])
+  @@map("tasks")
+}
+
+model Event {
+  id             String    @id @default(uuid())
+  title          String
+  occursAt       DateTime  @map("occurs_at")
+  deliveryId     String?   @map("delivery_id")
+  assigneeUserId String?   @map("assignee_user_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  delivery     Delivery? @relation(fields: [deliveryId], references: [id])
+  assigneeUser User?     @relation(fields: [assigneeUserId], references: [id])
+
+  @@index([deliveryId])
+  @@index([deletedAt])
+  @@map("events")
+}
+
+model RecurringTaskTemplate {
+  id                   String                @id @default(uuid())
+  title                String
+  priority             Priority
+  kind                 RecurrenceKind
+  intervalUnit         IntervalUnit?         @map("interval_unit")
+  intervalValue        Int?                  @map("interval_value")
+  boundDeliveryId      String?               @map("bound_delivery_id")
+  deliveryOffsetDays   Int?                  @map("delivery_offset_days")
+  defaultMemo          String?               @db.Text @map("default_memo")
+  nonBusinessDayPolicy NonBusinessDayPolicy  @map("non_business_day_policy")
+  isActive             Boolean               @default(true) @map("is_active")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  deletedAt            DateTime?             @map("deleted_at")
+
+  boundDelivery  Delivery? @relation(fields: [boundDeliveryId], references: [id])
+  generatedTasks Task[]
+
+  @@index([deletedAt])
+  @@map("recurring_task_templates")
+}
+
+model NonBusinessDay {
+  id            String                @id @default(uuid())
+  date          DateTime              @db.Date
+  label         String?
+  source        NonBusinessDaySource
+  dateActiveKey Unsupported("date")?  @map("date_active_key")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+  deletedAt     DateTime?             @map("deleted_at")
+
+  @@map("non_business_days")
 }
