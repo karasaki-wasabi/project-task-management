@@ -1,0 +1,14 @@
+// Minimal Prisma configuration for task 1.2 (backend project bootstrap).
+// The full data model (tasks / deliveries / events / recurring_task_templates /
+// non_business_days / users) is defined in task 1.3 — this file intentionally
+// contains only the generator/datasource blocks so `prisma generate` and other
+// tooling do not error while the schema is still empty.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
