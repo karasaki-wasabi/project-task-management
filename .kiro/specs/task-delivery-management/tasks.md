@@ -275,7 +275,7 @@
   - _Depends: 13.1_
 
 - [ ] 16. Integration: 開発段階関連ルートの結線確認
-- [ ] 16.1 development-stagesルートとtasks開発段階ルートの登録確認
+- [x] 16.1 development-stagesルートとtasks開発段階ルートの登録確認
   - development-stagesモジュールと、タスクの開発段階更新エンドポイントをアプリ全体(app.ts)に登録する
   - 実際にサーバーを起動し、両エンドポイントが200番台の応答を返すことを確認できる状態にする
   - _Requirements: 12.1, 12.3_

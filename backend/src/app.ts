@@ -25,6 +25,7 @@ import { holidayRoutes } from "./modules/holidays/holiday.routes.js";
 import { throughputRoutes } from "./modules/throughput/throughput.routes.js";
 import { recurrenceRoutes } from "./modules/recurrence/recurrence.routes.js";
 import { clientErrorRoutes } from "./modules/client-errors/client-error.routes.js";
+import { developmentStageRoutes } from "./modules/development-stages/development-stage.routes.js";
 
 export function buildApp(env: Env = loadEnv(), logger: AppLogger = createLogger(env.LOG_LEVEL)): FastifyInstance {
   const app = Fastify({ logger: false });
@@ -65,6 +66,7 @@ export function buildApp(env: Env = loadEnv(), logger: AppLogger = createLogger(
   app.register(throughputRoutes);
   app.register(recurrenceRoutes);
   app.register(clientErrorRoutes);
+  app.register(developmentStageRoutes);
 
   return app;
 }
