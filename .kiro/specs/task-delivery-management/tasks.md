@@ -8,7 +8,7 @@
   - `docker compose up`でmysqlコンテナが起動し接続確認できることを確認できる状態にする
   - _Requirements: 10.6_
 
-- [ ] 1.2 バックエンドプロジェクトセットアップ
+- [x] 1.2 バックエンドプロジェクトセットアップ
   - Node.js 24 + TypeScript + Fastify + Zod + Prismaの初期構成を作成する(Prismaの`datasource provider`は`mysql`)
   - `app.ts`にFastifyインスタンスを生成し、環境変数(`DATABASE_URL`、`LOG_LEVEL`)を読み込む
   - backendのDockerfile devステージを完成させ、`docker compose up backend`でコンテナが起動することを確認する

@@ -3,9 +3,27 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Placeholder backend entrypoint for Docker scaffolding (task 1.1). Real Fastify/TypeScript/Prisma setup is added in task 1.2.",
+  "description": "Backend API for the task/delivery management app: Node.js 24 + TypeScript + Fastify + Zod + Prisma (task 1.2).",
   "scripts": {
-    "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "dev": "prisma generate && tsx watch src/server.ts",
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.9.0",
+    "fastify": "^5.2.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "prisma": "^6.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  },
+  "prisma": {
+    "schema": "src/prisma/schema.prisma"
   }
 }
