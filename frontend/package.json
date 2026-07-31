@@ -1,0 +1,11 @@
+{
+  "name": "task-delivery-management-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Placeholder frontend entrypoint for Docker scaffolding (task 1.1). Real Nuxt 4.x SPA setup is added in task 1.6.",
+  "scripts": {
+    "dev": "node server.js",
+    "build": "node build.js"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "task-delivery-management-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Placeholder backend entrypoint for Docker scaffolding (task 1.1). Real Fastify/TypeScript/Prisma setup is added in task 1.2.",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js"
+  }
+}
