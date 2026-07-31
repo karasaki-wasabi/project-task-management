@@ -15,7 +15,7 @@
   - `GET /health`エンドポイントがコンテナ経由で200を返すことを確認できる状態にする
   - _Requirements: 10.6_
 
-- [ ] 1.3 全ドメインのPrismaスキーマ定義
+- [x] 1.3 全ドメインのPrismaスキーマ定義
   - `tasks` / `deliveries` / `events` / `recurring_task_templates` / `non_business_days` / `users`のテーブルをdesign.mdの物理データモデル通りに定義する
   - 全テーブルに`created_at`・`updated_at`・`deleted_at`を付与する
   - `non_business_days`に生成カラム`date_active_key`(`deleted_at`がnullのときのみ`date`と同値、それ以外はnull)を定義し、そのカラムにUNIQUE INDEXを設定する(論理削除済みレコードを除いた日付一意性をMySQLで実現する。design.md参照)
