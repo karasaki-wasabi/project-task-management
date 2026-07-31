@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
+import { recurrenceService } from "../recurrence/recurrence.service.js";
 import { deliveriesService } from "./delivery.service.js";
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
@@ -130,5 +131,74 @@ describe("deliveriesService (task 4.1)", () => {
 
   it("returns not_found (404) when deleting a non-existent delivery", async () => {
     await expect(deliveriesService.delete(randomUUID())).rejects.toMatchObject({ statusCode: 404 });
+  });
+});
+
+// RED: create()/updateDueDate() do not call RecurrenceService yet (task
+// 10.1, Requirements 5.3, 5.4).
+describe("deliveriesService <-> RecurrenceService wiring (task 10.1)", () => {
+  it("create() triggers onDeliveryCreated: an active delivery_relative template generates a task instance (Requirement 5.3)", async () => {
+    const template = await recurrenceService.registerTemplate({
+      title: "estimate doc",
+      priority: "high",
+      kind: "delivery_relative",
+      deliveryOffsetDays: 3,
+      nonBusinessDayPolicy: "as_is",
+    });
+
+    const delivery = await deliveriesService.create({ name: "wired release", dueDate: new Date("2036-06-15") });
+
+    const instances = await db.task.findMany({ where: { sourceTemplateId: template.id, deliveryId: delivery.id } });
+    expect(instances).toHaveLength(1);
+    expect(instances[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2036-06-12");
+
+    await db.$executeRawUnsafe("DELETE FROM tasks WHERE id = ?", instances[0].id);
+    await hardDelete("deliveries", [delivery.id]);
+    await db.$executeRawUnsafe("DELETE FROM recurring_task_templates WHERE id = ?", template.id);
+  });
+
+  it("updateDueDate() triggers onDeliveryDueDateChanged: recomputes an incomplete instance's scheduledDate, leaves completed ones alone (Requirement 5.4)", async () => {
+    const template = await recurrenceService.registerTemplate({
+      title: "wired recalculation doc",
+      priority: "low",
+      kind: "delivery_relative",
+      deliveryOffsetDays: 2,
+      nonBusinessDayPolicy: "as_is",
+    });
+    const delivery = await deliveriesService.create({ name: "wired recalculation", dueDate: new Date("2036-07-10") });
+    const [instance] = await db.task.findMany({ where: { sourceTemplateId: template.id, deliveryId: delivery.id } });
+    expect(instance.scheduledDate?.toISOString().slice(0, 10)).toBe("2036-07-08");
+
+    const updated = await deliveriesService.updateDueDate(delivery.id, new Date("2036-07-20"));
+
+    const recalculated = await db.task.findUnique({ where: { id: instance.id } });
+    expect(recalculated?.scheduledDate?.toISOString().slice(0, 10)).toBe("2036-07-18");
+    expect(updated.dueDate.getTime()).toBe(new Date("2036-07-20").getTime());
+
+    await db.$executeRawUnsafe("DELETE FROM tasks WHERE id = ?", instance.id);
+    await hardDelete("deliveries", [delivery.id]);
+    await db.$executeRawUnsafe("DELETE FROM recurring_task_templates WHERE id = ?", template.id);
+  });
+
+  it("updateDueDate() does not change a completed instance's scheduledDate", async () => {
+    const template = await recurrenceService.registerTemplate({
+      title: "wired completed doc",
+      priority: "low",
+      kind: "delivery_relative",
+      deliveryOffsetDays: 1,
+      nonBusinessDayPolicy: "as_is",
+    });
+    const delivery = await deliveriesService.create({ name: "wired completed", dueDate: new Date("2036-08-10") });
+    const [instance] = await db.task.findMany({ where: { sourceTemplateId: template.id, deliveryId: delivery.id } });
+    await db.task.update({ where: { id: instance.id }, data: { status: "done" } });
+
+    await deliveriesService.updateDueDate(delivery.id, new Date("2036-08-20"));
+
+    const unchanged = await db.task.findUnique({ where: { id: instance.id } });
+    expect(unchanged?.scheduledDate?.toISOString().slice(0, 10)).toBe("2036-08-09");
+
+    await db.$executeRawUnsafe("DELETE FROM tasks WHERE id = ?", instance.id);
+    await hardDelete("deliveries", [delivery.id]);
+    await db.$executeRawUnsafe("DELETE FROM recurring_task_templates WHERE id = ?", template.id);
   });
 });

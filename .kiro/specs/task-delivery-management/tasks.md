@@ -141,7 +141,7 @@
   - _Boundary: RecurrenceService_
 
 - [ ] 10. Integration: モジュール間結線とログ計測の組み込み
-- [ ] 10.1 納品作成・納品日変更からのRecurrenceService呼び出し結線
+- [x] 10.1 納品作成・納品日変更からのRecurrenceService呼び出し結線
   - `DeliveriesService.create`実行時に`RecurrenceService.onDeliveryCreated`を呼び出し、納品連動テンプレートに基づくタスクインスタンスが自動生成されるようにする
   - `DeliveriesService.updateDueDate`実行時に`RecurrenceService.onDeliveryDueDateChanged`を呼び出し、未完了の自動生成タスクの予定日が新しい納品日を基準に再計算され、完了済みタスクは変更されないことを確認できる状態にする
   - _Requirements: 5.3, 5.4_
