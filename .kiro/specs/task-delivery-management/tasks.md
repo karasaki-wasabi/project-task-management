@@ -100,7 +100,7 @@
   - _Boundary: HolidaysService_
 
 - [ ] 7. Throughput: 消化数集計
-- [ ] 7.1 (P) ThroughputServiceの実装
+- [x] 7.1 (P) ThroughputServiceの実装
   - 指定期間(週/月)ごとの完了タスク数集計を実装する
   - 直近4期間の単純移動平均によるフォーキャストを算出し、有効な過去期間が2未満の場合は`null`を返すロジックを実装する
   - `GET /api/throughput`エンドポイントを実装し、論理削除されたタスクの有無が過去期間の集計値に影響しないことを確認できる状態にする
