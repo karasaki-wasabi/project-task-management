@@ -1,12 +1,12 @@
 // RecurrenceService: template management (task 9.1) + instance generation
-// (task 9.2, design.md "Backend/recurrence", Requirements 5.1, 5.2, 5.5-5.9,
-// 5.6, 5.7, 8.3-8.7, 9.1-9.4). The actual CALL to onDeliveryCreated/
-// onDeliveryDueDateChanged from DeliveriesService is wired in task 10.1 —
-// this task only implements the methods themselves, exercised directly in
-// tests.
+// (task 9.2) + DeliveriesService wiring support (task 10.1) + business
+// event logging (task 10.2, design.md "Backend/recurrence", Requirements
+// 5.1, 5.2, 5.5-5.9, 5.6, 5.7, 8.3-8.7, 9.1-9.4, 10.2).
+import { randomUUID } from "node:crypto";
 import type { Delivery } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { RRule, type Options as RRuleOptions } from "rrule";
+import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
 import { holidaysService } from "../holidays/holiday.service.js";
 import { formatDateOnly, parseDateOnly } from "../holidays/holiday.repository.js";
@@ -67,7 +67,7 @@ export const recurrenceService = {
     }
   },
 
-  async deleteTemplate(templateId: string): Promise<void> {
+  async deleteTemplate(templateId: string, requestId: string = randomUUID()): Promise<void> {
     try {
       await recurrenceRepository.remove(templateId);
     } catch (error) {
@@ -76,6 +76,7 @@ export const recurrenceService = {
       }
       throw error;
     }
+    businessEventLogger.logBusinessEvent("recurring_task_template.deleted", { requestId, entityId: templateId });
   },
 
   list(): Promise<RecurringTaskTemplate[]> {
@@ -85,7 +86,7 @@ export const recurrenceService = {
   // design.md Batch/Job Contract: fixed_interval only — delivery_relative
   // generation happens exclusively via onDeliveryCreated/
   // onDeliveryDueDateChanged (Requirement 5.1).
-  async generateDueInstances(asOf: Date): Promise<Task[]> {
+  async generateDueInstances(asOf: Date, requestId: string = randomUUID()): Promise<Task[]> {
     const templates = await recurrenceRepository.listActiveByKind("fixed_interval");
     const created: Task[] = [];
 
@@ -95,7 +96,10 @@ export const recurrenceService = {
         const scheduledDate = await resolveScheduledDate(occurrence, template.nonBusinessDayPolicy);
         if (scheduledDate === null) continue; // policy=skip
         const instance = await tryCreateInstance(template, scheduledDate);
-        if (instance) created.push(instance);
+        if (instance) {
+          created.push(instance);
+          logInstanceGenerated(instance, requestId);
+        }
       }
     }
     return created;
@@ -103,7 +107,7 @@ export const recurrenceService = {
 
   // Requirement 5.2, 5.8: one instance per active delivery_relative
   // template, offset from the delivery's dueDate.
-  async onDeliveryCreated(delivery: Delivery): Promise<Task[]> {
+  async onDeliveryCreated(delivery: Delivery, requestId: string = randomUUID()): Promise<Task[]> {
     const templates = await recurrenceRepository.listActiveByKind("delivery_relative");
     const created: Task[] = [];
 
@@ -112,7 +116,10 @@ export const recurrenceService = {
       const scheduledDate = await resolveScheduledDate(parseDateOnly(rawDate), template.nonBusinessDayPolicy);
       if (scheduledDate === null) continue; // policy=skip
       const instance = await tryCreateInstance(template, scheduledDate, delivery.id);
-      if (instance) created.push(instance);
+      if (instance) {
+        created.push(instance);
+        logInstanceGenerated(instance, requestId);
+      }
     }
     return created;
   },
@@ -188,6 +195,12 @@ async function resolveScheduledDate(date: Date, policy: NonBusinessDayPolicy): P
     case "previous_business_day":
       return parseDateOnly(await holidaysService.previousBusinessDay(dateStr));
   }
+}
+
+// Requirement 10.2: recurring task instance generation is a broad-impact
+// business operation.
+function logInstanceGenerated(instance: Task, requestId: string): void {
+  businessEventLogger.logBusinessEvent("recurring_task_instance.generated", { requestId, entityId: instance.id });
 }
 
 async function tryCreateInstance(

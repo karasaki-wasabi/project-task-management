@@ -104,7 +104,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete("/api/tasks/:id", async (request, reply) => {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
-    const result = await tasksService.delete(params.id);
+    const result = await tasksService.delete(params.id, request.id);
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;

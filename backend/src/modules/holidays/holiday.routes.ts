@@ -27,7 +27,7 @@ export async function holidayRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete("/api/holidays/:id", async (request, reply) => {
     const params = parseOrBadRequest(holidayIdParamsSchema, request.params);
-    await holidaysService.remove(params.id);
+    await holidaysService.remove(params.id, request.id);
     reply.status(204).send();
   });
 

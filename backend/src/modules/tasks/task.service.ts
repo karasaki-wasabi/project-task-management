@@ -1,6 +1,9 @@
-// TasksService (task 3.1 core + task 3.2 hierarchy/split, design.md
-// "Backend/tasks", Requirements 1.1-1.6, 2.1-2.4, 7.2, 9.1-9.4).
+// TasksService (task 3.1 core + task 3.2 hierarchy/split + task 10.2
+// business event logging, design.md "Backend/tasks", Requirements 1.1-1.6,
+// 2.1-2.4, 7.2, 9.1-9.4, 10.2).
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { err, ok, type Result } from "../../shared/result.js";
 import { taskRepository } from "./task.repository.js";
 import type { CreateTaskInput, Task, TaskError, TaskListFilter, TaskStatus } from "./task.types.js";
@@ -109,16 +112,17 @@ export const tasksService = {
     }
   },
 
-  async delete(taskId: string): Promise<Result<void, TaskError>> {
+  async delete(taskId: string, requestId: string = randomUUID()): Promise<Result<void, TaskError>> {
     try {
       await taskRepository.delete(taskId);
-      return ok(undefined);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         return err({ type: "not_found", taskId });
       }
       throw error;
     }
+    businessEventLogger.logBusinessEvent("task.deleted", { requestId, entityId: taskId });
+    return ok(undefined);
   },
 
   list(filter: TaskListFilter): Promise<Task[]> {

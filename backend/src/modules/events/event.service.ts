@@ -1,8 +1,11 @@
-// EventsService (task 5.1, design.md "Backend/events", Requirements 4.1-4.3,
-// 7.2, 9.1-9.4). Same throw-based error pattern as UsersService/
-// DeliveriesService (design.md's EventsService interface returns plain
-// Promises, not `Result<T, E>`).
+// EventsService (task 5.1 core + task 10.2 business event logging,
+// design.md "Backend/events", Requirements 4.1-4.3, 7.2, 9.1-9.4, 10.2).
+// Same throw-based error pattern as UsersService/DeliveriesService
+// (design.md's EventsService interface returns plain Promises, not
+// `Result<T, E>`).
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
 import { eventRepository } from "./event.repository.js";
 import type { CreateEventInput, Event, EventListFilter } from "./event.types.js";
@@ -35,7 +38,7 @@ export const eventsService = {
     }
   },
 
-  async delete(eventId: string): Promise<void> {
+  async delete(eventId: string, requestId: string = randomUUID()): Promise<void> {
     try {
       await eventRepository.delete(eventId);
     } catch (error) {
@@ -44,6 +47,7 @@ export const eventsService = {
       }
       throw error;
     }
+    businessEventLogger.logBusinessEvent("event.deleted", { requestId, entityId: eventId });
   },
 
   list(filter: EventListFilter): Promise<Event[]> {

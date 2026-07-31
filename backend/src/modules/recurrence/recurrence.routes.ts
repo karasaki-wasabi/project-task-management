@@ -51,7 +51,7 @@ export async function recurrenceRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete("/api/recurring-templates/:id", async (request, reply) => {
     const params = parseOrBadRequest(templateIdParamsSchema, request.params);
-    await recurrenceService.deleteTemplate(params.id);
+    await recurrenceService.deleteTemplate(params.id, request.id);
     reply.status(204).send();
   });
 
@@ -61,6 +61,6 @@ export async function recurrenceRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/api/recurring-templates/generate-due", async (request) => {
     const body = parseOrBadRequest(generateDueBodySchema, request.body ?? {});
-    return recurrenceService.generateDueInstances(body.asOf ?? new Date());
+    return recurrenceService.generateDueInstances(body.asOf ?? new Date(), request.id);
   });
 }

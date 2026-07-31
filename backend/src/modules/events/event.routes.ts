@@ -32,7 +32,7 @@ export async function eventRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete("/api/events/:id", async (request, reply) => {
     const params = parseOrBadRequest(eventIdParamsSchema, request.params);
-    await eventsService.delete(params.id);
+    await eventsService.delete(params.id, request.id);
     reply.status(204).send();
   });
 
