@@ -30,7 +30,7 @@
   - 更新→`updated_at`が変わること、削除→`deleted_at`が設定され物理行が残ることをテストで確認できる状態にする
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-- [ ] 1.5 ログ基盤の実装
+- [x] 1.5 ログ基盤の実装
   - Pinoロガーを`shared/logger.ts`に構成し、Fastifyの`reqId`をアクセスログ・エラーログ・業務イベントログ共通の相関キーとして使う
   - `onResponse`フックでアクセスログ(メソッド・パス・ステータスコード・応答時間)を出力する
   - `logBusinessEvent`/`logError`ヘルパー関数を実装し、`setErrorHandler`でグローバル例外を捕捉してスタックトレース+`requestId`を記録してから適切なHTTPステータスを返す
