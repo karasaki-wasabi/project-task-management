@@ -108,7 +108,7 @@
   - _Boundary: ThroughputService_
 
 - [ ] 8. Client Errors: フロントエンドエラー受信
-- [ ] 8.1 (P) ClientErrorsServiceの実装
+- [x] 8.1 (P) ClientErrorsServiceの実装
   - フロントエンドから送信されたエラー情報(メッセージ・スタックトレース・発生ページURL)を受け取るServiceを実装する
   - `POST /api/client-errors`エンドポイントを実装し、受信内容がLogging Infrastructure経由でバックエンドと同じ形式のエラーログとして出力されることを確認できる状態にする
   - _Requirements: 10.4_
