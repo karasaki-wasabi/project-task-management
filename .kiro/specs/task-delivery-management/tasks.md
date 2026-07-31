@@ -300,7 +300,7 @@
   - _Boundary: Frontend/kanban_
   - _Depends: 14.1_
 
-- [ ] 17.3 カンバン表示とカード移動の実装
+- [x] 17.3 カンバン表示とカード移動の実装
   - 開発段階が設定されているタスクを、開発段階ごとの列に分けたカンバン形式で表示する(未設定のタスクは対象外とする)
   - カードを別の列にドラッグ操作で移動すると、タスクの開発段階が更新される
   - 担当者未設定のタスクのカードを移動する際は、担当者の選択を求めてから移動を確定する
@@ -350,3 +350,4 @@
 - task 13.1: `non_business_days.date_active_key`(MySQLのSTORED GENERATED COLUMN、task 1.3参照)はPrisma schemaでは`Unsupported("date")`かつ`@@unique`注釈なしで表現されているため、Prisma自身のドリフト検出からは見えない。この状態で無関係なスキーマ変更に対して`npx prisma migrate dev`を実行したところ、生成されたマイグレーションの先頭に`DROP INDEX non_business_days_date_active_key_key ON non_business_days`が混入し、そのまま適用すると非営業日の重複登録防止ルールが無音で無効化されるところだった。既存の`schema.integration.test.ts`の該当テストで検出し、生成されたマイグレーションSQLから該当行を手動で削除、`prisma migrate reset --force`でDBを再構築して解決した。今後、この生成カラムが存在する状態で新しいマイグレーションを`migrate dev`で生成する際は、必ず生成されたSQLに`non_business_days`への意図しないDROP文が混入していないか確認してから適用すること。
 - task 14.1: マスタデータの並び順(`order`)を新規作成時に自動採番する際、「現存する(論理削除されていない)件数」を次の値として使うと、削除後の再作成で既存レコードと`order`が衝突する(例: A(0), B(1)を作成後Aを削除して新規作成すると、件数ベースの採番ではCが1になりBと衝突する)。`order`は現存レコードの最大値+1(`Math.max(-1, ...existing.map(s => s.order)) + 1`)で採番すること。並び順を持つマスタを今後追加する際は同様の採番方式を踏襲する。
 - task 15.1: `Task.developmentStageId`はtask 13.1で実FK制約付きの外部キーとして追加されているため、テストで任意の`randomUUID()`を「存在する開発段階のID」として使うとFK違反(P2003→400)になり意図した成功パスをテストできない。開発段階を参照するテストでは、必ず`db.developmentStage.create(...)`で実レコードを作成してからそのidを使うこと(タスク自体が存在しないことを確認する404テストなど、参照先の実在性が無関係なケースを除く)。
+- task 17.3: カンバンのカード移動は、design.mdで既定とされたブラウザ標準のHTML5 Drag and Drop API(`draggable`属性 + `dragstart`/`dragover.prevent`/`drop`)で実装し、実ブラウザ(Playwrightの`locator.dragTo()`)で列間移動・担当者未設定時の選択ダイアログ表示・担当者設定済みタスクの無プロンプト移動をすべて確認できたため、軽量ライブラリへの切り替えは行わなかった。あわせて、requirements.md/design.mdに明記されていない「タスクが初めて開発段階を持つ経路」について、開発段階マスタの列とは別に「未割り当て」プール(ドラッグ元専用、ドロップ先にはしない)を追加する判断を行った。
