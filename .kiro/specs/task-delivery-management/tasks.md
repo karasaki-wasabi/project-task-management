@@ -70,7 +70,7 @@
   - _Boundary: TasksService_
 
 - [ ] 4. Deliveries: 納品管理
-- [ ] 4.1 (P) DeliveriesServiceの実装
+- [x] 4.1 (P) DeliveriesServiceの実装
   - 納品(名前・納品期日)の登録・納品日更新・一覧・論理削除を実装する(この時点ではRecurrenceServiceへの通知は行わない)
   - タスクを納品に紐付け、必須フラグを設定できるようにする
   - 必須タスクの完了数・未完了数から進捗を算出するAPIを実装し、複数納品が同時に並行して存在できることを確認できる状態にする
@@ -245,3 +245,7 @@
   - フロントエンドから送信したエラーがバックエンドログに同じ形式で記録されることを確認する
   - _Requirements: 10.3, 10.4, 10.5_
   - _Depends: 10.3, 11.7_
+
+## Implementation Notes
+
+- task 4.1: design.mdのDeliveriesService Postconditionsに「削除後もTask/EventはdeliveryIdを保持する」という記載とData Models「Consistency & Integrity」の「deliveryIdをnullに更新する」という記載が矛盾していたため、後者(明示的な理由付きの記述)を正として実装し、design.md側の記載を修正した。今後同様の箇所を実装する際は両セクションの整合性を先に確認すること。
