@@ -3,9 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Placeholder frontend entrypoint for Docker scaffolding (task 1.1). Real Nuxt 4.x SPA setup is added in task 1.6.",
+  "description": "Nuxt 4.x (Vue 3) static SPA frontend for the task/delivery management app (task 1.6).",
   "scripts": {
-    "dev": "node server.js",
-    "build": "node build.js"
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "nuxt": "^4.5.1",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5",
+    "vue-tsc": "^2.2.0"
   }
 }

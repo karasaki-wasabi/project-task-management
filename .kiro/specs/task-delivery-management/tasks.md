@@ -38,7 +38,7 @@
   - 意図的に例外を発生させた際、同一`requestId`でアクセスログとエラーログが出力されることを確認できる状態にする
   - _Requirements: 10.1, 10.3, 10.5, 10.6_
 
-- [ ] 1.6 (P) フロントエンドプロジェクトセットアップ
+- [x] 1.6 (P) フロントエンドプロジェクトセットアップ
   - Nuxt 4.x(Vue 3) + TypeScriptプロジェクトを`ssr: false`の静的SPA構成で初期化する
   - `composables/useApiClient.ts`にバックエンドAPIクライアントの雛形を作成する
   - frontendのDockerfile devステージを完成させ、`docker compose up frontend`でコンテナが起動し初期画面が表示されることを確認できる状態にする
