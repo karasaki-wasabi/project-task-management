@@ -22,6 +22,7 @@ export interface Task {
   parentTaskId?: string | null;
   assigneeUserId?: string | null;
   sourceTemplateId?: string | null;
+  developmentStageId?: string | null;
   scheduledDate?: string | null;
   completedAt?: string | null;
   createdAt: string;
@@ -127,6 +128,12 @@ export interface ThroughputSummary {
   forecastNextPeriodCount: number | null;
 }
 
+export interface DevelopmentStage {
+  id: string;
+  name: string;
+  order: number;
+}
+
 export function useApiClient() {
   const config = useRuntimeConfig();
 
@@ -152,6 +159,11 @@ export function useApiClient() {
       request<Task[]>(`/api/tasks/${id}/split`, { method: "POST", body: { parts } }),
     updateTaskStatus: (id: string, status: TaskStatus) =>
       request<Task>(`/api/tasks/${id}/status`, { method: "PATCH", body: { status } }),
+    updateTaskDevelopmentStage: (id: string, developmentStageId: string | null, assigneeUserId?: string) =>
+      request<Task>(`/api/tasks/${id}/development-stage`, {
+        method: "PATCH",
+        body: { developmentStageId, assigneeUserId },
+      }),
     deleteTask: (id: string) => request<void>(`/api/tasks/${id}`, { method: "DELETE" }),
 
     // Deliveries (design.md "Backend/deliveries" API Contract)
@@ -189,6 +201,17 @@ export function useApiClient() {
     // Throughput (design.md "Backend/throughput" API Contract)
     getThroughput: (periodType: PeriodType, rangeCount: number) =>
       request<ThroughputSummary>("/api/throughput", { query: { periodType, rangeCount } }),
+
+    // Development Stages (design.md "Backend/development-stages" API Contract)
+    listDevelopmentStages: () => request<DevelopmentStage[]>("/api/development-stages"),
+    createDevelopmentStage: (name: string) =>
+      request<DevelopmentStage>("/api/development-stages", { method: "POST", body: { name } }),
+    renameDevelopmentStage: (id: string, name: string) =>
+      request<DevelopmentStage>(`/api/development-stages/${id}`, { method: "PATCH", body: { name } }),
+    reorderDevelopmentStages: (orderedIds: string[]) =>
+      request<DevelopmentStage[]>("/api/development-stages/reorder", { method: "POST", body: { orderedIds } }),
+    deleteDevelopmentStage: (id: string) =>
+      request<void>(`/api/development-stages/${id}`, { method: "DELETE" }),
 
     // Client errors (design.md "Backend/client-errors" API Contract)
     reportClientError: (input: { message: string; stack?: string; pageUrl: string; occurredAt: string }) =>
