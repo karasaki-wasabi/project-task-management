@@ -1,7 +1,7 @@
-// HTTP routes for Tasks (task 3.1, design.md "Backend/tasks" API Contract).
-// `/api/tasks/:id/children` and `/api/tasks/:id/split` are added in task 3.2.
-// Registered into the shared app in task 10.3; standalone Fastify plugin
-// here so this module stays testable in isolation.
+// HTTP routes for Tasks (task 3.1 core + task 3.2 hierarchy/split,
+// design.md "Backend/tasks" API Contract). Registered into the shared app in
+// task 10.3; standalone Fastify plugin here so this module stays testable in
+// isolation.
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
@@ -21,6 +21,7 @@ const createTaskBodySchema = z.object({
   parentTaskId: z.string().optional(),
 });
 const updateStatusBodySchema = z.object({ status: taskStatus });
+const splitBodySchema = z.object({ parts: z.array(createTaskBodySchema) });
 const taskIdParamsSchema = z.object({ id: z.string() });
 const listQuerySchema = z.object({
   deliveryId: z.string().optional(),
@@ -77,6 +78,28 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       return;
     }
     reply.status(200).send(result.value);
+  });
+
+  app.post("/api/tasks/:id/children", async (request, reply) => {
+    const params = parseOrBadRequest(taskIdParamsSchema, request.params);
+    const body = parseOrBadRequest(createTaskBodySchema, request.body);
+    const result = await tasksService.addChild(params.id, body);
+    if (!result.ok) {
+      reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
+      return;
+    }
+    reply.status(201).send(result.value);
+  });
+
+  app.post("/api/tasks/:id/split", async (request, reply) => {
+    const params = parseOrBadRequest(taskIdParamsSchema, request.params);
+    const body = parseOrBadRequest(splitBodySchema, request.body);
+    const result = await tasksService.splitTask(params.id, body.parts);
+    if (!result.ok) {
+      reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
+      return;
+    }
+    reply.status(201).send(result.value);
   });
 
   app.delete("/api/tasks/:id", async (request, reply) => {

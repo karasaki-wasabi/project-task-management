@@ -111,3 +111,92 @@ describe("taskRoutes (task 3.1)", () => {
     await app.close();
   });
 });
+
+// RED: /children and /split routes do not exist yet (task 3.2).
+describe("taskRoutes hierarchy (task 3.2)", () => {
+  it("POST /api/tasks/:id/children creates a child task and returns 201", async () => {
+    const app = await buildTestApp();
+    const parent = await app.inject({ method: "POST", url: "/api/tasks", payload: { title: "parent", priority: "medium" } });
+    const parentId = parent.json().id;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/tasks/${parentId}/children`,
+      payload: { title: "child", priority: "low" },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().parentTaskId).toBe(parentId);
+
+    await hardDeleteTasks([response.json().id, parentId]);
+    await app.close();
+  });
+
+  it("POST /api/tasks/:id/children returns 404 for a non-existent parent", async () => {
+    const app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/tasks/${randomUUID()}/children`,
+      payload: { title: "orphan", priority: "low" },
+    });
+
+    expect(response.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it("POST /api/tasks/:id/split splits a task into parts and returns 201", async () => {
+    const app = await buildTestApp();
+    const original = await app.inject({ method: "POST", url: "/api/tasks", payload: { title: "big", priority: "high" } });
+    const originalId = original.json().id;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/tasks/${originalId}/split`,
+      payload: { parts: [{ title: "part 1", priority: "low" }, { title: "part 2", priority: "low" }] },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const parts = response.json();
+    expect(parts).toHaveLength(2);
+    expect(parts[0].priority).toBe("high");
+
+    await hardDeleteTasks([...parts.map((p: { id: string }) => p.id), originalId]);
+    await app.close();
+  });
+
+  it("POST /api/tasks/:id/split returns 400 when given fewer than 2 parts", async () => {
+    const app = await buildTestApp();
+    const original = await app.inject({ method: "POST", url: "/api/tasks", payload: { title: "small", priority: "low" } });
+    const originalId = original.json().id;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/tasks/${originalId}/split`,
+      payload: { parts: [{ title: "only one", priority: "low" }] },
+    });
+
+    expect(response.statusCode).toBe(400);
+
+    await hardDeleteTasks([originalId]);
+    await app.close();
+  });
+
+  it("PATCH /api/tasks/:id/status returns 409 when the task has an incomplete child", async () => {
+    const app = await buildTestApp();
+    const parent = await app.inject({ method: "POST", url: "/api/tasks", payload: { title: "parent", priority: "medium" } });
+    const parentId = parent.json().id;
+    const child = await app.inject({
+      method: "POST",
+      url: `/api/tasks/${parentId}/children`,
+      payload: { title: "child", priority: "low" },
+    });
+
+    const response = await app.inject({ method: "PATCH", url: `/api/tasks/${parentId}/status`, payload: { status: "done" } });
+
+    expect(response.statusCode).toBe(409);
+
+    await hardDeleteTasks([child.json().id, parentId]);
+    await app.close();
+  });
+});

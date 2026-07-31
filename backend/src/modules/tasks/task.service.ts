@@ -1,6 +1,5 @@
-// TasksService core (task 3.1, design.md "Backend/tasks", Requirements 1.1-
-// 1.6, 7.2, 9.1-9.4). `addChild`/`splitTask` and hierarchy business rules
-// (e.g. rejecting completion with incomplete children) land in task 3.2.
+// TasksService (task 3.1 core + task 3.2 hierarchy/split, design.md
+// "Backend/tasks", Requirements 1.1-1.6, 2.1-2.4, 7.2, 9.1-9.4).
 import { Prisma } from "@prisma/client";
 import { err, ok, type Result } from "../../shared/result.js";
 import { taskRepository } from "./task.repository.js";
@@ -33,6 +32,13 @@ export const tasksService = {
   },
 
   async updateStatus(taskId: string, status: TaskStatus): Promise<Result<Task, TaskError>> {
+    if (status === "done") {
+      const incompleteChildren = await taskRepository.countIncompleteChildren(taskId);
+      if (incompleteChildren > 0) {
+        return err({ type: "incomplete_children", taskId });
+      }
+    }
+
     const completedAt = status === "done" ? new Date() : null;
     try {
       const task = await taskRepository.updateStatus(taskId, status, completedAt);
@@ -40,6 +46,64 @@ export const tasksService = {
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         return err({ type: "not_found", taskId });
+      }
+      throw error;
+    }
+  },
+
+  async addChild(parentTaskId: string, input: CreateTaskInput): Promise<Result<Task, TaskError>> {
+    const parent = await taskRepository.findById(parentTaskId);
+    if (!parent) {
+      return err({ type: "not_found", taskId: parentTaskId });
+    }
+
+    const title = input.title.trim();
+    if (title.length === 0) {
+      return err({ type: "validation_error", message: "title is required" });
+    }
+
+    try {
+      const child = await taskRepository.create({ ...input, title, parentTaskId });
+      return ok(child);
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        return err({ type: "validation_error", message: "deliveryId or assigneeUserId does not exist" });
+      }
+      throw error;
+    }
+  },
+
+  async splitTask(taskId: string, parts: CreateTaskInput[]): Promise<Result<Task[], TaskError>> {
+    if (parts.length < 2) {
+      return err({ type: "validation_error", message: "splitTask requires at least 2 parts" });
+    }
+    for (const part of parts) {
+      if (part.title.trim().length === 0) {
+        return err({ type: "validation_error", message: "title is required for every part" });
+      }
+    }
+
+    const original = await taskRepository.findById(taskId);
+    if (!original) {
+      return err({ type: "not_found", taskId });
+    }
+
+    // design.md TasksService Postconditions: parts inherit the original
+    // task's delivery link and priority, become its children.
+    const inheritedParts = parts.map((part) => ({
+      ...part,
+      title: part.title.trim(),
+      deliveryId: original.deliveryId ?? undefined,
+      priority: original.priority,
+      parentTaskId: taskId,
+    }));
+
+    try {
+      const created = await taskRepository.createMany(inheritedParts);
+      return ok(created);
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        return err({ type: "validation_error", message: "assigneeUserId does not exist" });
       }
       throw error;
     }

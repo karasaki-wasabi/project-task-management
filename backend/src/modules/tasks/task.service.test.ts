@@ -158,3 +158,138 @@ describe("tasksService (task 3.1)", () => {
     expect(result.error.type).toBe("not_found");
   });
 });
+
+// RED: addChild/splitTask do not exist yet (task 3.2, Requirements 2.1-2.4).
+describe("tasksService hierarchy (task 3.2)", () => {
+  it("adds a child task under a parent (Requirement 2.1)", async () => {
+    const parent = await tasksService.create({ title: "parent", priority: "medium" });
+    if (!parent.ok) throw new Error("setup failed");
+
+    const child = await tasksService.addChild(parent.value.id, { title: "child", priority: "low" });
+
+    expect(child.ok).toBe(true);
+    if (!child.ok) return;
+    expect(child.value.parentTaskId).toBe(parent.value.id);
+
+    await hardDeleteTasks([child.value.id, parent.value.id]);
+  });
+
+  it("allows a child to have its own child, i.e. multi-level nesting (Requirement 2.2)", async () => {
+    const grandparent = await tasksService.create({ title: "grandparent", priority: "medium" });
+    if (!grandparent.ok) throw new Error("setup failed");
+    const parent = await tasksService.addChild(grandparent.value.id, { title: "parent", priority: "medium" });
+    if (!parent.ok) throw new Error("setup failed");
+
+    const child = await tasksService.addChild(parent.value.id, { title: "child", priority: "low" });
+
+    expect(child.ok).toBe(true);
+    if (!child.ok) return;
+    expect(child.value.parentTaskId).toBe(parent.value.id);
+
+    await hardDeleteTasks([child.value.id, parent.value.id, grandparent.value.id]);
+  });
+
+  it("returns not_found when adding a child to a non-existent parent", async () => {
+    const result = await tasksService.addChild(randomUUID(), { title: "orphan", priority: "low" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.type).toBe("not_found");
+  });
+
+  it("splits a task into parts that inherit its deliveryId and priority (Requirement 2.3)", async () => {
+    const delivery = await db.delivery.create({ data: { name: `d-${randomUUID()}`, dueDate: new Date() } });
+    const original = await tasksService.create({
+      title: "big task",
+      priority: "high",
+      deliveryId: delivery.id,
+    });
+    if (!original.ok) throw new Error("setup failed");
+
+    const result = await tasksService.splitTask(original.value.id, [
+      { title: "part 1", priority: "low" },
+      { title: "part 2", priority: "low" },
+    ]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(2);
+    for (const part of result.value) {
+      expect(part.parentTaskId).toBe(original.value.id);
+      expect(part.deliveryId).toBe(delivery.id);
+      expect(part.priority).toBe("high");
+    }
+
+    await hardDeleteTasks([...result.value.map((t) => t.id), original.value.id]);
+    await db.$executeRawUnsafe("DELETE FROM deliveries WHERE id = ?", delivery.id);
+  });
+
+  it("rejects splitting into fewer than 2 parts", async () => {
+    const original = await tasksService.create({ title: "small task", priority: "low" });
+    if (!original.ok) throw new Error("setup failed");
+
+    const result = await tasksService.splitTask(original.value.id, [{ title: "only one", priority: "low" }]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.type).toBe("validation_error");
+
+    await hardDeleteTasks([original.value.id]);
+  });
+
+  it("returns not_found when splitting a non-existent task", async () => {
+    const result = await tasksService.splitTask(randomUUID(), [
+      { title: "a", priority: "low" },
+      { title: "b", priority: "low" },
+    ]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.type).toBe("not_found");
+  });
+
+  it("rejects completing a parent task while it has an incomplete child (Requirement 2.4)", async () => {
+    const parent = await tasksService.create({ title: "parent with open child", priority: "medium" });
+    if (!parent.ok) throw new Error("setup failed");
+    const child = await tasksService.addChild(parent.value.id, { title: "unfinished child", priority: "low" });
+    if (!child.ok) throw new Error("setup failed");
+
+    const result = await tasksService.updateStatus(parent.value.id, "done");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({ type: "incomplete_children", taskId: parent.value.id });
+
+    await hardDeleteTasks([child.value.id, parent.value.id]);
+  });
+
+  it("allows completing a parent task once all children are done", async () => {
+    const parent = await tasksService.create({ title: "parent with finished child", priority: "medium" });
+    if (!parent.ok) throw new Error("setup failed");
+    const child = await tasksService.addChild(parent.value.id, { title: "finished child", priority: "low" });
+    if (!child.ok) throw new Error("setup failed");
+    const childDone = await tasksService.updateStatus(child.value.id, "done");
+    if (!childDone.ok) throw new Error("setup failed");
+
+    const result = await tasksService.updateStatus(parent.value.id, "done");
+
+    expect(result.ok).toBe(true);
+
+    await hardDeleteTasks([child.value.id, parent.value.id]);
+  });
+
+  it("still allows completion when children are deleted rather than done", async () => {
+    const parent = await tasksService.create({ title: "parent with deleted child", priority: "medium" });
+    if (!parent.ok) throw new Error("setup failed");
+    const child = await tasksService.addChild(parent.value.id, { title: "removed child", priority: "low" });
+    if (!child.ok) throw new Error("setup failed");
+    const deleted = await tasksService.delete(child.value.id);
+    if (!deleted.ok) throw new Error("setup failed");
+
+    const result = await tasksService.updateStatus(parent.value.id, "done");
+
+    expect(result.ok).toBe(true);
+
+    await hardDeleteTasks([child.value.id, parent.value.id]);
+  });
+});

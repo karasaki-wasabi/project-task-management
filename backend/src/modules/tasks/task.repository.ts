@@ -42,4 +42,36 @@ export const taskRepository = {
       orderBy: { createdAt: "asc" },
     });
   },
+
+  // Soft-deleted children are excluded by the shared `db` client's default
+  // filter, so a deleted (rather than done) child never blocks completion.
+  countIncompleteChildren(parentTaskId: string): Promise<number> {
+    return db.task.count({ where: { parentTaskId, status: { not: "done" } } });
+  },
+
+  // Interactive-transaction callback form; equivalent to the `$transaction([...])`
+  // array form for this client (verified: no `query.create` hook exists on the
+  // soft-delete extension), used here for readability when building the
+  // per-part insert loop.
+  createMany(inputs: CreateTaskInput[]): Promise<Task[]> {
+    return db.$transaction(async (tx) => {
+      const created: Task[] = [];
+      for (const input of inputs) {
+        created.push(
+          await tx.task.create({
+            data: {
+              title: input.title,
+              priority: input.priority,
+              memo: input.memo,
+              deliveryId: input.deliveryId,
+              isRequiredForDelivery: input.deliveryId ? (input.isRequiredForDelivery ?? false) : false,
+              assigneeUserId: input.assigneeUserId,
+              parentTaskId: input.parentTaskId,
+            },
+          }),
+        );
+      }
+      return created;
+    });
+  },
 };
