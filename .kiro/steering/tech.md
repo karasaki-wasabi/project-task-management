@@ -60,5 +60,21 @@ Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロント
 - 認証機能は現時点でOut of Boundary。`User`は名前のみの軽量レコードで、担当者選択リストとしてのみ機能する(将来の認証導入は別スペックで扱い、その際`User`の意味が変わる点はdesign.mdのRevalidation Triggersに明記済み)
 - ログはCloudWatch Logsへのstdout/stderr転送までを対象とし、専用のログ集約・可視化基盤(ELK/Datadog等)は構築しない
 
+### デプロイ範囲: 当面はStage 1まで(2026-07時点の決定)
+
+個人開発・自費運用のため、上記インフラ段階導入方針のうち**Stage 1(S3 + CloudFront + App Runner)を当面のゴールとする**。Stage 2(RDS)・Stage 3(ECS Fargate + IaC)は、チームでの利用が見えてきた段階(会社で借りているサーバーへの相乗りを打診するタイミング等)で再検討する。
+
+**費用試算(2026-07調査、個人利用・低トラフィック前提)**:
+- Stage 1のみ: 月$10〜20程度(主にApp Runnerのアイドル課金。S3/CloudFrontはほぼ無料枠内)
+- 独自ドメインは任意(取らなければ$0。取る場合はRoute 53で年$12前後 + ホストゾーン月$0.50)
+- HTTPS証明書はACMで無料、CloudWatch Logsも個人利用の量なら無料枠内
+- GitHub Actions / GHCRはpublicリポジトリのため無料
+- Stage 2(RDS)は新規アカウントなら最初の12ヶ月無料、その後+$15〜20/月
+- Stage 3は固定費(ALB 月$16〜20、NAT Gateway 月$32)が乗るため要注意。個人規模ならNAT Gatewayを避ける構成にするだけで大きく圧縮できる
+
+**AWS以外の無料代替(将来検討する場合の参考)**:
+- 各パーツを分散: Cloudflare Pages(フロント、常時無料)+ Render(バックエンド、無料枠は15分アイドルで自動停止しコールドスタートあり)+ Aiven(MySQL、常時無料枠)
+- 1台のVMに全部乗せ: Oracle Cloud "Always Free" ARM VM上で今のDocker Compose構成をほぼそのまま稼働可能(常時起動、休眠なし)。無料枠の内容は変動があるため利用直前に要確認
+
 ---
 _Document standards and patterns, not every dependency_
