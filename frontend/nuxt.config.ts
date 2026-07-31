@@ -6,6 +6,12 @@ export default defineNuxtConfig({
   compatibilityDate: "2026-07-31",
   ssr: false,
   devtools: { enabled: true },
+  // Without this, Nuxt auto-registers `components/tasks/TaskNode.vue` as
+  // `<TasksTaskNode>` (directory-prefixed) — found via task 11.x's real
+  // browser verification: `<TaskNode>`/`<AssigneeFilter>` usage across pages
+  // silently rendered as unknown native elements (no build/typecheck error)
+  // until interacted with in an actual browser.
+  components: [{ path: "~/components", pathPrefix: false }],
   // Bind all interfaces on the fixed container-internal port so
   // docker-compose's `${FRONTEND_PORT:-3001}:3001` mapping (see
   // docker-compose.yml) reaches the dev server from the host.

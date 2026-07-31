@@ -131,3 +131,48 @@ describe("app.ts route registration (task 10.3)", () => {
     await app.close();
   });
 });
+
+// RED: CORS is not configured yet. Found via real cross-origin browser
+// testing (task 11.x): the SPA (ssr: false) calls the API directly from the
+// browser, and the frontend/backend containers run on different ports/
+// origins even in local dev — without CORS headers, every browser-originated
+// API call fails with a generic network error (no HTTP status at all),
+// invisible to any test that calls the API directly (curl, `app.inject`,
+// same-origin fetch) rather than through an actual cross-origin browser
+// request. This was undetected until this task's Playwright verification.
+describe("app.ts CORS (found and fixed during task 11.x frontend integration)", () => {
+  it("responds to a cross-origin GET with an Access-Control-Allow-Origin header reflecting the request's Origin", async () => {
+    const { app } = buildTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/users",
+      headers: { origin: "http://localhost:13021" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:13021");
+
+    await app.close();
+  });
+
+  it("responds to a CORS preflight OPTIONS request for a state-changing route", async () => {
+    const { app } = buildTestApp();
+
+    const response = await app.inject({
+      method: "OPTIONS",
+      url: "/api/users",
+      headers: {
+        origin: "http://localhost:13021",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    });
+
+    expect(response.statusCode).toBeLessThan(300);
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:13021");
+    expect(response.headers["access-control-allow-methods"]).toContain("POST");
+
+    await app.close();
+  });
+});
