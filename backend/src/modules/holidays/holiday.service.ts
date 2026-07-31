@@ -1,7 +1,9 @@
 // HolidaysService: manual management (task 6.1) + external-API manual sync
-// (task 6.2, design.md "Backend/holidays", Requirements 8.1, 8.2, 8.8, 8.9,
-// 9.1-9.4).
+// (task 6.2) + business event logging (task 10.2, design.md
+// "Backend/holidays", Requirements 8.1, 8.2, 8.8, 8.9, 9.1-9.4, 10.2).
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { HttpError, badRequest, notFound } from "../../shared/http-errors.js";
 import { fetchJapaneseHolidays, type ExternalHolidayRecord } from "./holiday.external-api.js";
 import { holidayRepository } from "./holiday.repository.js";
@@ -42,7 +44,7 @@ export const holidaysService = {
     }
   },
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, requestId: string = randomUUID()): Promise<void> {
     try {
       await holidayRepository.remove(id);
     } catch (error) {
@@ -51,6 +53,7 @@ export const holidaysService = {
       }
       throw error;
     }
+    businessEventLogger.logBusinessEvent("non_business_day.deleted", { requestId, entityId: id });
   },
 
   list(): Promise<NonBusinessDay[]> {

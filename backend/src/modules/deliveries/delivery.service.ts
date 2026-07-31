@@ -1,6 +1,9 @@
-// DeliveriesService (task 4.1 core + task 10.1 RecurrenceService wiring,
-// design.md "Backend/deliveries", Requirements 3.1-3.7, 5.3, 5.4, 9.1-9.4).
+// DeliveriesService (task 4.1 core + task 10.1 RecurrenceService wiring +
+// task 10.2 business event logging, design.md "Backend/deliveries",
+// Requirements 3.1-3.7, 5.3, 5.4, 9.1-9.4, 10.2).
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
 import { recurrenceService } from "../recurrence/recurrence.service.js";
 import { deliveryRepository } from "./delivery.repository.js";
@@ -15,7 +18,7 @@ function isValidDate(date: Date): boolean {
 }
 
 export const deliveriesService = {
-  async create(input: CreateDeliveryInput): Promise<Delivery> {
+  async create(input: CreateDeliveryInput, requestId: string = randomUUID()): Promise<Delivery> {
     const name = input.name.trim();
     if (name.length === 0) {
       throw badRequest("name is required");
@@ -26,9 +29,11 @@ export const deliveriesService = {
     // design.md DeliveriesService Implementation Notes: past dueDates are
     // allowed (recording deliveries that have already passed).
     const delivery = await deliveryRepository.create({ name, dueDate: input.dueDate });
+    // Requirement 10.2: delivery creation is a broad-impact operation.
+    businessEventLogger.logBusinessEvent("delivery.created", { requestId, entityId: delivery.id });
     // design.md System Flow "繰り返しタスクインスタンス生成(納品連動)":
     // synchronous call, Requirement 5.3.
-    await recurrenceService.onDeliveryCreated(delivery);
+    await recurrenceService.onDeliveryCreated(delivery, requestId);
     return delivery;
   },
 
@@ -71,7 +76,7 @@ export const deliveriesService = {
     };
   },
 
-  async delete(deliveryId: string): Promise<void> {
+  async delete(deliveryId: string, requestId: string = randomUUID()): Promise<void> {
     try {
       await deliveryRepository.delete(deliveryId);
     } catch (error) {
@@ -80,6 +85,7 @@ export const deliveriesService = {
       }
       throw error;
     }
+    businessEventLogger.logBusinessEvent("delivery.deleted", { requestId, entityId: deliveryId });
   },
 
   list(): Promise<Delivery[]> {

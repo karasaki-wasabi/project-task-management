@@ -30,7 +30,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete("/api/users/:id", async (request, reply) => {
     const params = parseOrBadRequest(userIdParamsSchema, request.params);
-    await usersService.delete(params.id);
+    await usersService.delete(params.id, request.id);
     reply.status(204).send();
   });
 }

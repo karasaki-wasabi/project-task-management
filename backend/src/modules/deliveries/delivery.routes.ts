@@ -24,7 +24,7 @@ function parseOrBadRequest<T>(schema: z.ZodType<T>, data: unknown): T {
 export async function deliveryRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/deliveries", async (request, reply) => {
     const body = parseOrBadRequest(createDeliveryBodySchema, request.body);
-    const delivery = await deliveriesService.create(body);
+    const delivery = await deliveriesService.create(body, request.id);
     reply.status(201).send(delivery);
   });
 
@@ -42,7 +42,7 @@ export async function deliveryRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete("/api/deliveries/:id", async (request, reply) => {
     const params = parseOrBadRequest(deliveryIdParamsSchema, request.params);
-    await deliveriesService.delete(params.id);
+    await deliveriesService.delete(params.id, request.id);
     reply.status(204).send();
   });
 

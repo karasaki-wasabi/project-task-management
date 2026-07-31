@@ -1,7 +1,10 @@
-// UsersService (task 2.1, design.md "Backend/users", Requirements 7.1, 7.3,
-// 9.1-9.4). No authentication: this only supports selecting from a list of
-// pre-registered users (Requirement 7.3 / Non-Goal: no login).
+// UsersService (task 2.1 core + task 10.2 business event logging, design.md
+// "Backend/users", Requirements 7.1, 7.3, 9.1-9.4, 10.2). No authentication:
+// this only supports selecting from a list of pre-registered users
+// (Requirement 7.3 / Non-Goal: no login).
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
 import { userRepository } from "./user.repository.js";
 import type { User } from "./user.types.js";
@@ -23,7 +26,7 @@ export const usersService = {
     return userRepository.list();
   },
 
-  async delete(userId: string): Promise<void> {
+  async delete(userId: string, requestId: string = randomUUID()): Promise<void> {
     try {
       await userRepository.delete(userId);
     } catch (error) {
@@ -32,5 +35,6 @@ export const usersService = {
       }
       throw error;
     }
+    businessEventLogger.logBusinessEvent("user.deleted", { requestId, entityId: userId });
   },
 };
