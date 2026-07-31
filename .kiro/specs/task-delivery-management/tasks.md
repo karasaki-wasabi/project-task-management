@@ -23,7 +23,7 @@
   - `docker compose exec backend npx prisma migrate dev`でマイグレーションを実行し、全テーブルがDBに作成されることを確認する
   - _Requirements: 9.1, 9.3_
 
-- [ ] 1.4 共通ソフトデリートRepository規約の実装
+- [x] 1.4 共通ソフトデリートRepository規約の実装
   - レコード更新時に`updated_at`を自動更新する共通処理を実装する
   - 削除操作を物理DELETEではなく`deleted_at`のUPDATEとして実行する共通関数を実装する
   - 一覧・詳細取得系の既定クエリに`deleted_at IS NULL`を自動付与する共通クエリビルダーを実装する
