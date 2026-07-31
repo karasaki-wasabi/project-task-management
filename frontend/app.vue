@@ -3,7 +3,9 @@
     <header class="app-header">
       <strong>Task Delivery Management</strong>
       <nav class="app-nav">
+        <NuxtLink to="/">ダッシュボード</NuxtLink>
         <NuxtLink to="/tasks">タスク</NuxtLink>
+        <NuxtLink to="/kanban">カンバン</NuxtLink>
         <NuxtLink to="/deliveries">納品</NuxtLink>
         <NuxtLink to="/events">タイムライン</NuxtLink>
         <NuxtLink to="/recurrence">繰り返し設定</NuxtLink>
