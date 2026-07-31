@@ -62,12 +62,34 @@ describe("app.ts route registration (task 10.3)", () => {
     ["/api/holidays", "GET"],
     ["/api/throughput?periodType=week&rangeCount=1", "GET"],
     ["/api/recurring-templates", "GET"],
+    ["/api/development-stages", "GET"],
   ] as const)("%s is registered and reachable (not 404)", async (url, method) => {
     const { app } = buildTestApp();
 
     const response = await app.inject({ method, url });
 
     expect(response.statusCode).not.toBe(404);
+    await app.close();
+  });
+
+  it("PATCH /api/tasks/:id/development-stage is registered and reachable (task 16.1)", async () => {
+    const { app } = buildTestApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/tasks",
+      payload: { title: "route-check task", priority: "low" },
+    });
+    const taskId = created.json().id;
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/tasks/${taskId}/development-stage`,
+      payload: { developmentStageId: null },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    await db.$executeRawUnsafe(`DELETE FROM tasks WHERE id = ?`, taskId);
     await app.close();
   });
 
