@@ -115,7 +115,7 @@
   - _Boundary: ClientErrorsService_
 
 - [ ] 9. Recurrence: 繰り返しタスク生成ロジック
-- [ ] 9.1 RecurrenceServiceのテンプレート管理
+- [x] 9.1 RecurrenceServiceのテンプレート管理
   - 固定間隔(`fixed_interval`)・納品連動(`delivery_relative`)のテンプレート登録、停止(`isActive=false`)、論理削除を実装する
   - テンプレートに全インスタンス共通の既定メモと、非営業日該当時の扱い(そのまま登録/登録しない/次営業日/前営業日)を設定できるようにする
   - `POST /api/recurring-templates`・`POST /api/recurring-templates/:id/stop`・`DELETE /api/recurring-templates/:id`を実装し、登録したテンプレートが一覧から取得できることを確認できる状態にする
