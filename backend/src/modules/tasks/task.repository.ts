@@ -29,6 +29,13 @@ export const taskRepository = {
     return db.task.update({ where: { id }, data: { status, completedAt } });
   },
 
+  updateDevelopmentStage(
+    id: string,
+    data: { developmentStageId: string | null; assigneeUserId?: string },
+  ): Promise<Task> {
+    return db.task.update({ where: { id }, data });
+  },
+
   delete(id: string): Promise<Task> {
     return db.task.delete({ where: { id } });
   },
