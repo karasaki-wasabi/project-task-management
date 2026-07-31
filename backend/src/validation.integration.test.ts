@@ -253,3 +253,102 @@ describe("12.7: ログ相関とフロントエンドエラー記録の統合検�
     await app.close();
   });
 });
+
+describe("18.1: 開発段階マスタ削除時のタスク参照解除の統合検証 (Requirement 12.5)", () => {
+  it("deleting a development stage via the real HTTP path resets referencing tasks' developmentStageId to null", async () => {
+    const { app } = buildTestApp();
+
+    const stage = await app
+      .inject({ method: "POST", url: "/api/development-stages", payload: { name: `e2e stage ${randomUUID()}` } })
+      .then((r) => r.json());
+    const task = await app
+      .inject({ method: "POST", url: "/api/tasks", payload: { title: "e2e stage task", priority: "low" } })
+      .then((r) => r.json());
+    await app.inject({
+      method: "PATCH",
+      url: `/api/tasks/${task.id}/development-stage`,
+      payload: { developmentStageId: stage.id },
+    });
+
+    const deleteResponse = await app.inject({ method: "DELETE", url: `/api/development-stages/${stage.id}` });
+    expect(deleteResponse.statusCode).toBe(204);
+
+    const tasksResponse = await app.inject({ method: "GET", url: "/api/tasks" });
+    const updatedTask = tasksResponse.json().find((t: { id: string }) => t.id === task.id);
+    expect(updatedTask.developmentStageId).toBeNull();
+
+    const stagesResponse = await app.inject({ method: "GET", url: "/api/development-stages" });
+    expect(stagesResponse.json().some((s: { id: string }) => s.id === stage.id)).toBe(false);
+
+    await hardDelete("tasks", [task.id]);
+    await hardDelete("development_stages", [stage.id]);
+    await app.close();
+  });
+});
+
+describe("18.2: 開発段階更新時の担当者自動設定ルールの統合検証 (Requirements 12.6, 12.7, 12.8)", () => {
+  it("sets the assignee together with the development stage when the task is unassigned", async () => {
+    const { app } = buildTestApp();
+
+    const user = await app
+      .inject({ method: "POST", url: "/api/users", payload: { name: `e2e user ${randomUUID()}` } })
+      .then((r) => r.json());
+    const stage = await app
+      .inject({ method: "POST", url: "/api/development-stages", payload: { name: `e2e stage ${randomUUID()}` } })
+      .then((r) => r.json());
+    const task = await app
+      .inject({ method: "POST", url: "/api/tasks", payload: { title: "e2e unassigned task", priority: "low" } })
+      .then((r) => r.json());
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/tasks/${task.id}/development-stage`,
+      payload: { developmentStageId: stage.id, assigneeUserId: user.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().developmentStageId).toBe(stage.id);
+    expect(response.json().assigneeUserId).toBe(user.id);
+
+    await hardDelete("tasks", [task.id]);
+    await hardDelete("development_stages", [stage.id]);
+    await hardDelete("users", [user.id]);
+    await app.close();
+  });
+
+  it("does not overwrite an already-assigned task's assignee when only the development stage is moved", async () => {
+    const { app } = buildTestApp();
+
+    const originalAssignee = await app
+      .inject({ method: "POST", url: "/api/users", payload: { name: `e2e original ${randomUUID()}` } })
+      .then((r) => r.json());
+    const otherUser = await app
+      .inject({ method: "POST", url: "/api/users", payload: { name: `e2e other ${randomUUID()}` } })
+      .then((r) => r.json());
+    const stage = await app
+      .inject({ method: "POST", url: "/api/development-stages", payload: { name: `e2e stage ${randomUUID()}` } })
+      .then((r) => r.json());
+    const task = await app
+      .inject({
+        method: "POST",
+        url: "/api/tasks",
+        payload: { title: "e2e already assigned task", priority: "low", assigneeUserId: originalAssignee.id },
+      })
+      .then((r) => r.json());
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/tasks/${task.id}/development-stage`,
+      payload: { developmentStageId: stage.id, assigneeUserId: otherUser.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().developmentStageId).toBe(stage.id);
+    expect(response.json().assigneeUserId).toBe(originalAssignee.id);
+
+    await hardDelete("tasks", [task.id]);
+    await hardDelete("development_stages", [stage.id]);
+    await hardDelete("users", [originalAssignee.id, otherUser.id]);
+    await app.close();
+  });
+});
