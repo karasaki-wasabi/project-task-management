@@ -92,7 +92,7 @@
   - _Requirements: 8.1, 8.2, 9.1, 9.2, 9.3, 9.4_
   - _Boundary: HolidaysService_
 
-- [ ] 6.2 HolidaysServiceの外部祝日API手動同期機能
+- [x] 6.2 HolidaysServiceの外部祝日API手動同期機能
   - ユーザー操作(手動トリガー)でのみ外部祝日APIを呼び出し、取得した祝日を非営業日マスタへ反映する機能を実装する
   - 既存の日付と重複する取得結果をスキップし、新規分のみ`source=external_api`で追加する
   - `POST /api/holidays/sync`エンドポイントを実装し、外部API障害時に既存マスタを変更せず502を返すことを確認できる状態にする

@@ -3,7 +3,7 @@
 // 10.3; this test mounts the plugin on a throwaway Fastify instance.
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../shared/db.js";
 import { holidayRoutes } from "./holiday.routes.js";
 
@@ -84,6 +84,56 @@ describe("holidayRoutes (task 6.1)", () => {
     const response = await app.inject({ method: "DELETE", url: `/api/holidays/${randomUUID()}` });
 
     expect(response.statusCode).toBe(404);
+    await app.close();
+  });
+});
+
+// RED: POST /api/holidays/sync does not exist yet (task 6.2). global.fetch
+// is stubbed rather than hitting the real external API from tests.
+describe("holidayRoutes sync (task 6.2)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("POST /api/holidays/sync adds new holidays returned by the external API", async () => {
+    const date = "2033-02-11";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ [date]: "建国記念の日" }) })),
+    );
+    const app = await buildTestApp();
+
+    const response = await app.inject({ method: "POST", url: "/api/holidays/sync" });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.skippedExisting).toBe(0);
+    expect(body.added.map((h: { date: string }) => h.date)).toContain(date);
+
+    await hardDelete([date]);
+    await app.close();
+  });
+
+  it("POST /api/holidays/sync returns 502 and leaves the master unchanged when the external API fails", async () => {
+    const survivor = "2033-03-03";
+    const seedApp = await buildTestApp();
+    await seedApp.inject({ method: "POST", url: "/api/holidays", payload: { date: survivor } });
+    await seedApp.close();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })),
+    );
+    const app = await buildTestApp();
+
+    const response = await app.inject({ method: "POST", url: "/api/holidays/sync" });
+
+    expect(response.statusCode).toBe(502);
+
+    const listResponse = await app.inject({ method: "GET", url: "/api/holidays" });
+    expect(listResponse.json().some((h: { date: string }) => h.date === survivor)).toBe(true);
+
+    await hardDelete([survivor]);
     await app.close();
   });
 });
