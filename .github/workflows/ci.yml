@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci_root_pw
+          MYSQL_DATABASE: task_delivery_management
+          MYSQL_USER: app_user
+          MYSQL_PASSWORD: ci_app_pw
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci_root_pw"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: mysql://app_user:ci_app_pw@127.0.0.1:3306/task_delivery_management
+      LOG_LEVEL: info
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+
+      - run: npx prisma generate
+
+      - run: npx prisma migrate deploy
+
+      # File-parallelism is disabled: integration tests share the same real
+      # MySQL instance, and running test files concurrently causes
+      # cross-file data races (see .kiro/steering/testing.md).
+      - run: npx vitest run --no-file-parallelism
+
+      - run: npm run build
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      # vitest.config.ts excludes e2e/** (Playwright specs); this only runs
+      # the composable unit tests.
+      - run: npm run test
+
+      - run: npm run generate
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Validates the deployment-target images (Dockerfile "prod" stage)
+      # actually build, independent of the dev-mode images docker-compose
+      # uses locally. Catches Docker-specific build issues the node-native
+      # backend/frontend jobs above can't see.
+      - run: docker build --target prod -t task-delivery-backend:ci ./backend
+      - run: docker build --target prod -t task-delivery-frontend:ci ./frontend
