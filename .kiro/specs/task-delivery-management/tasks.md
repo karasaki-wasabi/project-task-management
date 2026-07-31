@@ -1,7 +1,7 @@
 # Implementation Plan
 
 - [ ] 1. Foundation: 基盤・データモデル・共通インフラ
-- [ ] 1.1 Docker開発環境の基盤構築
+- [x] 1.1 Docker開発環境の基盤構築
   - `docker-compose.yml`にbackend/frontend/mysqlの3サービスを定義する
   - mysqlサービス(MySQL 8.x)にnamed volumeを設定しデータを永続化する
   - backend/frontend用のマルチステージDockerfile(devステージ: bind mount + ホットリロード)の雛形を作成する
