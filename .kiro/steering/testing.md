@@ -33,6 +33,10 @@
 
 `frontend/playwright.config.ts` の `baseURL` は環境変数 `E2E_BASE_URL` で上書き可能。Docker Composeで起動した実際のbackend/frontendに対して実行する(モックサーバーは使わない)。ブラウザバイナリがDockerコンテナ間で永続化されない問題は [[local-dev-pitfalls]] を参照。
 
+### ドラッグ&ドロップ(HTML5 Drag and Drop API)のテスト
+
+カンバンのカード移動(`frontend/pages/kanban/index.vue`、ブラウザ標準のHTML5 Drag and Drop API)は、Playwrightの`locator.dragTo()`で検証できる。ネイティブの`dragstart`/`dragover`/`drop`イベントシーケンスを内部で発行するため、独自にイベントを手動ディスパッチする必要はない。`frontend/e2e/kanban.spec.ts`が実例。ドラッグ元・ドロップ先ともロケータで要素を絞り込んだ上で`sourceLocator.dragTo(targetLocator)`を呼ぶだけでよい。
+
 ## 方針
 
 - サービス層のユニットテストではモックを最小限にし、実DBに対して検証する(このプロジェクトの一貫した選択)。

@@ -15,6 +15,7 @@ const newTitle = ref("");
 const newPriority = ref<Priority>("medium");
 const newMemo = ref("");
 const newAssigneeUserId = ref("");
+const newIsRequiredForDelivery = ref(false);
 const users = ref<User[]>([]);
 
 const splitTarget = ref<Task | null>(null);
@@ -39,11 +40,17 @@ async function createTask() {
     priority: newPriority.value,
     memo: newMemo.value || undefined,
     deliveryId: deliveryId.value || undefined,
+    // Requirement 3.3: only meaningful when the task is linked to a
+    // delivery; found missing entirely from this form while writing task
+    // 18.3's dashboard E2E test (no UI could ever mark a task required,
+    // so a delivery's progress could never show a nonzero requiredTotal).
+    isRequiredForDelivery: deliveryId.value ? newIsRequiredForDelivery.value : undefined,
     // Requirement 7.1: assign to one pre-registered user at creation time.
     assigneeUserId: newAssigneeUserId.value || undefined,
   });
   newTitle.value = "";
   newMemo.value = "";
+  newIsRequiredForDelivery.value = false;
   await load();
 }
 
@@ -101,6 +108,10 @@ onMounted(async () => {
         <option value="">担当者未設定</option>
         <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
       </select>
+      <label v-if="deliveryId">
+        <input v-model="newIsRequiredForDelivery" type="checkbox" />
+        必須タスク
+      </label>
       <button type="submit">タスク登録</button>
     </form>
 
