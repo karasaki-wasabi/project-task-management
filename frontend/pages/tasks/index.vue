@@ -90,32 +90,55 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section>
-    <h1>タスク一覧</h1>
+  <div class="space-y-6">
+    <h1 class="text-xl font-semibold tracking-tight">タスク一覧</h1>
 
     <AssigneeFilter v-model="assigneeUserId" />
-    <p v-if="error" role="alert" style="color: red">{{ error }}</p>
+    <ErrorAlert v-if="error" :message="error" />
 
-    <form @submit.prevent="createTask">
-      <input v-model="newTitle" placeholder="タスク名" required />
-      <select v-model="newPriority">
+    <form
+      class="flex flex-wrap items-center gap-2 rounded-lg bg-white p-4 ring-1 ring-slate-200"
+      @submit.prevent="createTask"
+    >
+      <input
+        v-model="newTitle"
+        placeholder="タスク名"
+        required
+        class="min-w-40 flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <select
+        v-model="newPriority"
+        class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
         <option value="high">高</option>
         <option value="medium">中</option>
         <option value="low">低</option>
       </select>
-      <input v-model="newMemo" placeholder="メモ" />
-      <select v-model="newAssigneeUserId">
+      <input
+        v-model="newMemo"
+        placeholder="メモ"
+        class="min-w-32 flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <select
+        v-model="newAssigneeUserId"
+        class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
         <option value="">担当者未設定</option>
         <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
       </select>
-      <label v-if="deliveryId">
-        <input v-model="newIsRequiredForDelivery" type="checkbox" />
+      <label v-if="deliveryId" class="flex items-center gap-1.5 text-sm text-slate-700">
+        <input v-model="newIsRequiredForDelivery" type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
         必須タスク
       </label>
-      <button type="submit">タスク登録</button>
+      <button
+        type="submit"
+        class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+      >
+        タスク登録
+      </button>
     </form>
 
-    <ul class="task-tree">
+    <ul class="list-none space-y-1">
       <TaskNode
         v-for="task in rootTasks"
         :key="task.id"
@@ -127,27 +150,38 @@ onMounted(async () => {
       />
     </ul>
 
-    <div v-if="splitTarget" class="split-form">
-      <h2>「{{ splitTarget.title }}」を分割</h2>
+    <div v-if="splitTarget" class="space-y-2 rounded-lg bg-white p-4 ring-1 ring-slate-200">
+      <h2 class="text-sm font-semibold text-slate-900">「{{ splitTarget.title }}」を分割</h2>
       <div v-for="(_, index) in splitPartTitles" :key="index">
-        <input v-model="splitPartTitles[index]" placeholder="分割後のタスク名" />
+        <input
+          v-model="splitPartTitles[index]"
+          placeholder="分割後のタスク名"
+          class="w-full max-w-sm rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
       </div>
-      <button type="button" @click="splitPartTitles.push('')">分割項目を追加</button>
-      <button type="button" @click="confirmSplit">分割を実行</button>
-      <button type="button" @click="splitTarget = null">キャンセル</button>
+      <div class="flex gap-2 pt-1">
+        <button
+          type="button"
+          class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          @click="splitPartTitles.push('')"
+        >
+          分割項目を追加
+        </button>
+        <button
+          type="button"
+          class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+          @click="confirmSplit"
+        >
+          分割を実行
+        </button>
+        <button
+          type="button"
+          class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          @click="splitTarget = null"
+        >
+          キャンセル
+        </button>
+      </div>
     </div>
-  </section>
+  </div>
 </template>
-
-<style scoped>
-.task-tree,
-.task-tree ul {
-  list-style: none;
-  padding-left: 1.25rem;
-}
-.split-form {
-  border: 1px solid #ddd;
-  padding: 1rem;
-  margin-top: 1rem;
-}
-</style>

@@ -1,53 +1,36 @@
 <template>
-  <div>
-    <header class="app-header">
-      <strong>Task Delivery Management</strong>
-      <nav class="app-nav">
-        <NuxtLink to="/">ダッシュボード</NuxtLink>
-        <NuxtLink to="/tasks">タスク</NuxtLink>
-        <NuxtLink to="/kanban">カンバン</NuxtLink>
-        <NuxtLink to="/deliveries">納品</NuxtLink>
-        <NuxtLink to="/events">タイムライン</NuxtLink>
-        <NuxtLink to="/recurrence">繰り返し設定</NuxtLink>
-        <NuxtLink to="/throughput">消化数</NuxtLink>
-        <NuxtLink to="/users">ユーザー</NuxtLink>
-      </nav>
+  <div class="min-h-screen bg-slate-50 font-sans text-slate-900">
+    <header class="sticky top-0 z-10 border-b border-slate-200 bg-white">
+      <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
+        <strong class="text-sm font-semibold tracking-tight text-slate-900">Task Delivery Management</strong>
+        <nav class="flex flex-wrap gap-x-1 gap-y-1 text-sm">
+          <NuxtLink
+            v-for="link in navLinks"
+            :key="link.to"
+            :to="link.to"
+            class="rounded-md px-2.5 py-1.5 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            active-class="bg-blue-50 text-blue-700 hover:bg-blue-50"
+          >
+            {{ link.label }}
+          </NuxtLink>
+        </nav>
+      </div>
     </header>
-    <main class="app-main">
+    <main class="mx-auto max-w-6xl px-4 py-6 sm:px-6">
       <NuxtPage />
     </main>
   </div>
 </template>
 
-<style>
-body {
-  font-family: system-ui, sans-serif;
-  margin: 0;
-}
-.app-header {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid #ddd;
-}
-.app-nav {
-  display: flex;
-  gap: 1rem;
-}
-.app-nav a.router-link-active {
-  font-weight: bold;
-}
-.app-main {
-  padding: 1.5rem;
-}
-table {
-  border-collapse: collapse;
-  width: 100%;
-}
-th, td {
-  border: 1px solid #ddd;
-  padding: 0.4rem 0.6rem;
-  text-align: left;
-}
-</style>
+<script setup lang="ts">
+const navLinks = [
+  { to: "/", label: "ダッシュボード" },
+  { to: "/tasks", label: "タスク" },
+  { to: "/kanban", label: "カンバン" },
+  { to: "/deliveries", label: "納品" },
+  { to: "/events", label: "タイムライン" },
+  { to: "/recurrence", label: "繰り返し設定" },
+  { to: "/throughput", label: "消化数" },
+  { to: "/users", label: "ユーザー" },
+];
+</script>

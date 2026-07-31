@@ -33,28 +33,51 @@ onMounted(loadUsers);
 </script>
 
 <template>
-  <section>
-    <h1>ユーザー管理</h1>
+  <div class="space-y-6">
+    <h1 class="text-xl font-semibold tracking-tight">ユーザー管理</h1>
 
-    <form @submit.prevent="createUser">
-      <input v-model="newUserName" placeholder="ユーザー名" required />
-      <button type="submit">登録</button>
+    <form
+      class="flex flex-wrap items-center gap-2 rounded-lg bg-white p-4 ring-1 ring-slate-200"
+      @submit.prevent="createUser"
+    >
+      <input
+        v-model="newUserName"
+        placeholder="ユーザー名"
+        required
+        class="min-w-40 flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <button
+        type="submit"
+        class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+      >
+        登録
+      </button>
     </form>
-    <p v-if="error" role="alert" style="color: red">{{ error }}</p>
+    <ErrorAlert v-if="error" :message="error" />
 
-    <table>
-      <thead>
-        <tr>
-          <th>名前</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="user in users" :key="user.id">
-          <td>{{ user.name }}</td>
-          <td><button @click="deleteUser(user.id)">削除</button></td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
+    <div class="overflow-x-auto rounded-lg bg-white ring-1 ring-slate-200">
+      <table class="w-full text-left text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+            <th class="px-3 py-2 font-medium">名前</th>
+            <th class="px-3 py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="user in users" :key="user.id" class="border-b border-slate-100 last:border-0">
+            <td class="px-3 py-2 font-medium text-slate-900">{{ user.name }}</td>
+            <td class="px-3 py-2">
+              <button
+                type="button"
+                class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                @click="deleteUser(user.id)"
+              >
+                削除
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </template>

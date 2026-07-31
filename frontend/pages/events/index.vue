@@ -52,24 +52,47 @@ onMounted(load);
 </script>
 
 <template>
-  <section>
-    <h1>タスク・イベント タイムライン</h1>
+  <div class="space-y-6">
+    <h1 class="text-xl font-semibold tracking-tight">タスク・イベント タイムライン</h1>
 
     <AssigneeFilter v-model="assigneeUserId" />
 
-    <form @submit.prevent="createEvent">
-      <input v-model="newEventTitle" placeholder="イベント名" required />
-      <input v-model="newEventOccursAt" type="datetime-local" required />
-      <button type="submit">イベント登録</button>
+    <form
+      class="flex flex-wrap items-center gap-2 rounded-lg bg-white p-4 ring-1 ring-slate-200"
+      @submit.prevent="createEvent"
+    >
+      <input
+        v-model="newEventTitle"
+        placeholder="イベント名"
+        required
+        class="min-w-40 flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <input
+        v-model="newEventOccursAt"
+        type="datetime-local"
+        required
+        class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <button
+        type="submit"
+        class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+      >
+        イベント登録
+      </button>
     </form>
 
-    <ul>
-      <li v-for="entry in entries" :key="`${entry.kind}-${entry.id}`" :data-kind="entry.kind">
-        <span class="entry-kind">{{ entry.kind === "task" ? "タスク" : "イベント" }}</span>
-        <time>{{ entry.at }}</time>
-        <span>{{ entry.title }}</span>
-        <span v-if="entry.status">({{ entry.status }})</span>
+    <ul class="space-y-1.5">
+      <li
+        v-for="entry in entries"
+        :key="`${entry.kind}-${entry.id}`"
+        :data-kind="entry.kind"
+        class="flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-slate-200"
+      >
+        <Badge :tone="entry.kind === 'task' ? 'info' : 'neutral'" :label="entry.kind === 'task' ? 'タスク' : 'イベント'" />
+        <time class="text-slate-500">{{ entry.at }}</time>
+        <span class="font-medium text-slate-900">{{ entry.title }}</span>
+        <StatusBadge v-if="entry.status" :status="entry.status" />
       </li>
     </ul>
-  </section>
+  </div>
 </template>
