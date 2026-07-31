@@ -76,12 +76,38 @@ jobs:
 
   docker-build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
-      # Validates the deployment-target images (Dockerfile "prod" stage)
-      # actually build, independent of the dev-mode images docker-compose
-      # uses locally. Catches Docker-specific build issues the node-native
-      # backend/frontend jobs above can't see.
-      - run: docker build --target prod -t task-delivery-backend:ci ./backend
-      - run: docker build --target prod -t task-delivery-frontend:ci ./frontend
+      # Publishing (below) only happens on a push to main, using the
+      # workflow's own auto-issued GITHUB_TOKEN (no PAT needed). On PRs this
+      # still builds both images (target: prod, the deployment artifacts)
+      # without pushing, so PR CI still catches Docker-specific build
+      # breakage the node-native backend/frontend jobs above can't see.
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          target: prod
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ghcr.io/${{ github.repository }}-backend:latest
+            ghcr.io/${{ github.repository }}-backend:${{ github.sha }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          target: prod
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ghcr.io/${{ github.repository }}-frontend:latest
+            ghcr.io/${{ github.repository }}-frontend:${{ github.sha }}
