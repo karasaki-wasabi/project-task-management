@@ -78,7 +78,7 @@
   - _Boundary: DeliveriesService_
 
 - [ ] 5. Events: 非タスクイベント
-- [ ] 5.1 (P) EventsServiceの実装
+- [x] 5.1 (P) EventsServiceの実装
   - イベント(名前・日時)の登録・一覧・論理削除を実装する
   - `assigneeUserId`によるフィルタ付き一覧取得を実装し、イベントに完了/未完了などのタスク用ステータスを持たせないことを確認できる状態にする
   - _Requirements: 4.1, 4.2, 4.3, 7.2, 9.1, 9.2, 9.3, 9.4_
