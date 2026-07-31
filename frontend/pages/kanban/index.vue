@@ -107,134 +107,147 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section>
-    <h1>開発段階マスタ</h1>
+  <div class="space-y-8">
+    <section class="space-y-4">
+      <h1 class="text-xl font-semibold tracking-tight">開発段階マスタ</h1>
 
-    <form @submit.prevent="createStage">
-      <input v-model="newStageName" placeholder="段階名(例: 仕様未確定)" required />
-      <button type="submit">登録</button>
-    </form>
-
-    <ol class="stage-list">
-      <li v-for="(stage, index) in stages" :key="stage.id">
-        <span>{{ stage.name }}</span>
-        <button type="button" :disabled="index === 0" @click="moveStage(index, -1)">↑</button>
-        <button type="button" :disabled="index === stages.length - 1" @click="moveStage(index, 1)">↓</button>
-        <button type="button" @click="renameStage(stage)">名称変更</button>
-        <button type="button" @click="deleteStage(stage.id)">削除</button>
-      </li>
-    </ol>
-
-    <h2>カンバン</h2>
-    <p v-if="stages.length === 0" class="empty-state">開発段階が未登録です。上のフォームから登録してください。</p>
-
-    <div v-if="pendingMove" class="assignee-picker" role="dialog">
-      <p>このタスクは担当者が未設定です。移動と同時に担当者を選択してください。</p>
-      <select v-model="pendingAssigneeUserId">
-        <option value="" disabled>担当者を選択</option>
-        <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
-      </select>
-      <button type="button" :disabled="!pendingAssigneeUserId" @click="confirmPendingMove">確定</button>
-      <button type="button" @click="cancelPendingMove">キャンセル</button>
-    </div>
-
-    <p class="pool-hint">
-      「未割り当て」は開発段階マスタの列ではなく、カードのドラッグ元専用の一時置き場です(ドロップ先にはなりません)。
-    </p>
-    <div class="board">
-      <div class="column unassigned-pool">
-        <h3>未割り当て</h3>
-        <ul
-          class="card-list"
-          @dragover.prevent
+      <form
+        class="flex flex-wrap items-center gap-2 rounded-lg bg-white p-4 ring-1 ring-slate-200"
+        @submit.prevent="createStage"
+      >
+        <input
+          v-model="newStageName"
+          placeholder="段階名(例: 仕様未確定)"
+          required
+          class="min-w-56 flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button
+          type="submit"
+          class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
         >
-          <li
-            v-for="task in unassignedStageTasks"
-            :key="task.id"
-            class="card"
-            draggable="true"
-            :data-task-id="task.id"
-            @dragstart="onDragStart(task.id)"
+          登録
+        </button>
+      </form>
+
+      <ol class="stage-list list-none space-y-1">
+        <li
+          v-for="(stage, index) in stages"
+          :key="stage.id"
+          class="flex items-center gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200"
+        >
+          <span class="flex-1 text-sm font-medium text-slate-900">{{ stage.name }}</span>
+          <button
+            type="button"
+            :disabled="index === 0"
+            class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            @click="moveStage(index, -1)"
           >
-            {{ task.title }}
-          </li>
-        </ul>
+            ↑
+          </button>
+          <button
+            type="button"
+            :disabled="index === stages.length - 1"
+            class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            @click="moveStage(index, 1)"
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            @click="renameStage(stage)"
+          >
+            名称変更
+          </button>
+          <button
+            type="button"
+            class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            @click="deleteStage(stage.id)"
+          >
+            削除
+          </button>
+        </li>
+      </ol>
+    </section>
+
+    <section class="space-y-4">
+      <h2 class="text-lg font-semibold tracking-tight">カンバン</h2>
+      <p v-if="stages.length === 0" class="text-sm text-slate-600">
+        開発段階が未登録です。上のフォームから登録してください。
+      </p>
+
+      <div v-if="pendingMove" class="assignee-picker space-y-3 rounded-lg bg-amber-50 p-4 ring-1 ring-amber-200" role="dialog">
+        <p class="text-sm text-amber-900">このタスクは担当者が未設定です。移動と同時に担当者を選択してください。</p>
+        <div class="flex flex-wrap items-center gap-2">
+          <select
+            v-model="pendingAssigneeUserId"
+            class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="" disabled>担当者を選択</option>
+            <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
+          </select>
+          <button
+            type="button"
+            :disabled="!pendingAssigneeUserId"
+            class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            @click="confirmPendingMove"
+          >
+            確定
+          </button>
+          <button
+            type="button"
+            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            @click="cancelPendingMove"
+          >
+            キャンセル
+          </button>
+        </div>
       </div>
 
-      <div v-for="stage in stages" :key="stage.id" class="column" :data-stage-id="stage.id">
-        <h3>{{ stage.name }}</h3>
-        <ul class="card-list" @dragover.prevent @drop="onDropOnStage(stage.id)">
-          <li
-            v-for="task in tasksForStage(stage.id)"
-            :key="task.id"
-            class="card"
-            draggable="true"
-            :data-task-id="task.id"
-            @dragstart="onDragStart(task.id)"
-          >
-            {{ task.title }}
-            <span v-if="userName(task.assigneeUserId)" class="assignee">({{ userName(task.assigneeUserId) }})</span>
-          </li>
-        </ul>
+      <p class="pool-hint text-sm text-slate-500">
+        「未割り当て」は開発段階マスタの列ではなく、カードのドラッグ元専用の一時置き場です(ドロップ先にはなりません)。
+      </p>
+      <div class="board flex items-start gap-4 overflow-x-auto pb-2">
+        <div class="column unassigned-pool min-w-56 rounded-lg border border-dashed border-slate-300 bg-slate-100 p-3">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">未割り当て</h3>
+          <ul class="card-list min-h-12 list-none space-y-2" @dragover.prevent>
+            <li
+              v-for="task in unassignedStageTasks"
+              :key="task.id"
+              class="card cursor-grab rounded-md bg-white p-2 text-sm ring-1 ring-slate-200"
+              draggable="true"
+              :data-task-id="task.id"
+              @dragstart="onDragStart(task.id)"
+            >
+              {{ task.title }}
+            </li>
+          </ul>
+        </div>
+
+        <div
+          v-for="stage in stages"
+          :key="stage.id"
+          class="column min-w-56 rounded-lg bg-slate-50 p-3"
+          :data-stage-id="stage.id"
+        >
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ stage.name }}</h3>
+          <ul class="card-list min-h-12 list-none space-y-2" @dragover.prevent @drop="onDropOnStage(stage.id)">
+            <li
+              v-for="task in tasksForStage(stage.id)"
+              :key="task.id"
+              class="card cursor-grab rounded-md bg-white p-2 text-sm ring-1 ring-slate-200"
+              draggable="true"
+              :data-task-id="task.id"
+              @dragstart="onDragStart(task.id)"
+            >
+              {{ task.title }}
+              <span v-if="userName(task.assigneeUserId)" class="assignee ml-1 text-xs text-slate-500"
+                >({{ userName(task.assigneeUserId) }})</span
+              >
+            </li>
+          </ul>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
+  </div>
 </template>
-
-<style scoped>
-.stage-list {
-  padding-left: 1.5rem;
-}
-.stage-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0;
-}
-.board {
-  display: flex;
-  gap: 1rem;
-  align-items: flex-start;
-}
-.column {
-  min-width: 220px;
-  background: #f7f7f7;
-  border-radius: 4px;
-  padding: 0.75rem;
-}
-.unassigned-pool {
-  background: #eef2f7;
-  border: 1px dashed #99a;
-}
-.pool-hint {
-  color: #555;
-  font-size: 0.9em;
-}
-.card-list {
-  list-style: none;
-  padding: 0;
-  min-height: 3rem;
-}
-.card {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 0.5rem;
-  margin-bottom: 0.5rem;
-  cursor: grab;
-}
-.assignee {
-  color: #555;
-  font-size: 0.85em;
-}
-.assignee-picker {
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 1rem;
-  margin-bottom: 1rem;
-  background: #fffbe6;
-}
-.empty-state {
-  color: #555;
-}
-</style>

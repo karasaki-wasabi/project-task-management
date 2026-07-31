@@ -16,7 +16,7 @@ test("task list shows status/priority at a glance, and an on_hold task stays in 
 
   const row = page.locator("li", { hasText: title }).first();
   await expect(row).toBeVisible();
-  await expect(row).toContainText("優先度: high");
+  await expect(row).toHaveAttribute("data-priority", "high");
 
   await row.locator("select").selectOption("on_hold");
   await expect(row).toHaveAttribute("data-status", "on_hold");

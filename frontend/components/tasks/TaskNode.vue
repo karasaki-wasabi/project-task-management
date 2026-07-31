@@ -23,21 +23,24 @@ function childrenOf(taskId: string): Task[] {
 </script>
 
 <template>
-  <li :data-task-id="task.id" :data-status="task.status">
-    <div class="task-row">
+  <li :data-task-id="task.id" :data-status="task.status" :data-priority="task.priority" class="py-1">
+    <div class="flex flex-wrap items-center gap-2">
       <button
         v-if="children.length > 0"
         type="button"
-        class="toggle"
+        class="w-4 text-slate-400 hover:text-slate-600"
         :aria-expanded="expanded"
         @click="expanded = !expanded"
       >
         {{ expanded ? "▾" : "▸" }}
       </button>
-      <span class="title">{{ task.title }}</span>
-      <span class="priority" :data-priority="task.priority">優先度: {{ task.priority }}</span>
+      <span v-else class="w-4"></span>
+      <span class="text-sm font-medium text-slate-900">{{ task.title }}</span>
+      <PriorityBadge :priority="task.priority" />
+      <StatusBadge :status="task.status" />
       <select
         :value="task.status"
+        class="rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
         @change="emit('statusChange', task.id, ($event.target as HTMLSelectElement).value as TaskStatus)"
       >
         <option value="not_started">未着手</option>
@@ -45,10 +48,16 @@ function childrenOf(taskId: string): Task[] {
         <option value="done">完了</option>
         <option value="on_hold">保留</option>
       </select>
-      <button type="button" @click="emit('split', task)">分割</button>
+      <button
+        type="button"
+        class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        @click="emit('split', task)"
+      >
+        分割
+      </button>
     </div>
 
-    <ul v-if="expanded && children.length > 0">
+    <ul v-if="expanded && children.length > 0" class="list-none pl-6">
       <TaskNode
         v-for="child in children"
         :key="child.id"
@@ -61,14 +70,3 @@ function childrenOf(taskId: string): Task[] {
     </ul>
   </li>
 </template>
-
-<style scoped>
-.task-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.toggle {
-  cursor: pointer;
-}
-</style>

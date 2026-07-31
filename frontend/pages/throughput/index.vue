@@ -18,44 +18,64 @@ onMounted(load);
 </script>
 
 <template>
-  <section>
-    <h1>消化数ダッシュボード</h1>
+  <div class="space-y-6">
+    <h1 class="text-xl font-semibold tracking-tight">消化数ダッシュボード</h1>
 
-    <form @submit.prevent="load">
-      <label>
+    <form
+      class="flex flex-wrap items-end gap-3 rounded-lg bg-white p-4 ring-1 ring-slate-200"
+      @submit.prevent="load"
+    >
+      <label class="flex flex-col gap-1 text-sm text-slate-700">
         期間種別
-        <select v-model="periodType">
+        <select
+          v-model="periodType"
+          class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
           <option value="week">週</option>
           <option value="month">月</option>
         </select>
       </label>
-      <label>
+      <label class="flex flex-col gap-1 text-sm text-slate-700">
         表示件数
-        <input v-model.number="rangeCount" type="number" min="1" />
+        <input
+          v-model.number="rangeCount"
+          type="number"
+          min="1"
+          class="w-24 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
       </label>
-      <button type="submit">表示</button>
+      <button
+        type="submit"
+        class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+      >
+        表示
+      </button>
     </form>
 
-    <table v-if="summary">
-      <thead>
-        <tr>
-          <th>期間開始</th>
-          <th>期間終了</th>
-          <th>完了数</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="period in summary.periods" :key="period.periodStart">
-          <td>{{ period.periodStart.slice(0, 10) }}</td>
-          <td>{{ period.periodEnd.slice(0, 10) }}</td>
-          <td>{{ period.completedCount }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <div v-if="summary" class="overflow-x-auto rounded-lg bg-white ring-1 ring-slate-200">
+      <table class="w-full text-left text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+            <th class="px-3 py-2 font-medium">期間開始</th>
+            <th class="px-3 py-2 font-medium">期間終了</th>
+            <th class="px-3 py-2 font-medium">完了数</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="period in summary.periods" :key="period.periodStart" class="border-b border-slate-100 last:border-0">
+            <td class="px-3 py-2 text-slate-600">{{ period.periodStart.slice(0, 10) }}</td>
+            <td class="px-3 py-2 text-slate-600">{{ period.periodEnd.slice(0, 10) }}</td>
+            <td class="px-3 py-2 font-medium text-slate-900">{{ period.completedCount }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-    <p v-if="summary && summary.forecastNextPeriodCount !== null">
-      今後の目安: {{ summary.forecastNextPeriodCount }} 件/期間
+    <p v-if="summary && summary.forecastNextPeriodCount !== null" class="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700">
+      今後の目安: <span class="font-semibold">{{ summary.forecastNextPeriodCount }}</span> 件/期間
     </p>
-    <p v-else-if="summary">実績データ不足のため、今後の目安は表示できません。</p>
-  </section>
+    <p v-else-if="summary" class="rounded-lg bg-slate-100 px-4 py-3 text-sm text-slate-600">
+      実績データ不足のため、今後の目安は表示できません。
+    </p>
+  </div>
 </template>

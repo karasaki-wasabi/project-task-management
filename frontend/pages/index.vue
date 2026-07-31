@@ -37,57 +37,62 @@ onMounted(load);
 </script>
 
 <template>
-  <section>
-    <h1>ダッシュボード</h1>
+  <div class="space-y-6">
+    <h1 class="text-xl font-semibold tracking-tight">ダッシュボード</h1>
 
-    <section class="dashboard-section overdue-section">
-      <h2>期限超過・未完了の納品</h2>
-      <p v-if="overdueDeliveries.length === 0" class="empty-state">期限超過の納品はありません。順調です。</p>
+    <section class="rounded-lg bg-red-50 p-4">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-red-700">期限超過・未完了の納品</h2>
+      <p v-if="overdueDeliveries.length === 0" class="mt-2 text-sm text-slate-600">
+        期限超過の納品はありません。順調です。
+      </p>
       <template v-else>
-        <ul>
+        <ul class="mt-3 space-y-2">
           <li v-for="delivery in visibleOverdueDeliveries" :key="delivery.id">
-            <NuxtLink :to="`/tasks?deliveryId=${delivery.id}`">
-              {{ delivery.name }}(納品期日: {{ delivery.dueDate.slice(0, 10) }})
-              — {{ delivery.progress?.requiredCompleted }} / {{ delivery.progress?.requiredTotal }}
+            <NuxtLink
+              :to="`/tasks?deliveryId=${delivery.id}`"
+              class="block rounded-md bg-white px-3 py-2 text-sm shadow-sm ring-1 ring-red-100 hover:ring-red-300"
+            >
+              <span class="font-medium text-slate-900">{{ delivery.name }}</span>
+              <span class="text-slate-500">(納品期日: {{ delivery.dueDate.slice(0, 10) }})</span>
+              <span class="ml-2 text-red-700"
+                >{{ delivery.progress?.requiredCompleted }} / {{ delivery.progress?.requiredTotal }}</span
+              >
             </NuxtLink>
           </li>
         </ul>
-        <NuxtLink v-if="overdueDeliveries.length > DISPLAY_LIMIT" to="/deliveries">
+        <NuxtLink
+          v-if="overdueDeliveries.length > DISPLAY_LIMIT"
+          to="/deliveries"
+          class="mt-3 inline-block text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+        >
           すべての納品を見る({{ overdueDeliveries.length }}件)
         </NuxtLink>
       </template>
     </section>
 
-    <section class="dashboard-section events-section">
-      <h2>直近のイベント</h2>
-      <p v-if="upcomingEvents.length === 0" class="empty-state">直近のイベントはありません。</p>
+    <section class="rounded-lg bg-white p-4 ring-1 ring-slate-200">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">直近のイベント</h2>
+      <p v-if="upcomingEvents.length === 0" class="mt-2 text-sm text-slate-600">直近のイベントはありません。</p>
       <template v-else>
-        <ul>
+        <ul class="mt-3 space-y-2">
           <li v-for="event in visibleUpcomingEvents" :key="event.id">
-            <NuxtLink to="/events">{{ event.title }} — {{ event.occursAt }}</NuxtLink>
+            <NuxtLink
+              to="/events"
+              class="block rounded-md px-3 py-2 text-sm hover:bg-slate-50"
+            >
+              <span class="font-medium text-slate-900">{{ event.title }}</span>
+              <span class="ml-2 text-slate-500">{{ event.occursAt }}</span>
+            </NuxtLink>
           </li>
         </ul>
-        <NuxtLink v-if="upcomingEvents.length > DISPLAY_LIMIT" to="/events">
+        <NuxtLink
+          v-if="upcomingEvents.length > DISPLAY_LIMIT"
+          to="/events"
+          class="mt-3 inline-block text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+        >
           すべてのイベントを見る({{ upcomingEvents.length }}件)
         </NuxtLink>
       </template>
     </section>
-  </section>
+  </div>
 </template>
-
-<style scoped>
-.dashboard-section {
-  margin-bottom: 2rem;
-}
-.overdue-section {
-  background: #fff5f5;
-  padding: 1rem;
-  border-radius: 4px;
-}
-.overdue-section h2 {
-  color: #c0392b;
-}
-.empty-state {
-  color: #555;
-}
-</style>
