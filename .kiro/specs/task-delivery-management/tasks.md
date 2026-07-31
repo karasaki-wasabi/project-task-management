@@ -123,7 +123,7 @@
   - _Depends: 3.1, 6.1_
   - _Boundary: RecurrenceService_
 
-- [ ] 9.2 RecurrenceServiceのインスタンス生成ロジック
+- [x] 9.2 RecurrenceServiceのインスタンス生成ロジック
   - 固定間隔テンプレートについて`rrule`を用いた次回発生日計算からタスクインスタンスを生成する処理を実装する
   - 納品連動テンプレートについて納品日からのオフセット日数でタスクインスタンスを生成する処理を実装する
   - テンプレートの既定メモを生成時にインスタンスの初期メモへコピーし、生成後の個別編集が他インスタンス・テンプレートに影響しないことを実装する
@@ -249,3 +249,4 @@
 ## Implementation Notes
 
 - task 4.1: design.mdのDeliveriesService Postconditionsに「削除後もTask/EventはdeliveryIdを保持する」という記載とData Models「Consistency & Integrity」の「deliveryIdをnullに更新する」という記載が矛盾していたため、後者(明示的な理由付きの記述)を正として実装し、design.md側の記載を修正した。今後同様の箇所を実装する際は両セクションの整合性を先に確認すること。
+- task 9.2: 統合テストは実MySQLを共有し、テスト失敗時にクリーンアップ(hardDelete)がスキップされるとデータが残留し、以降の実行が連鎖的に失敗することがある(特に並列実行時)。テストが原因不明に失敗した場合は、まず対象日付範囲のレコードが残っていないか確認してから再実行すること。

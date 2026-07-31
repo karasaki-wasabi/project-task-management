@@ -459,6 +459,7 @@ interface RecurrenceService {
 - Integration: `onDeliveryCreated`/`onDeliveryDueDateChanged`はDeliveriesServiceから同期呼び出しされる(非同期メッセージングは導入しない、Simplification)。`nonBusinessDayPolicy`が`as_is`以外の場合のみHolidaysServiceを同期呼び出しする
 - Validation: `deliveryOffsetDays`は0以上の整数のみ許可
 - Risks: スケジューラ基盤未定のため、本番運用で自動生成が呼ばれない期間は固定間隔タスクが生成されない(research.md Risks参照)。開発・検証段階では`POST /api/recurring-templates/generate-due`による手動実行で代替できる
+- `fixed_interval`テンプレートの起点日: `recurring_task_templates`に明示的な開始日カラムを設けないため、`rrule`の`dtstart`はテンプレートの`created_at`(日付部分、UTC基準)を起点とする。この起点日自体も`generateDueInstances`の対象に含む(inclusive)ため、テンプレート登録直後に`generateDueInstances`を実行すると登録日当日分のインスタンスが即時生成される
 
 ### Backend/holidays
 
