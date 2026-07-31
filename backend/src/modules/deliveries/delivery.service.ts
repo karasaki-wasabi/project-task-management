@@ -1,9 +1,8 @@
-// DeliveriesService (task 4.1, design.md "Backend/deliveries", Requirements
-// 3.1-3.7, 9.1-9.4). RecurrenceService is not notified from here yet — that
-// wiring is task 10.1's job (design.md "この時点ではRecurrenceServiceへの
-// 通知は行わない" per tasks.md).
+// DeliveriesService (task 4.1 core + task 10.1 RecurrenceService wiring,
+// design.md "Backend/deliveries", Requirements 3.1-3.7, 5.3, 5.4, 9.1-9.4).
 import { Prisma } from "@prisma/client";
 import { badRequest, notFound } from "../../shared/http-errors.js";
+import { recurrenceService } from "../recurrence/recurrence.service.js";
 import { deliveryRepository } from "./delivery.repository.js";
 import type { CreateDeliveryInput, Delivery, DeliveryProgress } from "./delivery.types.js";
 
@@ -26,21 +25,30 @@ export const deliveriesService = {
     }
     // design.md DeliveriesService Implementation Notes: past dueDates are
     // allowed (recording deliveries that have already passed).
-    return deliveryRepository.create({ name, dueDate: input.dueDate });
+    const delivery = await deliveryRepository.create({ name, dueDate: input.dueDate });
+    // design.md System Flow "繰り返しタスクインスタンス生成(納品連動)":
+    // synchronous call, Requirement 5.3.
+    await recurrenceService.onDeliveryCreated(delivery);
+    return delivery;
   },
 
   async updateDueDate(deliveryId: string, dueDate: Date): Promise<Delivery> {
     if (!isValidDate(dueDate)) {
       throw badRequest("dueDate is invalid");
     }
+    let delivery: Delivery;
     try {
-      return await deliveryRepository.updateDueDate(deliveryId, dueDate);
+      delivery = await deliveryRepository.updateDueDate(deliveryId, dueDate);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         throw notFound(`Delivery not found: ${deliveryId}`);
       }
       throw error;
     }
+    // Requirement 5.4: recalculates incomplete auto-generated instances;
+    // completed ones are left untouched (RecurrenceService's own guarantee).
+    await recurrenceService.onDeliveryDueDateChanged(delivery);
+    return delivery;
   },
 
   async getProgress(deliveryId: string): Promise<DeliveryProgress> {
