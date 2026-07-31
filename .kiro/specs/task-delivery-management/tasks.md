@@ -133,7 +133,7 @@
   - _Depends: 9.1_
   - _Boundary: RecurrenceService_
 
-- [ ] 9.3 手動生成トリガーエンドポイントの実装
+- [x] 9.3 手動生成トリガーエンドポイントの実装
   - `POST /api/recurring-templates/generate-due`エンドポイントを実装し、`asOf`省略時は現在時刻を基準にfixed_intervalテンプレートの期日到来分を生成する
   - 同じ`asOf`で複数回呼び出しても重複したタスクが生成されないことを確認できる状態にする
   - _Requirements: 5.1, 5.5, 5.6_
@@ -250,3 +250,4 @@
 
 - task 4.1: design.mdのDeliveriesService Postconditionsに「削除後もTask/EventはdeliveryIdを保持する」という記載とData Models「Consistency & Integrity」の「deliveryIdをnullに更新する」という記載が矛盾していたため、後者(明示的な理由付きの記述)を正として実装し、design.md側の記載を修正した。今後同様の箇所を実装する際は両セクションの整合性を先に確認すること。
 - task 9.2: 統合テストは実MySQLを共有し、テスト失敗時にクリーンアップ(hardDelete)がスキップされるとデータが残留し、以降の実行が連鎖的に失敗することがある(特に並列実行時)。テストが原因不明に失敗した場合は、まず対象日付範囲のレコードが残っていないか確認してから再実行すること。
+- task 9.3: Vitestのデフォルト(ファイル並列実行)では、あるテストファイルのhardDelete(物理DELETE、アプリコード側は使用しない)が、別ファイルで進行中のgenerateDueInstances(全アクティブテンプレートをグローバルスキャン)のread-then-insertと競合し、外部キー制約違反(500)やタイムアウトを引き起こすことがある。本番コードはstop/deleteとも論理削除のみでこの競合は発生しないため機能的な欠陥ではないが、recurrence関連のテストで原因不明の失敗が出た場合は`npx vitest run --no-file-parallelism`で再実行して切り分けること。

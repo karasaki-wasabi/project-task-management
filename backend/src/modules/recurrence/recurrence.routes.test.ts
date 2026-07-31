@@ -137,3 +137,93 @@ describe("recurrenceRoutes (task 9.1)", () => {
     await app.close();
   });
 });
+
+// RED: POST /api/recurring-templates/generate-due does not exist yet
+// (task 9.3, Requirements 5.1, 5.5, 5.6).
+describe("recurrenceRoutes generate-due (task 9.3)", () => {
+  it("generates due instances for fixed_interval templates up to the given asOf and returns them", async () => {
+    const app = await buildTestApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/recurring-templates",
+      payload: {
+        title: "generate-due route template",
+        priority: "low",
+        kind: "fixed_interval",
+        intervalUnit: "day",
+        intervalValue: 1,
+        nonBusinessDayPolicy: "as_is",
+      },
+    });
+    const { id } = created.json();
+    await db.$executeRawUnsafe("UPDATE recurring_task_templates SET created_at = ? WHERE id = ?", new Date("2035-01-01T00:00:00.000Z"), id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/recurring-templates/generate-due",
+      payload: { asOf: "2035-01-03T00:00:00.000Z" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as Array<{ id: string; sourceTemplateId: string }>;
+    const mine = body.filter((t) => t.sourceTemplateId === id);
+    expect(mine).toHaveLength(3);
+
+    await hardDelete(mine.map((t) => t.id));
+    await db.$executeRawUnsafe("DELETE FROM tasks WHERE source_template_id = ?", id);
+    await hardDelete([id]);
+    await app.close();
+  });
+
+  it("is idempotent when called twice with the same asOf", async () => {
+    const app = await buildTestApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/recurring-templates",
+      payload: {
+        title: "idempotent route template",
+        priority: "low",
+        kind: "fixed_interval",
+        intervalUnit: "day",
+        intervalValue: 1,
+        nonBusinessDayPolicy: "as_is",
+      },
+    });
+    const { id } = created.json();
+    await db.$executeRawUnsafe("UPDATE recurring_task_templates SET created_at = ? WHERE id = ?", new Date("2035-02-01T00:00:00.000Z"), id);
+    const payload = { asOf: "2035-02-02T00:00:00.000Z" };
+
+    await app.inject({ method: "POST", url: "/api/recurring-templates/generate-due", payload });
+    await app.inject({ method: "POST", url: "/api/recurring-templates/generate-due", payload });
+
+    const all = await db.task.findMany({ where: { sourceTemplateId: id } });
+    expect(all).toHaveLength(2);
+
+    await db.$executeRawUnsafe("DELETE FROM tasks WHERE source_template_id = ?", id);
+    await hardDelete([id]);
+    await app.close();
+  });
+
+  it("defaults asOf to the current time when omitted", async () => {
+    const app = await buildTestApp();
+
+    const response = await app.inject({ method: "POST", url: "/api/recurring-templates/generate-due", payload: {} });
+
+    expect(response.statusCode).toBe(200);
+    expect(Array.isArray(response.json())).toBe(true);
+    await app.close();
+  });
+
+  it("returns 400 for an invalid asOf", async () => {
+    const app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/recurring-templates/generate-due",
+      payload: { asOf: "not-a-date" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    await app.close();
+  });
+});
