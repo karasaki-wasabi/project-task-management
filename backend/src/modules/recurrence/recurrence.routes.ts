@@ -1,10 +1,10 @@
-// HTTP routes for RecurrenceService template management (task 9.1,
-// design.md "Backend/recurrence" API Contract, plus GET /api/recurring-
-// templates — see recurrence.routes.test.ts header comment for why this
-// list endpoint was added despite not being in design.md's API Contract
-// table). generate-due is added in task 9.3. Registered into the shared
-// app in task 10.3; standalone Fastify plugin here so this module stays
-// testable in isolation.
+// HTTP routes for RecurrenceService template management (task 9.1) + manual
+// generation trigger (task 9.3, design.md "Backend/recurrence" API
+// Contract, plus GET /api/recurring-templates — see
+// recurrence.routes.test.ts header comment for why this list endpoint was
+// added despite not being in design.md's API Contract table). Registered
+// into the shared app in task 10.3; standalone Fastify plugin here so this
+// module stays testable in isolation.
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
@@ -26,6 +26,7 @@ const registerTemplateBodySchema = z.object({
   nonBusinessDayPolicy,
 });
 const templateIdParamsSchema = z.object({ id: z.string() });
+const generateDueBodySchema = z.object({ asOf: z.coerce.date().optional() });
 
 function parseOrBadRequest<T>(schema: z.ZodType<T>, data: unknown): T {
   const result = schema.safeParse(data);
@@ -56,5 +57,10 @@ export async function recurrenceRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/recurring-templates", async () => {
     return recurrenceService.list();
+  });
+
+  app.post("/api/recurring-templates/generate-due", async (request) => {
+    const body = parseOrBadRequest(generateDueBodySchema, request.body ?? {});
+    return recurrenceService.generateDueInstances(body.asOf ?? new Date());
   });
 }
