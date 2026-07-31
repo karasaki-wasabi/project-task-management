@@ -5,7 +5,11 @@
 import { randomUUID } from "node:crypto";
 import type { Delivery } from "@prisma/client";
 import { Prisma } from "@prisma/client";
-import { RRule, type Options as RRuleOptions } from "rrule";
+// `rrule` ships no "exports" map, so Node's native ESM loader (unlike
+// Vitest's transform, which masked this) can't always detect its named CJS
+// exports — import the CJS default and destructure instead.
+import rrulePackage, { type Options as RRuleOptions } from "rrule";
+const { RRule } = rrulePackage;
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
 import { holidaysService } from "../holidays/holiday.service.js";

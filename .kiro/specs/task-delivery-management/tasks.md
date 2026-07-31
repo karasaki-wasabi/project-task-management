@@ -153,7 +153,7 @@
   - _Requirements: 10.2_
   - _Depends: 1.4, 2.1, 3.1, 4.1, 5.1, 6.1, 9.1_
 
-- [ ] 10.3 全モジュールのルート登録とエラーハンドラ結線の確認
+- [x] 10.3 全モジュールのルート登録とエラーハンドラ結線の確認
   - `app.ts`に全モジュール(users/tasks/deliveries/events/holidays/throughput/recurrence/client-errors)のルートを登録する
   - グローバルエラーハンドラが全ルートに適用されていることを確認する
   - 一連のAPI呼び出しを通しで実行し、正常系・異常系ともに期待したレスポンスとログが得られることを確認できる状態にする
@@ -251,3 +251,4 @@
 - task 4.1: design.mdのDeliveriesService Postconditionsに「削除後もTask/EventはdeliveryIdを保持する」という記載とData Models「Consistency & Integrity」の「deliveryIdをnullに更新する」という記載が矛盾していたため、後者(明示的な理由付きの記述)を正として実装し、design.md側の記載を修正した。今後同様の箇所を実装する際は両セクションの整合性を先に確認すること。
 - task 9.2: 統合テストは実MySQLを共有し、テスト失敗時にクリーンアップ(hardDelete)がスキップされるとデータが残留し、以降の実行が連鎖的に失敗することがある(特に並列実行時)。テストが原因不明に失敗した場合は、まず対象日付範囲のレコードが残っていないか確認してから再実行すること。
 - task 9.3: Vitestのデフォルト(ファイル並列実行)では、あるテストファイルのhardDelete(物理DELETE、アプリコード側は使用しない)が、別ファイルで進行中のgenerateDueInstances(全アクティブテンプレートをグローバルスキャン)のread-then-insertと競合し、外部キー制約違反(500)やタイムアウトを引き起こすことがある。本番コードはstop/deleteとも論理削除のみでこの競合は発生しないため機能的な欠陥ではないが、recurrence関連のテストで原因不明の失敗が出た場合は`npx vitest run --no-file-parallelism`で再実行して切り分けること。
+- task 10.3: `rrule`パッケージは`exports`フィールドを持たないCJSパッケージのため、`import { RRule } from "rrule"`はVitest(esbuild変換)配下では動くが、`tsc`のビルドやNode実行時(ESMネイティブローダー)では`SyntaxError: does not provide an export named 'RRule'`で失敗する。テストとビルド(tsc)はどちらもこの問題を検出できず、`docker compose up`で実際にコンテナを起動して初めて発覚した。デフォルトインポート+分割代入(`import rrulePackage from "rrule"; const { RRule } = rrulePackage;`)に修正して解決。`exports`フィールドを持たないCJS依存を追加する際は、テスト・ビルドが通っても実際にアプリを起動して動作確認すること。
