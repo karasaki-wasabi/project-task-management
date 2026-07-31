@@ -92,23 +92,26 @@ model Task {
   parentTaskId          String?    @map("parent_task_id")
   assigneeUserId        String?    @map("assignee_user_id")
   sourceTemplateId      String?    @map("source_template_id")
+  developmentStageId    String?    @map("development_stage_id")
   scheduledDate         DateTime?  @map("scheduled_date") @db.Date
   completedAt           DateTime?  @map("completed_at")
   createdAt             DateTime   @default(now()) @map("created_at")
   updatedAt             DateTime   @updatedAt @map("updated_at")
   deletedAt             DateTime?  @map("deleted_at")
 
-  delivery       Delivery?               @relation(fields: [deliveryId], references: [id])
-  parentTask     Task?                   @relation("TaskChildren", fields: [parentTaskId], references: [id])
-  childTasks     Task[]                  @relation("TaskChildren")
-  assigneeUser   User?                   @relation(fields: [assigneeUserId], references: [id])
-  sourceTemplate RecurringTaskTemplate?  @relation(fields: [sourceTemplateId], references: [id])
+  delivery         Delivery?               @relation(fields: [deliveryId], references: [id])
+  parentTask       Task?                   @relation("TaskChildren", fields: [parentTaskId], references: [id])
+  childTasks       Task[]                  @relation("TaskChildren")
+  assigneeUser     User?                   @relation(fields: [assigneeUserId], references: [id])
+  sourceTemplate   RecurringTaskTemplate?  @relation(fields: [sourceTemplateId], references: [id])
+  developmentStage DevelopmentStage?       @relation(fields: [developmentStageId], references: [id])
 
   @@unique([sourceTemplateId, scheduledDate])
   @@index([deliveryId])
   @@index([parentTaskId])
   @@index([completedAt])
   @@index([deletedAt])
+  @@index([developmentStageId])
   @@map("tasks")
 }
 
@@ -164,4 +167,18 @@ model NonBusinessDay {
   deletedAt     DateTime?             @map("deleted_at")
 
   @@map("non_business_days")
+}
+
+model DevelopmentStage {
+  id        String    @id @default(uuid())
+  name      String
+  order     Int
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  tasks Task[]
+
+  @@index([deletedAt])
+  @@map("development_stages")
 }

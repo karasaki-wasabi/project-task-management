@@ -126,4 +126,19 @@ describe("physical schema (task 1.3)", () => {
     await prisma.task.delete({ where: { id: firstInstance.id } });
     await prisma.recurringTaskTemplate.delete({ where: { id: template.id } });
   });
+
+  it("round-trips a development stage and links it to a task (task 13.1)", async () => {
+    const stage = await prisma.developmentStage.create({ data: { name: `stage-${randomUUID()}`, order: 0 } });
+    const task = await prisma.task.create({
+      data: { title: "stage-linked task", priority: "low", developmentStageId: stage.id },
+    });
+
+    expect(task.developmentStageId).toBe(stage.id);
+    expect(stage.createdAt).toBeInstanceOf(Date);
+    expect(stage.updatedAt).toBeInstanceOf(Date);
+    expect(stage.deletedAt).toBeNull();
+
+    await prisma.task.delete({ where: { id: task.id } });
+    await prisma.developmentStage.delete({ where: { id: stage.id } });
+  });
 });
