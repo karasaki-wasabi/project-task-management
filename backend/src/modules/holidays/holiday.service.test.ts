@@ -124,3 +124,49 @@ describe("holidaysService (task 6.1)", () => {
     expect(previous).toBe(trackedDate(36));
   });
 });
+
+// RED: syncFromExternalApi does not exist yet (task 6.2, Requirements 8.8, 8.9).
+describe("holidaysService.syncFromExternalApi (task 6.2)", () => {
+  it("adds new holidays from the external API with source=external_api", async () => {
+    const a = trackedDate(100);
+    const b = trackedDate(101);
+    const fakeFetch = async () => [
+      { date: a, label: "holiday A" },
+      { date: b, label: "holiday B" },
+    ];
+
+    const result = await holidaysService.syncFromExternalApi(fakeFetch);
+
+    expect(result.skippedExisting).toBe(0);
+    expect(result.added.map((h) => h.date).sort()).toEqual([a, b].sort());
+    expect(result.added.every((h) => h.source === "external_api")).toBe(true);
+  });
+
+  it("skips dates that already exist and only adds the new ones", async () => {
+    const existing = trackedDate(110);
+    const fresh = trackedDate(111);
+    await holidaysService.register({ date: existing, label: "already there" });
+    const fakeFetch = async () => [
+      { date: existing, label: "duplicate" },
+      { date: fresh, label: "new one" },
+    ];
+
+    const result = await holidaysService.syncFromExternalApi(fakeFetch);
+
+    expect(result.skippedExisting).toBe(1);
+    expect(result.added.map((h) => h.date)).toEqual([fresh]);
+  });
+
+  it("returns 502 and leaves the existing master unchanged when the external API fails", async () => {
+    const existing = trackedDate(120);
+    await holidaysService.register({ date: existing, label: "untouched" });
+    const failingFetch = async (): Promise<never> => {
+      throw new Error("network down");
+    };
+
+    await expect(holidaysService.syncFromExternalApi(failingFetch)).rejects.toMatchObject({ statusCode: 502 });
+
+    const list = await holidaysService.list();
+    expect(list.some((h) => h.date === existing)).toBe(true);
+  });
+});

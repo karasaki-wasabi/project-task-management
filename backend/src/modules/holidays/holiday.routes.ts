@@ -1,7 +1,7 @@
-// HTTP routes for Holidays (task 6.1, design.md "Backend/holidays" API
-// Contract). `POST /api/holidays/sync` is added in task 6.2. Registered
-// into the shared app in task 10.3; standalone Fastify plugin here so this
-// module stays testable in isolation.
+// HTTP routes for Holidays (task 6.1 manual management + task 6.2 external
+// sync, design.md "Backend/holidays" API Contract). Registered into the
+// shared app in task 10.3; standalone Fastify plugin here so this module
+// stays testable in isolation.
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
@@ -33,5 +33,9 @@ export async function holidayRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/holidays", async () => {
     return holidaysService.list();
+  });
+
+  app.post("/api/holidays/sync", async () => {
+    return holidaysService.syncFromExternalApi();
   });
 }

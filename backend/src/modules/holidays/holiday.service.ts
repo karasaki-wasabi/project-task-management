@@ -1,8 +1,9 @@
-// HolidaysService manual-management core (task 6.1, design.md
-// "Backend/holidays", Requirements 8.1, 8.2, 9.1-9.4). External-API sync
-// (`syncFromExternalApi`, requirements 8.8/8.9) is added in task 6.2.
+// HolidaysService: manual management (task 6.1) + external-API manual sync
+// (task 6.2, design.md "Backend/holidays", Requirements 8.1, 8.2, 8.8, 8.9,
+// 9.1-9.4).
 import { Prisma } from "@prisma/client";
 import { HttpError, badRequest, notFound } from "../../shared/http-errors.js";
+import { fetchJapaneseHolidays, type ExternalHolidayRecord } from "./holiday.external-api.js";
 import { holidayRepository } from "./holiday.repository.js";
 import type { NonBusinessDay, RegisterNonBusinessDayInput } from "./holiday.types.js";
 
@@ -81,5 +82,36 @@ export const holidaysService = {
       candidate = addDays(candidate, -1);
     }
     return candidate;
+  },
+
+  // Requirements 8.8, 8.9: only ever called from a user-triggered action
+  // (never polled). If the fetch itself fails, the master is left untouched
+  // and a 502 is thrown before any writes happen (Requirement: "外部API障害
+  // 時は既存マスタを変更せず502を返す"). Records that already exist for a
+  // date are skipped, not overwritten.
+  async syncFromExternalApi(
+    fetchHolidays: () => Promise<ExternalHolidayRecord[]> = fetchJapaneseHolidays,
+  ): Promise<{ added: NonBusinessDay[]; skippedExisting: number }> {
+    let records: ExternalHolidayRecord[];
+    try {
+      records = await fetchHolidays();
+    } catch {
+      throw new HttpError(502, "Failed to fetch holidays from the external holiday API");
+    }
+
+    const added: NonBusinessDay[] = [];
+    let skippedExisting = 0;
+    for (const record of records) {
+      try {
+        added.push(await holidayRepository.register({ date: record.date, label: record.label }, "external_api"));
+      } catch (error) {
+        if (isUniqueConstraintViolation(error)) {
+          skippedExisting += 1;
+          continue;
+        }
+        throw error;
+      }
+    }
+    return { added, skippedExisting };
   },
 };
