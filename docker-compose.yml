@@ -41,6 +41,11 @@ services:
       target: dev
     environment:
       NODE_ENV: development
+      # The SPA calls the API from the browser (ssr: false), so this must be
+      # reachable from the host, not the docker-internal service name — the
+      # host-published backend port (task 11.x: found missing, this wiring
+      # was never added when the frontend started making real API calls).
+      NUXT_PUBLIC_API_BASE_URL: http://localhost:${BACKEND_PORT:-3000}
     ports:
       - "${FRONTEND_PORT:-3001}:3001"
     volumes:

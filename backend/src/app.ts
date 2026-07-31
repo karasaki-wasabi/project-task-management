@@ -13,6 +13,7 @@
 // own (task 2.1-9.3 built and tested each in isolation), so registration
 // here is just wiring; `setErrorHandler` below already applies uniformly to
 // every registered route since it is a single Fastify instance.
+import cors from "@fastify/cors";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { loadEnv, type Env } from "./config/env.js";
 import { createLogger, type AppLogger } from "./shared/logger.js";
@@ -27,6 +28,18 @@ import { clientErrorRoutes } from "./modules/client-errors/client-error.routes.j
 
 export function buildApp(env: Env = loadEnv(), logger: AppLogger = createLogger(env.LOG_LEVEL)): FastifyInstance {
   const app = Fastify({ logger: false });
+
+  // The SPA (ssr: false, task 1.6) calls this API directly from the
+  // browser, and frontend/backend run on different origins even in local
+  // dev (separate docker-compose services/ports) — found missing during
+  // task 11.x's real browser verification (curl/app.inject same-origin
+  // calls never exercise this). This is a lightweight, no-auth internal
+  // tool (product.md), so reflecting the request's own Origin rather than
+  // maintaining an allowlist is an acceptable, low-risk default.
+  app.register(cors, {
+    origin: true,
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  });
 
   app.get("/health", async () => {
     return { status: "ok" };

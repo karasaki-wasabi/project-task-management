@@ -40,4 +40,15 @@ export function createClientErrorsService(logger: AppLogger) {
   };
 }
 
-export const clientErrorsService = createClientErrorsService(createLogger(loadEnv().LOG_LEVEL));
+let sharedLogger: AppLogger = createLogger(loadEnv().LOG_LEVEL);
+
+// Test seam (same pattern as shared/business-event-logger.ts, task 10.2):
+// lets an app-level test redirect this module's singleton to a collecting
+// stream to observe the log line a real HTTP call produces, without
+// refactoring `clientErrorsService`'s call sites into a DI factory.
+export function setClientErrorLoggerForTests(logger: AppLogger): void {
+  sharedLogger = logger;
+  clientErrorsService = createClientErrorsService(sharedLogger);
+}
+
+export let clientErrorsService = createClientErrorsService(sharedLogger);
