@@ -156,10 +156,36 @@
 - **Trade-offs**: PostgreSQLが得意とする部分ユニークインデックス(`WHERE`句付きUNIQUE INDEX)がMySQLには存在しないため、`non_business_days`テーブルの「論理削除済みを除いた日付一意制約」は生成カラム(`STORED GENERATED COLUMN`)を使った代替実装が必要になった(design.md Physical Data Model参照)
 - **Follow-up**: Prismaのmigration生成時にMySQLの生成カラム構文(`GENERATED ALWAYS AS (...) STORED`)がサポートされているか実装時に確認する
 
+### Decision: カンバンのドラッグ&ドロップは既定でHTML5標準APIを採用し、UX次第でライブラリ導入も許容する
+- **Context**: 開発段階マスタとカンバン管理(要件12)の追加にあたり、カード移動UIの実装方式を検討した(light discovery、既存フロントエンドはNuxt 4 SPA、外部UIライブラリは未導入)。当初はHTML5標準APIのみに固定する案としたが、ユーザーから「デザイン次第ではライブラリ導入も検討してほしい」とフィードバックがあり、条件付きの判断に見直した
+- **Alternatives Considered**:
+  1. ブラウザ標準のHTML5 Drag and Drop API(`draggable`属性 + `dragstart`/`dragover`/`drop`イベント)
+  2. `vue-draggable-plus`(内部で`SortableJS`を利用、Vue 3対応、ドラッグ中のプレビュー・アニメーション・タッチ操作をサポート)等のVue向けドラッグ&ドロップライブラリを新規導入
+- **Selected Approach**: 既定は1(build)、ただし以下の判断基準に該当する場合は2(adopt)へ切り替えてよい
+- **切り替え判断基準**(実装時にUI/UXデザインを見て判断する):
+  - ドラッグ中に元の位置にプレースホルダーを表示する、カードが滑らかに追従するなど、標準APIの既定の見た目(ゴースト画像・カクつき)では実現しづらい視覚表現が必要になった場合
+  - タッチデバイス(スマートフォン・タブレット)での操作性が要件として重要になった場合(HTML5 Drag and Drop APIはタッチ操作のネイティブサポートが弱い)
+  - 同一列内の並び替えなど、列間移動以外のドラッグ操作が追加で必要になった場合
+- **Rationale**: 実装着手前の設計段階では、実際のUI(見た目・動き)を確定できないため、最小コストな標準APIから始めつつ、実装中に判断基準へ該当したら軽量ライブラリへ切り替えられる余地を残す。過剰な先読みで最初からライブラリを導入する(YAGNI違反)ことも、UXの問題を見て見ぬふりして標準APIに固執することも避ける
+- **Trade-offs**: 切り替え可能性を残すことで、実装時に判断コストが発生する。ライブラリを採用した場合は`frontend/package.json`に新規依存が増える
+- **Follow-up**: 実装時にどちらを選んだか、選んだ理由を`tasks.md`の`## Implementation Notes`に記録する(このプロジェクトの既存の判断ログ運用パターンを踏襲)
+
+### Decision: 開発段階マスタの削除は既存のdeliveries削除パターンを再利用する
+- **Context**: 開発段階マスタ削除時、当該段階が設定されていたタスクの扱いをどう実装するか(要件12.5)
+- **Alternatives Considered**:
+  1. `deliveries`削除時の`Task.deliveryId`null更新と同じトランザクションパターンを`development-stages`削除でも踏襲する
+  2. 新しいイベント駆動の仕組み(削除イベントを発行しTasksServiceが購読する)を導入する
+- **Selected Approach**: 1
+- **Rationale**: 既に承認済みの設計(`deliveries.repository.ts`の`delete`)が同一のトランザクション内FK null更新パターンとして存在し、これを再利用すれば新しい非同期メッセージング基盤を導入せずに済む(design.md Architecture Integration「Existing patterns preserved」参照)
+- **Trade-offs**: なし(既存パターンの純粋な再利用)
+- **Follow-up**: なし
+
 ## Risks & Mitigations
 - リスク: 繰り返しタスク生成のトリガー(スケジューラ)基盤が未定 — 生成ロジックをトリガー非依存の関数として設計し、後からcron/EventBridge等を選択可能にする
 - リスク: `rrule` のメンテナンス頻度低下 — RFC標準準拠のため仕様変更リスクは低いが、実装時に代替ライブラリ(`simple-rrule`等)への切り替えパスを確保する
 - リスク: 納品連動テンプレートの自動生成が意図しない大量タスクを生む可能性 — テンプレートの有効/停止フラグと、生成後のインスタンス個別削除を許可する
+- リスク: HTML5 Drag and Drop APIのPlaywrightでの自動テストは、ネイティブのマウスイベントシーケンス(`dragstart`→`dragover`→`drop`)を明示的にディスパッチする必要があり、通常のクリック操作より実装コストが高い — E2E実装時にPlaywrightの`dragTo()`または手動イベントディスパッチのいずれかを検証し、`.kiro/steering/testing.md`に手順を記録する
+- リスク: 開発段階マスタが空(1件も登録されていない)状態でカンバン画面を開くと表示する列が存在しない — フロントエンドはこの状態で「開発段階が未登録です」等の空状態を表示する(要件12にはこの文言までは規定されていないため、実装時にUI文言を決定する)
 
 ## References
 - [rrule (npm)](https://www.npmjs.com/package/rrule) — 固定間隔繰り返しの標準ライブラリ候補

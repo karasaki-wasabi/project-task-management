@@ -13,6 +13,7 @@
 - 複数の納品が並行して進行する状況を破綻なく扱える
 - 固定間隔および納品連動という2種類の繰り返しタスク生成を型安全に実装する
 - 期間ごとの消化タスク数の可視化と簡易な今後の目安表示を実現する
+- 危険な納品・直近のイベントを横断的に把握できるダッシュボードと、ユーザー定義の開発段階に基づくカンバン管理を実現する
 
 ### Non-Goals
 - タスクの重さ(見積もり工数)の自動算出(requirements.md Out of scope)
@@ -32,6 +33,8 @@
 - 期間ごとの消化タスク数の集計ロジックと簡易フォーキャスト算出
 - APIアクセスログ・業務イベントログ・サーバーエラーログ・フロントエンドエラーログの構造化出力とリクエストID相関
 - 担当ユーザー(名前のみの軽量レコード)の管理とタスク・イベントへの割り当て・絞り込み
+- 開発段階マスタ(名称・並び順のユーザー定義)の管理と、タスクへの開発段階の任意紐付け・カンバン形式での表示/移動
+- 危険な納品・直近イベントを横断表示するダッシュボード(既存の納品進捗・イベント一覧ロジックの表示側集約のみ)
 
 ### Out of Boundary
 - ユーザー認証・ログインセッション管理(将来別スペックで扱う)
@@ -42,6 +45,8 @@
 - ログの長期保管ポリシー・監査要件対応
 - 繰り返しタスク生成のスケジューリング実行基盤(cron/EventBridge等のインフラ選定)
 - AWSへのデプロイ構成そのもの(steering `tech.md` の段階的インフラ計画に従う。本スペックはアプリケーションが将来その計画に乗ることを前提にするのみ)
+- 開発段階マスタの見た目カスタマイズ(色・アイコン等)。名称と並び順のみを対象とする
+- 「今このブラウザを使っているのは誰か」を推測・記憶する仕組み(認証なしのため、担当者はカード移動の都度明示的に選択する)
 
 ### Allowed Dependencies
 - steering `tech.md` に記載の段階的AWSデプロイ方針(S3/CloudFront、App Runner、将来のRDS/ECS Fargate)
@@ -49,11 +54,13 @@
 - 日本の祝日を提供する外部API(手動同期トリガー時のみ呼び出す、具体候補はresearch.md参照)
 - App Runnerが標準で提供するCloudWatch Logsへのstdout/stderr転送(追加のログ収集エージェントは導入しない)
 - ローカル開発用のDocker Compose環境(backend/frontend/mysqlの3コンテナ)。本番のコンテナ/インフラ構成そのものはOut of Boundaryのまま
+- カンバンのカード移動UI: 既定はブラウザ標準のHTML5 Drag and Dropイベント。ただし実装時のUI/UX判断により、軽量なドラッグ&ドロップライブラリ(例: `vue-draggable-plus`)を採用してもよい(判断基準はresearch.md参照)
 
 ### Revalidation Triggers
 - `Task` / `Delivery` / `RecurringTaskTemplate` のデータ契約(フィールド追加・削除・意味変更)
 - 繰り返しタスク生成ロジックのトリガー方式が確定した場合(呼び出し契約が固まるため)
-- 認証機能を別スペックで追加する場合(`User` の扱いが「担当者選択リスト」から「ログイン主体」へ変わるため)
+- 認証機能を別スペックで追加する場合(`User` の扱いが「担当者選択リスト」から「ログイン主体」へ変わるため。あわせてカンバンの担当者選択UXも自動アサインへ見直す余地が生まれる)
+- 開発段階マスタに名称・並び順以外の属性(色・アイコン等)を追加する場合
 
 ## Architecture
 
@@ -61,9 +68,9 @@
 
 **Architecture Integration**:
 - Selected pattern: レイヤードアーキテクチャ(Controller → Service → Repository)。個人開発規模でテスタビリティと型安全性を両立できるため採用(`research.md` Architecture Pattern Evaluation参照)
-- Domain/feature boundaries: バックエンドを `tasks` / `deliveries` / `events` / `recurrence` / `holidays` / `throughput` / `users` の7モジュールに分割し、モジュール間は各モジュールが公開する Service インターフェース経由でのみ連携する
-- Existing patterns preserved: なし(greenfieldのため新規確立)
-- New components rationale: 各モジュールは要件の1〜複数のRequirementに対応する独立した責務境界を持つ(下表参照)。非営業日マスタは複数機能から参照されうる横断的なマスタデータであるため、`recurrence` から独立した `holidays` モジュールとして切り出す
+- Domain/feature boundaries: バックエンドを `tasks` / `deliveries` / `events` / `recurrence` / `holidays` / `throughput` / `users` / `development-stages` の8モジュールに分割し、モジュール間は各モジュールが公開する Service インターフェース経由でのみ連携する
+- Existing patterns preserved: `development-stages` は `holidays` と同じ「ユーザー定義マスタ + カンバン列の並び順」パターンに従う。マスタ削除時に参照側(`Task.developmentStageId`)をnullへ更新する処理は、`deliveries`削除時の`Task.deliveryId`null更新と同じ実装パターン(Data Models「Consistency & Integrity」参照)
+- New components rationale: 各モジュールは要件の1〜複数のRequirementに対応する独立した責務境界を持つ(下表参照)。非営業日マスタは複数機能から参照されうる横断的なマスタデータであるため、`recurrence` から独立した `holidays` モジュールとして切り出す。開発段階マスタも同様の理由で `tasks` から独立した `development-stages` モジュールとして切り出す(タスクへの紐付けは`tasks`モジュールが`Task.developmentStageId`として保持する)
 - Steering compliance: tech.md の段階的AWSデプロイ方針(フロント/バックエンド分離)に沿い、フロントエンドを静的SPA、バックエンドをAPIサーバーとして分離する
 
 ```mermaid
@@ -80,6 +87,7 @@ graph TB
         HolidaysService[Holidays Service]
         ThroughputService[Throughput Service]
         UsersService[Users Service]
+        DevelopmentStagesService[Development Stages Service]
         ClientErrorsService[Client Errors Service]
         Logging[Logging Infrastructure]
         Repository[Prisma Repository Layer]
@@ -95,6 +103,7 @@ graph TB
     ApiRoutes --> HolidaysService
     ApiRoutes --> ThroughputService
     ApiRoutes --> UsersService
+    ApiRoutes --> DevelopmentStagesService
     ApiRoutes --> ClientErrorsService
     TasksService --> Logging
     DeliveriesService --> Logging
@@ -111,6 +120,7 @@ graph TB
     DeliveriesService --> RecurrenceService
     ThroughputService --> Repository
     UsersService --> Repository
+    DevelopmentStagesService --> Repository
     Repository --> DB
 ```
 
@@ -125,6 +135,7 @@ graph TB
 | Recurrence Library | rrule 2.x | 固定間隔(毎日/毎週/毎月)の繰り返し日程計算 | build-vs-adopt: adopt(research.md参照) |
 | Logging | Pino(Fastify標準統合) + pino-pretty(開発時) | APIアクセスログ・業務イベントログ・エラーログの構造化出力 | 本番はJSONのままstdoutへ出力しApp Runner経由でCloudWatch Logsへ転送 |
 | Local Dev Runtime | Docker Compose(backend/frontend/mysqlの3サービス) | ホストのNode.jsバージョンに依存せずNode 24環境を再現し、開発者間・将来のWSL移行後でも同一の起動手順を保証する | backend/frontendはマルチステージDockerfile(dev: bind mount + ホットリロード、prod: 将来のApp Runnerイメージデプロイ/静的ビルド用)を持つ。詳細はFile Structure Plan参照 |
+| Kanban Drag & Drop | 既定: ブラウザ標準HTML5 Drag and Drop API / 条件付き: 軽量ライブラリ(例: `vue-draggable-plus`) | カンバンのカード列間移動UI | build-vs-adopt: 既定はbuild(標準イベントで開始)。実装時に見た目・操作性(ドラッグ中のプレビュー表示、タッチデバイス対応等)がUXの障害になると判断した場合は、軽量ライブラリの導入に切り替えてよい(判断基準・比較はresearch.md参照。採用した場合はtasks.md Implementation Notesに理由を記録する) |
 
 ## File Structure Plan
 
@@ -135,10 +146,10 @@ backend/
 ├── Dockerfile                    # マルチステージ(dev: bind mount + ホットリロード、prod: 将来のApp Runnerイメージ用ビルド)
 ├── src/
 │   ├── modules/
-│   │   ├── tasks/              # タスク登録・一覧・階層・分割・状態・優先度・メモ (Req 1, 2)
-│   │   │   ├── task.types.ts   # Task/TaskStatus/Priority 型定義
+│   │   ├── tasks/              # タスク登録・一覧・階層・分割・状態・優先度・メモ・開発段階紐付け (Req 1, 2, 12)
+│   │   │   ├── task.types.ts   # Task/TaskStatus/Priority 型定義(developmentStageIdを含む)
 │   │   │   ├── task.repository.ts
-│   │   │   ├── task.service.ts
+│   │   │   ├── task.service.ts # updateDevelopmentStage(Req 12)を含む
 │   │   │   └── task.routes.ts
 │   │   ├── deliveries/         # 納品登録・必須フラグ・進捗算出・並行管理 (Req 3、同パターン)
 │   │   ├── events/              # 非タスクイベント (Req 4、同パターン)
@@ -154,6 +165,11 @@ backend/
 │   │   │   └── holiday.routes.ts
 │   │   ├── throughput/          # 期間消化数集計・移動平均フォーキャスト (Req 6、同パターン)
 │   │   ├── users/               # 担当ユーザー登録・絞り込み (Req 7、同パターン)
+│   │   ├── development-stages/  # 開発段階マスタ・並び順管理 (Req 12、holidaysと同パターン)
+│   │   │   ├── development-stage.types.ts
+│   │   │   ├── development-stage.repository.ts # delete時にTask.developmentStageIdをnull更新(deliveries.repositoryと同パターン)
+│   │   │   ├── development-stage.service.ts
+│   │   │   └── development-stage.routes.ts
 │   │   └── client-errors/       # フロントエンドエラーの受信・記録 (Req 10)
 │   │       ├── client-error.types.ts
 │   │       ├── client-error.service.ts
@@ -168,12 +184,14 @@ backend/
 frontend/
 ├── Dockerfile                    # マルチステージ(dev: Nuxt devサーバー + ホットリロード、prod: `nuxi generate`の静的ビルドのみ、常駐コンテナは持たない)
 ├── pages/
+│   ├── index.vue                 # 状況把握用ダッシュボード(危険な納品・直近イベント) (Req 11)
 │   ├── tasks/                    # タスク一覧・階層表示・分割UI (Req 1, 2)
 │   ├── deliveries/               # 納品ボード・進捗表示・並行絞り込み (Req 3)
 │   ├── events/                   # タスク・イベント統合タイムライン (Req 4)
 │   ├── recurrence/               # 繰り返しテンプレート設定フォーム・非営業日マスタ管理 (Req 5, 8)
 │   ├── throughput/               # 消化数ダッシュボード (Req 6)
-│   └── users/                    # 担当者フィルタ (Req 7)
+│   ├── users/                    # 担当者フィルタ (Req 7)
+│   └── kanban/                   # 開発段階カンバン・開発段階マスタ管理 (Req 12)
 ├── components/
 │   └── (各pagesに対応する表示コンポーネント群。ドメインごとにサブディレクトリを切る)
 ├── composables/
@@ -183,11 +201,16 @@ frontend/
 └── nuxt.config.ts                # ssr: false による静的SPAビルド設定
 ```
 
-> `deliveries` / `events` / `throughput` / `users` は `tasks` と同じ repository → service → routes のパターンに従うため、非自明なファイルのみ個別記載する。フロントエンドは Nuxt の規約に従い、`pages/` がファイルベースルーティングを兼ねる。
+> `deliveries` / `events` / `throughput` / `users` / `development-stages` は `tasks` と同じ repository → service → routes のパターンに従うため、非自明なファイルのみ個別記載する。フロントエンドは Nuxt の規約に従い、`pages/` がファイルベースルーティングを兼ねる。
 > `docker-compose.yml` はホストのNode.jsバージョンに依存せず開発環境を再現するために導入する(research.md参照)。相対パスのみで構成し、リポジトリを別ホスト(例: WSL)へ移動しても同じ起動手順で動作する。
 
 ### Modified Files
-なし(greenfieldのため新規作成のみ)
+- `backend/src/prisma/schema.prisma` — `DevelopmentStage`モデル追加、`Task.developmentStageId`(任意・null許容FK)追加
+- `backend/src/modules/tasks/task.types.ts` / `task.repository.ts` / `task.service.ts` / `task.routes.ts` — `developmentStageId`フィールドと`updateDevelopmentStage`操作の追加
+- `backend/src/app.ts` — `developmentStageRoutes`の登録追加
+- `frontend/pages/index.vue` — 現行のリダイレクトのみの実装をダッシュボード表示に置き換え
+- `frontend/composables/useApiClient.ts` — `DevelopmentStage`型・関連API呼び出し・`Task.developmentStageId`・`updateTaskDevelopmentStage`の追加
+- `frontend/app.vue` — ナビゲーションへの「ダッシュボード」「カンバン」リンク追加
 
 ## System Flows
 
@@ -224,6 +247,30 @@ sequenceDiagram
 - `ThroughputService.getSummary(periodType, rangeCount)` が対象期間ごとに `Task.completedAt` を集計する。
 - 直近4期間の平均を「今後の目安」として返すが、有効な過去期間が2未満の場合は目安を `null` にし、フロントは「実績データ不足」を表示する(`research.md` Design Decisions参照)。
 
+### カンバンでのカード移動と担当者設定
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant KanbanView
+    participant TasksService
+    participant DB as MySQL
+
+    User->>KanbanView: タスクカードを別の開発段階の列へドロップ
+    alt タスクの担当者が未設定
+        KanbanView->>User: 担当者選択を求める
+        User->>KanbanView: 担当者を選択
+        KanbanView->>TasksService: updateDevelopmentStage(taskId, stageId, assigneeUserId)
+    else タスクの担当者が設定済み
+        KanbanView->>TasksService: updateDevelopmentStage(taskId, stageId)
+    end
+    TasksService->>DB: developmentStageId(と未設定時のみassigneeUserId)を更新
+    TasksService-->>KanbanView: 更新後のTask
+```
+
+- 担当者が既に設定されているタスクの移動では`assigneeUserId`をリクエストに含めない(要件12.8)。サーバー側は、リクエストに`assigneeUserId`が含まれていても現在の担当者が非nullであれば無視し、既存の担当者を保持する(クライアント側のUXだけに頼らずサーバー側でも業務ルールを担保する)。
+- 開発段階マスタから使用中の段階を削除した場合、当該段階が設定されていた全タスクの`developmentStageId`が`null`に更新される(要件12.5、`deliveries`削除時の`Task.deliveryId`null更新と同じ実装パターン)。
+
 ## Requirements Traceability
 
 | Requirement | Summary | Components | Interfaces | Flows |
@@ -238,6 +285,8 @@ sequenceDiagram
 | 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9 | 非営業日マスタ・外部祝日API手動取得・繰り越しポリシー | Holidays Service, Recurrence Service | HolidaysService.register/syncFromExternalApi/isBusinessDay/nextBusinessDay/previousBusinessDay | 繰り返しタスクインスタンス生成 |
 | 9.1, 9.2, 9.3, 9.4, 9.5 | 作成日時・更新日時の記録と論理削除 | 全Backendサービス共通(Repository層) | 各Service.delete、共有Repositoryの作成/更新/論理削除規約 | - |
 | 10.1, 10.2, 10.3, 10.4, 10.5, 10.6 | ログ計測(アクセス・業務イベント・エラー・フロントエンド) | Logging Infrastructure(共通)、Client Errors Service | logger.ts共通ヘルパー、ClientErrorsService.report | - |
+| 11.1, 11.2, 11.3, 11.4, 11.5, 11.6 | ダッシュボードによる状況の一元把握 | Frontend(DashboardView)、Deliveries Service、Events Service | DeliveryService.list/getProgress、EventService.list | - |
+| 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8, 12.9 | 開発段階マスタとカンバン管理 | Development Stages Service, Tasks Service | DevelopmentStagesService.list/create/rename/reorder/delete、TasksService.updateDevelopmentStage | カンバンでのカード移動と担当者設定 |
 
 ## Components and Interfaces
 
@@ -250,9 +299,12 @@ sequenceDiagram
 | HolidaysService | Backend/holidays | 非営業日マスタの管理と営業日判定 | 8 | Repository(P0) | Service |
 | ThroughputService | Backend/throughput | 期間別消化数集計・移動平均フォーキャスト | 6 | Repository(P0) | Service |
 | UsersService | Backend/users | 担当ユーザーの登録・一覧 | 7 | Repository(P0) | Service |
+| DevelopmentStagesService | Backend/development-stages | 開発段階マスタ(名称・並び順)の登録・編集・並び替え・削除 | 12 | Repository(P0) | Service, API |
 | Logging Infrastructure | Backend/shared | Pinoロガーの共通設定、requestId相関、業務イベントログ用ヘルパー | 10 | Fastify(P0), Pino(External, P0) | - |
 | ClientErrorsService | Backend/client-errors | フロントエンドの未捕捉エラーを受信しバックエンドログへ記録 | 10 | Repository(P1, 任意保存), Logging Infrastructure(P0) | Service, API |
 | TaskListView 他フロントエンドコンポーネント群 | Frontend/features | 各ドメインの一覧・フォームUI | 1, 2, 3, 4, 5, 6, 7 | api/client(P0) | - |
+| DashboardView | Frontend/dashboard | 危険な納品・直近イベントの横断表示、詳細画面へのドリルダウン | 11 | api/client(P0) | - |
+| KanbanView | Frontend/kanban | 開発段階マスタ管理UIと、開発段階ごとのカンバン列表示・カード移動 | 12 | api/client(P0) | - |
 | error-reporter.client プラグイン | Frontend/plugins | 未捕捉JSエラーの捕捉とバックエンドへの送信 | 10 | api/client(P0) | - |
 
 > フロントエンドコンポーネントは新規の永続化・外部連携責務を持たない表示層のため、個別の詳細ブロックは省略し summary行のみとする(Implementation Note: 各featureディレクトリはAPIクライアントの型をそのまま利用し、独自の状態管理ライブラリは追加しない)。
@@ -263,18 +315,20 @@ sequenceDiagram
 
 | Field | Detail |
 |-------|--------|
-| Intent | タスクの登録・一覧・状態遷移・階層化・分割を担う |
-| Requirements | 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.1, 2.2, 2.3, 2.4, 7.1, 7.2 |
+| Intent | タスクの登録・一覧・状態遷移・階層化・分割・開発段階紐付けを担う |
+| Requirements | 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.1, 2.2, 2.3, 2.4, 7.1, 7.2, 12.3, 12.6, 12.7, 12.8, 12.9 |
 
 **Responsibilities & Constraints**
 - タスクの作成・更新・一覧取得、および親子関係(多階層)の整合性維持
 - 分割操作は「元タスクを親化し、分割後のタスクを子タスクとして生成する」処理として実装する(research.md Design Decisions参照)
 - 親タスクに未完了の子タスクが存在する場合、親タスクの完了操作を拒否し理由を返す
+- タスクへの開発段階(`developmentStageId`)の紐付けは、タスクの状態(`status`)とは独立して変更できる(要件12.9)。担当者が未設定のタスクへ開発段階を設定する操作では、同一リクエストで担当者を設定できる(要件12.7)。担当者が既に設定されている場合、このリクエストの`assigneeUserId`は無視する(要件12.8)
 
 **Dependencies**
 - Inbound: Fastify Routes — HTTPリクエストの委譲(P0)
 - Outbound: Repository(Prisma) — 永続化(P0)
 - Outbound: RecurrenceService — 自動生成タスクインスタンスの作成先として呼び出される(P0、呼び出し方向はRecurrence→Tasksの一方向)
+- Inbound: DevelopmentStagesService — マスタ削除時に`Task.developmentStageId`をnull更新するために自身のRepositoryから直接参照される(P1、`deliveries`削除時の`Task.deliveryId`null更新と同じパターン)
 
 **Contracts**: Service [x] / API [x] / Event [ ] / Batch [ ] / State [x]
 
@@ -303,12 +357,17 @@ interface TasksService {
   updateStatus(taskId: string, status: TaskStatus): Promise<Result<Task, TaskError>>;
   addChild(parentTaskId: string, input: CreateTaskInput): Promise<Result<Task, TaskError>>;
   splitTask(taskId: string, parts: CreateTaskInput[]): Promise<Result<Task[], TaskError>>;
+  updateDevelopmentStage(
+    taskId: string,
+    developmentStageId: string | null,
+    assigneeUserId?: string,
+  ): Promise<Result<Task, TaskError>>;
   delete(taskId: string): Promise<Result<void, TaskError>>;
   list(filter: { deliveryId?: string; assigneeUserId?: string }): Promise<Task[]>;
 }
 ```
 - Preconditions: `splitTask` は `parts.length >= 2` を要求する
-- Postconditions: `splitTask` 実行後、元タスクは `parentTaskId=null` のまま親として残り、`parts` は元タスクを親とする子タスクとして作成される。`delete` 実行後、対象タスクの `deletedAt` が設定され、以後の `list` から除外される(要件9.3, 9.4)
+- Postconditions: `splitTask` 実行後、元タスクは `parentTaskId=null` のまま親として残り、`parts` は元タスクを親とする子タスクとして作成される。`delete` 実行後、対象タスクの `deletedAt` が設定され、以後の `list` から除外される(要件9.3, 9.4)。`updateDevelopmentStage` 実行後、`developmentStageId` は常に更新され、`assigneeUserId` は実行前の値が `null` の場合のみ引数の値で更新される(要件12.6〜12.8)
 - Invariants: `parentTaskId` は循環参照を持たない
 
 ##### API Contract
@@ -318,6 +377,7 @@ interface TasksService {
 | PATCH | /api/tasks/:id/status | { status: TaskStatus } | Task | 400, 404, 409 |
 | POST | /api/tasks/:id/children | CreateTaskInput | Task | 400, 404 |
 | POST | /api/tasks/:id/split | { parts: CreateTaskInput[] } | Task[] | 400, 404 |
+| PATCH | /api/tasks/:id/development-stage | { developmentStageId: string \| null, assigneeUserId?: string } | Task | 400, 404 |
 | DELETE | /api/tasks/:id | - | void | 404 |
 | GET | /api/tasks | Query: deliveryId?, assigneeUserId? | Task[] | 500 |
 
@@ -656,6 +716,61 @@ interface UsersService {
 - Validation: `name`は空文字不可
 - Risks: なし
 
+### Backend/development-stages
+
+#### DevelopmentStagesService
+
+| Field | Detail |
+|-------|--------|
+| Intent | 開発段階(名称・並び順)のユーザー定義マスタ管理 |
+| Requirements | 12.1, 12.2, 12.4, 12.5 |
+
+**Responsibilities & Constraints**
+- 開発段階を`(name, order)`のマスタレコードとして保持する。値は固定enumではなくユーザーが自由に登録・編集・削除できる(要件12.1)
+- `order`は並び替え専用の一括更新操作(`reorder`)でのみ変更する。個別レコード更新(`rename`)では`order`を変更しない
+- マスタレコードを削除する際、当該段階が設定されている全タスクの`developmentStageId`を`null`に更新してから削除する(要件12.5)。削除自体は共有Repository層の論理削除規約に従う(要件9.3)
+
+**Dependencies**
+- Inbound: Fastify Routes(P0)
+- Outbound: Repository(P0)
+- Outbound: TasksService が所有する `tasks` テーブルへの直接更新(`delete`時のみ、P1。`deliveries`削除時の`Task.deliveryId`null更新と同じ実装パターンで、TasksServiceの公開APIは経由しない)
+
+**Contracts**: Service [x] / API [x] / Event [ ] / Batch [ ] / State [ ]
+
+##### Service Interface
+```typescript
+interface DevelopmentStage {
+  id: string;
+  name: string;
+  order: number;
+}
+
+interface DevelopmentStagesService {
+  create(name: string): Promise<DevelopmentStage>;
+  rename(id: string, name: string): Promise<DevelopmentStage>;
+  reorder(orderedIds: string[]): Promise<DevelopmentStage[]>;
+  delete(id: string): Promise<void>;
+  list(): Promise<DevelopmentStage[]>;
+}
+```
+- Preconditions: `reorder`の`orderedIds`は、現存する(論理削除されていない)全開発段階のIDを過不足なく含むこと
+- Postconditions: `reorder`実行後、各段階の`order`は`orderedIds`内の位置(0始まり)に更新される。`delete`実行後、対象段階の`deletedAt`が設定されて以後の`list`から除外され、当該段階が設定されていた全タスクの`developmentStageId`が`null`に更新される(要件12.5, 9.3, 9.4)
+- Invariants: `list`は`order`昇順で返す
+
+##### API Contract
+| Method | Endpoint | Request | Response | Errors |
+|--------|----------|---------|----------|--------|
+| POST | /api/development-stages | { name } | DevelopmentStage | 400 |
+| PATCH | /api/development-stages/:id | { name } | DevelopmentStage | 400, 404 |
+| POST | /api/development-stages/reorder | { orderedIds: string[] } | DevelopmentStage[] | 400 |
+| DELETE | /api/development-stages/:id | - | void | 404 |
+| GET | /api/development-stages | - | DevelopmentStage[] | 500 |
+
+**Implementation Notes**
+- Integration: `delete`は「対象タスクのdevelopmentStageIdをnull更新」→「段階レコードを論理削除」をひとつのトランザクションで行う(`deliveries.repository.ts`の`delete`と同じ実装パターン)
+- Validation: `name`は空文字不可。`reorder`の`orderedIds`が現存レコードと過不足なく一致するかはサービス層で検証する
+- Risks: なし(単純なマスタCRUD + 一括並び替え)
+
 ### Backend/shared(Logging Infrastructure)
 
 #### Logging Infrastructure
@@ -757,6 +872,7 @@ interface ClientErrorsService {
 - **Event**: 非タスクイベント。状態を持たない
 - **RecurringTaskTemplate**: 繰り返しタスクの定義。`kind`により固定間隔/納品連動を切り替え、`defaultMemo`(共通既定メモ)と`nonBusinessDayPolicy`(非営業日該当時の扱い: そのまま登録/登録しない/次営業日/前営業日)を持つ
 - **NonBusinessDay**: 非営業日マスタ。祝日・会社休業日を手動登録する日付レコード
+- **DevelopmentStage**: 開発段階マスタ。`name`と`order`を持つユーザー定義レコード。タスクへの紐付けは任意
 
 ```mermaid
 erDiagram
@@ -766,6 +882,7 @@ erDiagram
     Delivery ||--o{ Event : belongsTo
     Task ||--o{ Task : parentChild
     RecurringTaskTemplate ||--o{ Task : generates
+    DevelopmentStage ||--o{ Task : stageOf
 ```
 
 > `NonBusinessDay` は `RecurringTaskTemplate` からFKで参照されるのではなく、生成時に `RecurrenceService` が `HolidaysService` 経由で日付照会するのみのため、上記ER図では独立エンティティとして扱う(Data Contracts上の参照関係)。
@@ -778,13 +895,16 @@ erDiagram
 - `RecurringTaskTemplate.boundDeliveryId` は `kind="fixed_interval"` のときのみ設定可能(オプション)。`kind="delivery_relative"` では常にnull(グローバル設定のため)
 - `(RecurringTaskTemplate.id, scheduledDate)` の組に一意制約を設け、生成の冪等性を担保する
 - `NonBusinessDay.date` は論理削除されていないレコードの範囲で一意制約を持つ(生成カラム`date_active_key`経由、Physical Data Model参照)。`RecurringTaskTemplate.defaultMemo` は生成時にのみ `Task.memo` へコピーされ、以降はDB上の参照関係を持たない(コピー後は独立フィールド)
+- `Task.developmentStageId` は null許容の外部キー(`DevelopmentStage.id`参照)。既存の`Task.status`(未着手/進行中/完了/保留)とは独立したフィールドであり、一方の変更が他方の値に影響しない(要件12.9)
+- `DevelopmentStage.order` は同一マスタ内での並び順を表す整数。一意制約は設けず(`reorder`一括更新時の一時的な重複を許容するため)、常に`reorder`実行後の最終状態でアプリ層が連番になるよう保証する
 
 **Consistency & Integrity**:
 - タスク完了時刻は`Task.completedAt`に記録し、`ThroughputService`の集計に用いる
 - 納品削除時は紐づくTask/Eventの`deliveryId`をnullに更新する(カスケード削除はしない。誤削除によるタスク消失を防ぐ)
+- 開発段階マスタ削除時は紐づくTaskの`developmentStageId`をnullに更新する(同上のパターン。要件12.5)
 
 **共通監査カラムと論理削除規約(要件9)**:
-- `tasks` / `deliveries` / `events` / `recurring_task_templates` / `non_business_days` / `users` の全テーブルが `created_at`(作成日時)・`updated_at`(更新日時)・`deleted_at`(論理削除日時、null許容)を共通で持つ
+- `tasks` / `deliveries` / `events` / `recurring_task_templates` / `non_business_days` / `users` / `development_stages` の全テーブルが `created_at`(作成日時)・`updated_at`(更新日時)・`deleted_at`(論理削除日時、null許容)を共通で持つ
 - 更新系操作は必ず`updated_at`を現在時刻で更新する(Repository層の共通処理として一元化し、各Serviceでの個別実装を避ける)
 - 削除操作は物理削除(`DELETE`文)を発行せず、`deleted_at`に削除時刻を設定するUPDATE操作として実装する
 - 一覧・詳細取得系のクエリは既定で`deleted_at IS NULL`を条件に含める(Repository層の共通クエリビルダーで一元化し、各Serviceが個別に条件を書かないようにする)
@@ -794,7 +914,7 @@ erDiagram
 
 **For Relational Databases**:
 - 以下の全テーブルは `created_at`・`updated_at`・`deleted_at`(null許容)を共通で持つ(要件9.1〜9.3、詳細は Logical Data Model の共通監査カラム規約を参照)
-- `tasks(id, title, status, priority, memo, delivery_id, is_required_for_delivery, parent_task_id, assignee_user_id, source_template_id, completed_at, created_at, updated_at, deleted_at)`
+- `tasks(id, title, status, priority, memo, delivery_id, is_required_for_delivery, parent_task_id, assignee_user_id, source_template_id, development_stage_id, completed_at, created_at, updated_at, deleted_at)`
 - `deliveries(id, name, due_date, created_at, updated_at, deleted_at)`
 - `events(id, title, occurs_at, delivery_id, assignee_user_id, created_at, updated_at, deleted_at)`
 - `recurring_task_templates(id, title, priority, kind, interval_unit, interval_value, bound_delivery_id, delivery_offset_days, default_memo, non_business_day_policy, is_active, created_at, updated_at, deleted_at)`
@@ -803,7 +923,8 @@ erDiagram
   - `source`: `manual` / `external_api`
   - `date_active_key`: `deleted_at`がnullのときのみ`date`と同じ値を持ち、論理削除済みのときはnullになる生成カラム(MySQLの`STORED GENERATED COLUMN`、`IF(deleted_at IS NULL, date, NULL)`相当)
 - `users(id, name, created_at, updated_at, deleted_at)`
-- インデックス: `tasks(delivery_id)`, `tasks(parent_task_id)`, `tasks(completed_at)`, `events(delivery_id)`, 各テーブルの`deleted_at`(既定の一覧クエリが`deleted_at IS NULL`で絞り込むため)
+- `development_stages(id, name, order, created_at, updated_at, deleted_at)`
+- インデックス: `tasks(delivery_id)`, `tasks(parent_task_id)`, `tasks(completed_at)`, `tasks(development_stage_id)`, `events(delivery_id)`, 各テーブルの`deleted_at`(既定の一覧クエリが`deleted_at IS NULL`で絞り込むため)
 - ユニーク制約: `non_business_days(date_active_key)`にUNIQUE INDEXを設定する。MySQLはUNIQUE INDEXでnull値を重複可能として扱うため、論理削除済みレコード(`date_active_key`がnull)は制約の対象外となり、同日付の再登録を許可できる(PostgreSQLの部分ユニークインデックス相当をMySQLで実現する方法、research.md参照)
 - ユニーク制約: `recurring_task_templates`から生成された`tasks`は`(source_template_id, scheduled_date)`相当で重複防止(生成テーブルまたはタスク自体に`scheduled_date`列を持たせて制約化する)
 
@@ -839,6 +960,8 @@ erDiagram
   - Repository共通処理: レコード更新時に`updated_at`が現在時刻に更新されること、削除操作が物理DELETEではなく`deleted_at`のUPDATEになること(要件9.1〜9.3)
   - `Logger.logBusinessEvent`/`logError`: 出力されるログがJSON形式で`requestId`を含むこと(要件10.1, 10.5)
   - `HolidaysService.nextBusinessDay`/`previousBusinessDay`: 非営業日が連続する場合に該当しなくなるまで日付を進める/遡ること(要件8.4, 8.5)
+  - `DevelopmentStagesService.reorder`: `orderedIds`の順序通りに各段階の`order`が更新されること(要件12.2)
+  - `TasksService.updateDevelopmentStage`: 担当者未設定のタスクでは引数の`assigneeUserId`が設定され、担当者設定済みのタスクでは引数の`assigneeUserId`が無視されること(要件12.7, 12.8)
 - **Integration Tests**
   - 納品登録 → delivery_relativeテンプレートに基づくタスク自動生成のエンドツーエンド(要件5.3)
   - `POST /api/recurring-templates/generate-due` → fixed_intervalテンプレートが期日到来分だけインスタンス化され、再実行しても重複生成されないこと(要件5.1, 5.5, 5.6)
@@ -851,10 +974,13 @@ erDiagram
   - タスク削除 → 削除後に一覧APIから除外されるが、`ThroughputService`の過去期間の完了数集計値が変化しないこと(要件9.4, 9.5)
   - サーバー側で意図的に例外を発生させるテストケース → エラーログに`requestId`とスタックトレースが記録され、同一`requestId`でアクセスログと関連付けられること(要件10.3, 10.5)
   - `POST /api/client-errors` → 送信したエラー内容がバックエンドログに同じ形式で記録されること(要件10.4)
+  - 開発段階マスタの削除 → 当該段階が設定されていた全タスクの`developmentStageId`が`null`に更新され、マスタの`list`から削除済み段階が除外されること(要件12.5)
 - **E2E/UI Tests**
   - タスク一覧で状態・優先度がひと目で分かり、保留タスクが一覧から消えないこと(要件1.2, 1.4)
   - タスクと非タスクイベントが統合タイムラインで区別可能な形式で表示されること(要件4.2)
   - 担当者フィルタでタスク・イベントの一覧が絞り込まれること(要件7.2)
+  - ダッシュボードで期限超過かつ必須タスク未完了の納品と直近イベントが表示され、項目選択で詳細画面へ遷移すること(要件11.2〜11.4)
+  - カンバンで担当者未設定のタスクカードを別の開発段階列へ移動すると担当者選択が求められ、選択後にタスクの開発段階と担当者が更新されること(要件12.6, 12.7)
 
 ## Supporting References
 
