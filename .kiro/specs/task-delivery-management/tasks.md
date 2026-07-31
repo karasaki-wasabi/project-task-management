@@ -265,7 +265,7 @@
   - _Depends: 13.1_
 
 - [ ] 15. Tasks: 開発段階紐付けの拡張
-- [ ] 15.1 (P) タスクへの開発段階設定機能の追加
+- [x] 15.1 (P) タスクへの開発段階設定機能の追加
   - タスクの開発段階を、タスクの状態(未着手/進行中/完了/保留)とは独立して更新できるようにする
   - 担当者が未設定のタスクに対しては、開発段階の更新と同時に担当者を設定できるようにする
   - 担当者が既に設定されているタスクに対しては、この操作で担当者が上書きされないようにする
@@ -349,3 +349,4 @@
 - task 12.x: design.md/research.mdはE2Eテストツールを指定していなかったため、Nuxt/Vue向けの標準的な選択肢としてPlaywrightを新規導入した(判断根拠は`frontend/playwright.config.ts`のヘッダコメントに記載)。また`backend/src/modules/client-errors/client-error.service.ts`には、task 10.2の`shared/business-event-logger.ts`と同じ「モジュール単位のロガーシングルトインをテストから差し替え可能にする」パターン(`let`エクスポート+セッター関数)を追加し、`validation.integration.test.ts`が実HTTP経由でのクライアントエラーログ出力を検証できるようにした。
 - task 13.1: `non_business_days.date_active_key`(MySQLのSTORED GENERATED COLUMN、task 1.3参照)はPrisma schemaでは`Unsupported("date")`かつ`@@unique`注釈なしで表現されているため、Prisma自身のドリフト検出からは見えない。この状態で無関係なスキーマ変更に対して`npx prisma migrate dev`を実行したところ、生成されたマイグレーションの先頭に`DROP INDEX non_business_days_date_active_key_key ON non_business_days`が混入し、そのまま適用すると非営業日の重複登録防止ルールが無音で無効化されるところだった。既存の`schema.integration.test.ts`の該当テストで検出し、生成されたマイグレーションSQLから該当行を手動で削除、`prisma migrate reset --force`でDBを再構築して解決した。今後、この生成カラムが存在する状態で新しいマイグレーションを`migrate dev`で生成する際は、必ず生成されたSQLに`non_business_days`への意図しないDROP文が混入していないか確認してから適用すること。
 - task 14.1: マスタデータの並び順(`order`)を新規作成時に自動採番する際、「現存する(論理削除されていない)件数」を次の値として使うと、削除後の再作成で既存レコードと`order`が衝突する(例: A(0), B(1)を作成後Aを削除して新規作成すると、件数ベースの採番ではCが1になりBと衝突する)。`order`は現存レコードの最大値+1(`Math.max(-1, ...existing.map(s => s.order)) + 1`)で採番すること。並び順を持つマスタを今後追加する際は同様の採番方式を踏襲する。
+- task 15.1: `Task.developmentStageId`はtask 13.1で実FK制約付きの外部キーとして追加されているため、テストで任意の`randomUUID()`を「存在する開発段階のID」として使うとFK違反(P2003→400)になり意図した成功パスをテストできない。開発段階を参照するテストでは、必ず`db.developmentStage.create(...)`で実レコードを作成してからそのidを使うこと(タスク自体が存在しないことを確認する404テストなど、参照先の実在性が無関係なケースを除く)。

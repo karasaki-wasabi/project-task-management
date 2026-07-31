@@ -199,4 +199,37 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     await hardDeleteTasks([child.json().id, parentId]);
     await app.close();
   });
+
+  it("PATCH /api/tasks/:id/development-stage updates developmentStageId and returns 200 (task 15.1)", async () => {
+    const app = await buildTestApp();
+    const created = await app.inject({ method: "POST", url: "/api/tasks", payload: { title: "stage route task", priority: "low" } });
+    const taskId = created.json().id;
+    const stage = await db.developmentStage.create({ data: { name: `route-stage-${randomUUID()}`, order: 0 } });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/tasks/${taskId}/development-stage`,
+      payload: { developmentStageId: stage.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().developmentStageId).toBe(stage.id);
+
+    await hardDeleteTasks([taskId]);
+    await db.$executeRawUnsafe(`DELETE FROM development_stages WHERE id = ?`, stage.id);
+    await app.close();
+  });
+
+  it("PATCH /api/tasks/:id/development-stage returns 404 for a non-existent task", async () => {
+    const app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/tasks/${randomUUID()}/development-stage`,
+      payload: { developmentStageId: randomUUID() },
+    });
+
+    expect(response.statusCode).toBe(404);
+    await app.close();
+  });
 });

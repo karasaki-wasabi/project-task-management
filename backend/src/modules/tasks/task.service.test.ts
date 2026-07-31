@@ -20,6 +20,11 @@ async function hardDeleteDeliveries(ids: string[]): Promise<void> {
   await db.$executeRawUnsafe(`DELETE FROM deliveries WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
+async function hardDeleteStages(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.$executeRawUnsafe(`DELETE FROM development_stages WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
+}
+
 afterAll(async () => {
   await db.$disconnect();
 });
@@ -291,5 +296,73 @@ describe("tasksService hierarchy (task 3.2)", () => {
     expect(result.ok).toBe(true);
 
     await hardDeleteTasks([child.value.id, parent.value.id]);
+  });
+});
+
+// RED: updateDevelopmentStage does not exist yet (task 15.1, Requirements
+// 12.3, 12.6, 12.7, 12.8, 12.9).
+describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
+  it("updates developmentStageId independently of the task's status (Requirement 12.9)", async () => {
+    const created = await tasksService.create({ title: "stage task", priority: "low" });
+    if (!created.ok) throw new Error("setup failed");
+    const stage = await db.developmentStage.create({ data: { name: `stage-${randomUUID()}`, order: 0 } });
+
+    const result = await tasksService.updateDevelopmentStage(created.value.id, stage.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.developmentStageId).toBe(stage.id);
+    expect(result.value.status).toBe("not_started");
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteStages([stage.id]);
+  });
+
+  it("sets the assignee when the task is currently unassigned (Requirement 12.7)", async () => {
+    const created = await tasksService.create({ title: "unassigned task", priority: "low" });
+    if (!created.ok) throw new Error("setup failed");
+    const user = await db.user.create({ data: { name: `assignee-${randomUUID()}` } });
+    const stage = await db.developmentStage.create({ data: { name: `stage-${randomUUID()}`, order: 0 } });
+
+    const result = await tasksService.updateDevelopmentStage(created.value.id, stage.id, user.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.assigneeUserId).toBe(user.id);
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteUsers([user.id]);
+    await hardDeleteStages([stage.id]);
+  });
+
+  it("does not overwrite the assignee when the task already has one (Requirement 12.8)", async () => {
+    const originalAssignee = await db.user.create({ data: { name: `original-${randomUUID()}` } });
+    const otherUser = await db.user.create({ data: { name: `other-${randomUUID()}` } });
+    const created = await tasksService.create({
+      title: "already assigned task",
+      priority: "low",
+      assigneeUserId: originalAssignee.id,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    const stage = await db.developmentStage.create({ data: { name: `stage-${randomUUID()}`, order: 0 } });
+
+    const result = await tasksService.updateDevelopmentStage(created.value.id, stage.id, otherUser.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.assigneeUserId).toBe(originalAssignee.id);
+    expect(result.value.developmentStageId).toBe(stage.id);
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteUsers([originalAssignee.id, otherUser.id]);
+    await hardDeleteStages([stage.id]);
+  });
+
+  it("returns not_found (404) for a non-existent task", async () => {
+    const result = await tasksService.updateDevelopmentStage(randomUUID(), randomUUID());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatchObject({ type: "not_found" });
   });
 });

@@ -21,6 +21,10 @@ const createTaskBodySchema = z.object({
   parentTaskId: z.string().optional(),
 });
 const updateStatusBodySchema = z.object({ status: taskStatus });
+const updateDevelopmentStageBodySchema = z.object({
+  developmentStageId: z.string().nullable(),
+  assigneeUserId: z.string().optional(),
+});
 const splitBodySchema = z.object({ parts: z.array(createTaskBodySchema) });
 const taskIdParamsSchema = z.object({ id: z.string() });
 const listQuerySchema = z.object({
@@ -73,6 +77,17 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
     const body = parseOrBadRequest(updateStatusBodySchema, request.body);
     const result = await tasksService.updateStatus(params.id, body.status);
+    if (!result.ok) {
+      reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
+      return;
+    }
+    reply.status(200).send(result.value);
+  });
+
+  app.patch("/api/tasks/:id/development-stage", async (request, reply) => {
+    const params = parseOrBadRequest(taskIdParamsSchema, request.params);
+    const body = parseOrBadRequest(updateDevelopmentStageBodySchema, request.body);
+    const result = await tasksService.updateDevelopmentStage(params.id, body.developmentStageId, body.assigneeUserId);
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;

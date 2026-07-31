@@ -54,6 +54,40 @@ export const tasksService = {
     }
   },
 
+  // design.md TasksService Postconditions: developmentStageId is always
+  // updated; assigneeUserId (from the request) is only applied when the
+  // task's current assigneeUserId is null, so a kanban card move never
+  // overwrites an already-assigned task's assignee (Requirements 12.6-12.8).
+  // Enforced here rather than trusted from the client.
+  async updateDevelopmentStage(
+    taskId: string,
+    developmentStageId: string | null,
+    assigneeUserId?: string,
+  ): Promise<Result<Task, TaskError>> {
+    const current = await taskRepository.findById(taskId);
+    if (!current) {
+      return err({ type: "not_found", taskId });
+    }
+
+    const data: { developmentStageId: string | null; assigneeUserId?: string } = { developmentStageId };
+    if (assigneeUserId && current.assigneeUserId === null) {
+      data.assigneeUserId = assigneeUserId;
+    }
+
+    try {
+      const task = await taskRepository.updateDevelopmentStage(taskId, data);
+      return ok(task);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) {
+        return err({ type: "not_found", taskId });
+      }
+      if (isForeignKeyViolation(error)) {
+        return err({ type: "validation_error", message: "developmentStageId or assigneeUserId does not exist" });
+      }
+      throw error;
+    }
+  },
+
   async addChild(parentTaskId: string, input: CreateTaskInput): Promise<Result<Task, TaskError>> {
     const parent = await taskRepository.findById(parentTaskId);
     if (!parent) {
