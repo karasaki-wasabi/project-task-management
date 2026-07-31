@@ -46,7 +46,7 @@
   - _Boundary: Frontend scaffolding_
 
 - [ ] 2. Users: 担当ユーザー管理
-- [ ] 2.1 (P) UsersServiceの実装
+- [x] 2.1 (P) UsersServiceの実装
   - ユーザーの登録・一覧・論理削除を行うServiceとRepositoryを実装する
   - 認証・ログイン機能を持たせず、登録済みユーザーの一覧からの選択のみをサポートする
   - `POST /api/users`・`GET /api/users`・`DELETE /api/users/:id`エンドポイントを実装する
