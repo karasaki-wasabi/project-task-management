@@ -1,0 +1,22 @@
+{
+  "feature_name": "task-delivery-management",
+  "created_at": "2026-07-30T07:19:56Z",
+  "updated_at": "2026-07-31T05:30:00Z",
+  "language": "ja",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}
