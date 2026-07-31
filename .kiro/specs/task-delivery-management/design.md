@@ -365,7 +365,7 @@ interface DeliveriesService {
 }
 ```
 - Preconditions: `dueDate` は登録・更新時ともに有効な日付であること
-- Postconditions: `updateDueDate` 実行後、紐づく未完了の自動生成タスクの予定日が再計算される。`delete` 実行後、対象納品の `deletedAt` が設定され、以後の `list` から除外される。紐づく Task/Event は `deliveryId` を保持したまま残る(要件9.3, 9.4)
+- Postconditions: `updateDueDate` 実行後、紐づく未完了の自動生成タスクの予定日が再計算される。`delete` 実行後、対象納品の `deletedAt` が設定され、以後の `list` から除外される(要件9.3, 9.4)。紐づく Task/Event はレコード自体を保持したまま `deliveryId` が `null` に更新される(カスケード削除はしない。Data Models「Consistency & Integrity」参照)
 - Invariants: `getProgress` は必須フラグが付いたタスクのみを分母・分子に用いる
 
 ##### API Contract
