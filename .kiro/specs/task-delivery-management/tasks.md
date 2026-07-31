@@ -255,7 +255,7 @@
   - _Requirements: 12.1, 12.3_
 
 - [ ] 14. Development Stages: 開発段階マスタ管理
-- [ ] 14.1 (P) DevelopmentStagesServiceの実装
+- [x] 14.1 (P) DevelopmentStagesServiceの実装
   - 開発段階の登録・名称変更・一覧取得・削除を行う
   - 並び替え操作(登録済み全段階のIDを渡すことで並び順を一括更新)を実装する
   - 使用中の段階を削除した際、当該段階が設定されている全タスクの開発段階を未設定に戻してから段階自体を削除する(delivery削除時のタスク参照解除と同じ実装パターンを踏襲)
@@ -348,3 +348,4 @@
 - task 11.x: `frontend/e2e/*.spec.ts`(Playwright、task 12.1-12.3で追加)を除外する`vitest.config.ts`がなかったため、フロントエンドの標準テストコマンド`npm run test`(=`vitest run`)がPlaywrightの`test()`をVitestのデフォルトglobで収集してロードエラーになり、コマンド全体が失敗していた。`vitest.config.ts`に`test.exclude: ["**/node_modules/**", "**/e2e/**"]`を追加して解決。E2Eテストツール(Playwright等)をユニットテストランナー(Vitest)と同一ディレクトリ構成で導入する際は、必ずテストランナーのinclude/excludeを明示的に分離すること。
 - task 12.x: design.md/research.mdはE2Eテストツールを指定していなかったため、Nuxt/Vue向けの標準的な選択肢としてPlaywrightを新規導入した(判断根拠は`frontend/playwright.config.ts`のヘッダコメントに記載)。また`backend/src/modules/client-errors/client-error.service.ts`には、task 10.2の`shared/business-event-logger.ts`と同じ「モジュール単位のロガーシングルトインをテストから差し替え可能にする」パターン(`let`エクスポート+セッター関数)を追加し、`validation.integration.test.ts`が実HTTP経由でのクライアントエラーログ出力を検証できるようにした。
 - task 13.1: `non_business_days.date_active_key`(MySQLのSTORED GENERATED COLUMN、task 1.3参照)はPrisma schemaでは`Unsupported("date")`かつ`@@unique`注釈なしで表現されているため、Prisma自身のドリフト検出からは見えない。この状態で無関係なスキーマ変更に対して`npx prisma migrate dev`を実行したところ、生成されたマイグレーションの先頭に`DROP INDEX non_business_days_date_active_key_key ON non_business_days`が混入し、そのまま適用すると非営業日の重複登録防止ルールが無音で無効化されるところだった。既存の`schema.integration.test.ts`の該当テストで検出し、生成されたマイグレーションSQLから該当行を手動で削除、`prisma migrate reset --force`でDBを再構築して解決した。今後、この生成カラムが存在する状態で新しいマイグレーションを`migrate dev`で生成する際は、必ず生成されたSQLに`non_business_days`への意図しないDROP文が混入していないか確認してから適用すること。
+- task 14.1: マスタデータの並び順(`order`)を新規作成時に自動採番する際、「現存する(論理削除されていない)件数」を次の値として使うと、削除後の再作成で既存レコードと`order`が衝突する(例: A(0), B(1)を作成後Aを削除して新規作成すると、件数ベースの採番ではCが1になりBと衝突する)。`order`は現存レコードの最大値+1(`Math.max(-1, ...existing.map(s => s.order)) + 1`)で採番すること。並び順を持つマスタを今後追加する際は同様の採番方式を踏襲する。
