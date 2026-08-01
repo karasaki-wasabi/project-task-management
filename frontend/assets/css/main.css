@@ -7,24 +7,86 @@
    Sortable applies these via plain `classList.add/remove(token)`, which
    throws if the token contains a space (i.e. more than one Tailwind
    utility class) — a single custom class per state, defined here with
-   plain CSS, is what Sortable's chosen/ghost/drag-class options need. */
+   plain CSS, is what Sortable's chosen/ghost/drag/fallback-class options
+   need.
+
+   Three distinct elements are involved in a forceFallback drag:
+   - The ORIGINAL card, still sitting in its source list while picked
+     ("chosen") — must NEVER change layout size (no transform: scale,
+     no outward-growing outline) or it pushes the column wider and
+     triggers a horizontal scrollbar (user-reported bug). Kept as a
+     faded placeholder instead.
+   - The floating CLONE that Sortable creates and appends to <body>
+     (`fallbackOnBody: true`) to visibly follow the cursor — this one is
+     free to use shadow/rotate since it's outside any column's layout.
+   - The in-list drop-placeholder ("ghost") shown where the card is
+     currently positioned.
+   User feedback: the clone wasn't reading as clearly attached to the
+   cursor — `fallbackClass` (below) is what actually styles it; it was
+   previously unset, so the clone had no visual distinction from a
+   static card. */
 .task-card-chosen {
-  transform: scale(1.02);
-  box-shadow:
-    0 10px 15px -3px rgb(0 0 0 / 0.1),
-    0 4px 6px -4px rgb(0 0 0 / 0.1);
+  opacity: 0.5;
   outline: 2px solid #2f5fdb;
-  outline-offset: -1px;
-  z-index: 10;
+  outline-offset: -2px;
 }
 
 .task-card-ghost {
-  opacity: 0.3;
+  opacity: 0.25;
 }
 
-.task-card-dragging {
-  transform: rotate(1deg);
+.task-card-drag-clone {
+  /* No `transform` here: Sortable positions this clone (fallbackOnBody)
+     via its own inline `transform: translate3d(...)`, and a class-level
+     `transform` (e.g. rotate) was found to fight that and freeze the
+     clone near its starting position instead of following the cursor
+     (user-reported bug) — box-shadow/cursor are safe, transform is not. */
+  cursor: grabbing;
   box-shadow:
-    0 20px 25px -5px rgb(0 0 0 / 0.1),
-    0 8px 10px -6px rgb(0 0 0 / 0.1);
+    0 20px 25px -5px rgb(0 0 0 / 0.25),
+    0 8px 10px -6px rgb(0 0 0 / 0.2);
+  /* The real fix for "clone only creeps a little toward the cursor":
+     TaskCard.vue has Tailwind's bare `transition` utility (for its hover
+     shadow), which transitions `transform` among other properties. Since
+     Sortable repositions this clone via `transform: translate3d(...)` on
+     every mousemove, that transition turned each new position into an
+     eased 150ms animation target — the clone was perpetually chasing a
+     moving target instead of tracking the cursor 1:1. Disabling
+     transitions on the clone specifically restores instant tracking. */
+  transition: none !important;
+}
+
+/* User feedback: hovering a valid drop target while dragging should
+   highlight the whole lane, not just show a per-card insertion point
+   (order within a lane isn't persisted, so an insertion-point ghost
+   implied a promise the app doesn't keep). Toggled via a `hoveredStageId`
+   ref bound to each stage column's `:class`. */
+.kanban-drop-target-active {
+  outline: 2px dashed #2f5fdb;
+  outline-offset: -2px;
+  background-color: #eef2ff;
+}
+
+/* Impeccable critique P1 ("board overflows... no visible scroll
+   affordance"): the browser evidence screenshot showed no visible
+   scrollbar on `.board` even though it does scroll — likely an
+   overlay-style OS scrollbar that only appears while actively scrolling.
+   Force a permanently-visible, always-reserved-space scrollbar instead, so
+   "there's more to the right" is legible at a glance, not just discoverable
+   by accident. Firefox uses `scrollbar-width`/`scrollbar-color`; the
+   `::-webkit-scrollbar*` rules cover Chromium/Safari. */
+.board {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+.board::-webkit-scrollbar {
+  height: 10px;
+}
+.board::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+}
+.board::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
 }

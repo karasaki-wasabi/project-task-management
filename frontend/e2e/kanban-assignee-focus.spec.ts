@@ -1,6 +1,10 @@
-// E2E: assignee-filter-driven focus tray + stage board linkage (task 5.2,
-// design.md "担当者絞り込みの状態遷移" state diagram / "AssigneeFocusTray" and
-// "kanban/index.vue" component blocks, Requirements 1.1, 1.2, 4.2, 4.3).
+// E2E: assignee-chip-driven focus tray (task 5.2, design.md "担当者絞り込み
+// の状態遷移" state diagram / "AssigneeFocusTray" and "kanban/index.vue"
+// component blocks, Requirements 1.1, 1.2). Round 3 user feedback removed
+// the stage-board-narrowing behavior (was Requirement 4.2/4.3) — a chip
+// click now only drives the focus tray, since filtering both was
+// redundant. This test verifies the board stays showing everyone
+// regardless of chip selection.
 //
 // Approach note: unlike kanban.spec.ts (which drags an *unassigned* task
 // onto a stage column to exercise the assignee-picker-on-move flow), this
@@ -78,41 +82,59 @@ test("selecting an assignee in the kanban filter links the focus tray and stage 
   await expect(page.locator(".assignee-picker")).not.toBeVisible();
   await expect(stageCardList.getByText(taskBTitle)).toBeVisible();
 
-  // 4. Default "すべて": focus tray is not present (Requirement 1.1), and
-  // the stage column shows both tasks. The assignee selector is now the
-  // merged TeamWorkloadSummary (user feedback round 2:
-  // "担当者絞り込みの欄とチーム負荷の欄を共通化") — a clickable "すべて"
-  // chip plus one chip per team member, instead of a <select>.
-  const allChip = page.getByRole("button", { name: "すべて", exact: true });
+  // 4. Default (nothing selected): focus tray is not present (Requirement
+  // 1.1), and the stage column shows both tasks. The assignee selector is
+  // the merged TeamWorkloadSummary (user feedback round 2:
+  // "担当者絞り込みの欄とチーム負荷の欄を共通化") — one chip per team
+  // member, instead of a <select>. Round 3 removed the standalone "すべて"
+  // chip since board-wide filtering was already gone by then; clicking a
+  // selected member's own chip again is now how you clear the selection.
   await expect(page.getByText("担当者フォーカス")).not.toBeVisible();
   await expect(stageCardList.getByText(taskATitle)).toBeVisible();
   await expect(stageCardList.getByText(taskBTitle)).toBeVisible();
 
   // 5. Click user A's workload chip: focus tray appears showing user A's
-  // task (Requirement 1.2), and the stage column narrows to only user A's
-  // task (Requirement 4.2/4.3).
+  // task (Requirement 1.2). Round 3: the stage board is NOT filtered by
+  // this selection anymore — both tasks must remain visible there. Enough
+  // assignees can accumulate across E2E/manual-testing runs to push a
+  // chip into TeamWorkloadSummary's folded "+N名" remainder —
+  // `expect().toBeVisible()` (unlike a one-shot `isVisible()`) retries, so
+  // this waits out any rendering lag before deciding the chip is actually
+  // in the remainder.
   const userAChip = page.getByRole("button", { name: new RegExp(userAName) });
+  try {
+    await expect(userAChip).toBeVisible({ timeout: 5000 });
+  } catch {
+    await page.locator(".remainder-toggle").click();
+    await expect(userAChip).toBeVisible();
+  }
   await userAChip.click();
   const focusTray = page.locator(".focus-tray");
   await expect(focusTray).toBeVisible();
   await expect(focusTray.getByText(taskATitle)).toBeVisible();
   await expect(focusTray.getByText(taskBTitle)).not.toBeVisible();
   await expect(stageCardList.getByText(taskATitle)).toBeVisible();
-  await expect(stageCardList.getByText(taskBTitle)).not.toBeVisible();
+  await expect(stageCardList.getByText(taskBTitle)).toBeVisible();
 
-  // 6. Click user B's chip: focus tray updates to user B's task, and the
-  // board column now shows only user B's task.
+  // 6. Click user B's chip: focus tray updates to user B's task; board
+  // still shows both.
   const userBChip = page.getByRole("button", { name: new RegExp(userBName) });
+  try {
+    await expect(userBChip).toBeVisible({ timeout: 5000 });
+  } catch {
+    await page.locator(".remainder-toggle").click();
+    await expect(userBChip).toBeVisible();
+  }
   await userBChip.click();
   await expect(focusTray).toBeVisible();
   await expect(focusTray.getByText(taskBTitle)).toBeVisible();
   await expect(focusTray.getByText(taskATitle)).not.toBeVisible();
+  await expect(stageCardList.getByText(taskATitle)).toBeVisible();
   await expect(stageCardList.getByText(taskBTitle)).toBeVisible();
-  await expect(stageCardList.getByText(taskATitle)).not.toBeVisible();
 
-  // 7. Click "すべて" again: focus tray disappears again (Requirement 1.1),
-  // and the board column shows both tasks again.
-  await allChip.click();
+  // 7. Click user B's chip again (toggle off): focus tray disappears
+  // (Requirement 1.1).
+  await userBChip.click();
   await expect(page.getByText("担当者フォーカス")).not.toBeVisible();
   await expect(stageCardList.getByText(taskATitle)).toBeVisible();
   await expect(stageCardList.getByText(taskBTitle)).toBeVisible();
