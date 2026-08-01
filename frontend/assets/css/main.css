@@ -1,0 +1,30 @@
+/* Global font: Noto Sans JP (user preference), loaded once here and wired
+   into tailwind.config.ts's fontFamily.sans so every page picks it up via
+   the existing `font-sans` class on app.vue's root element. */
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap");
+
+/* vue-draggable-plus (Sortable.js) drag-state classes for TaskCard.
+   Sortable applies these via plain `classList.add/remove(token)`, which
+   throws if the token contains a space (i.e. more than one Tailwind
+   utility class) — a single custom class per state, defined here with
+   plain CSS, is what Sortable's chosen/ghost/drag-class options need. */
+.task-card-chosen {
+  transform: scale(1.02);
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.1),
+    0 4px 6px -4px rgb(0 0 0 / 0.1);
+  outline: 2px solid #2f5fdb;
+  outline-offset: -1px;
+  z-index: 10;
+}
+
+.task-card-ghost {
+  opacity: 0.3;
+}
+
+.task-card-dragging {
+  transform: rotate(1deg);
+  box-shadow:
+    0 20px 25px -5px rgb(0 0 0 / 0.1),
+    0 8px 10px -6px rgb(0 0 0 / 0.1);
+}

@@ -3,9 +3,9 @@
 const props = defineProps<{ priority: Priority }>();
 
 const config: Record<Priority, { tone: "danger" | "warning" | "neutral"; label: string }> = {
-  high: { tone: "danger", label: "優先度: 高" },
-  medium: { tone: "warning", label: "優先度: 中" },
-  low: { tone: "neutral", label: "優先度: 低" },
+  high: { tone: "danger", label: "高" },
+  medium: { tone: "warning", label: "中" },
+  low: { tone: "neutral", label: "低" },
 };
 
 const current = computed(() => config[props.priority]);

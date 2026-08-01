@@ -7,6 +7,7 @@ export default defineNuxtConfig({
   ssr: false,
   devtools: { enabled: true },
   modules: ["@nuxtjs/tailwindcss"],
+  css: ["~/assets/css/main.css"],
   // Without this, Nuxt auto-registers `components/tasks/TaskNode.vue` as
   // `<TasksTaskNode>` (directory-prefixed) — found via task 11.x's real
   // browser verification: `<TaskNode>`/`<AssigneeFilter>` usage across pages

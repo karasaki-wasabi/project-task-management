@@ -17,5 +17,10 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3001",
     headless: true,
+    // Wider than Playwright's 1280x720 default: the kanban board scrolls
+    // horizontally within its own container (see e2e/drag.ts), so this
+    // just needs to be comfortably usable, not wide enough to fit every
+    // column at once.
+    viewport: { width: 1600, height: 1000 },
   },
 });
