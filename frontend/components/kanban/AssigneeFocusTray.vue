@@ -12,11 +12,38 @@
     rest.
   - Requirement 1.5: an empty `tasks` list shows a zero-count message
     instead of an empty area.
-  - Cards here are not drag sources (design.md Non-Goals: dragging out of
-    the focus tray is not required) — simply not wrapped in a
-    vue-draggable-plus list, so they're inert by construction.
+
+  User feedback round 3: this tray is now a drop TARGET (not just inert) —
+  dragging an unassigned card here assigns it to the currently-focused
+  user. It's a `VueDraggable` with `put: true`, sharing the same
+  `kanban-cards` Sortable group as the stage columns and backlog panel.
+  This component only reports which task was dropped (`assign` event);
+  the parent owns the actual API call, since it alone knows the currently
+  selected assignee and needs to also revert the optimistic drop (backend
+  constraint: `updateDevelopmentStage` only ever sets `assigneeUserId`
+  when the task doesn't already have one — reassigning an already-assigned
+  task is a no-op there, see `research.md`/parent component) — the parent
+  calls the exposed `resync()` after handling the drop either way. Also
+  now has a background/border like the other lanes, since it functions as
+  one (round-3 feedback).
+
+  Impeccable re-critique: `text-slate-500` labels here sit on this tray's
+  own `bg-slate-100`, measuring 4.34:1 — the first contrast fix pass only
+  touched the collapsed/base view and missed this combination inside an
+  actually-opened panel. Bumped to `text-slate-600` (6.92:1).
+
+  Round 3 follow-up ("未割り当て→担当者へのドラッグは問題ない。しかし、どこの
+  カンバンレーンに入れればいいかわかんない"): a card dropped here only gets
+  an assignee, not a development stage, so it stayed effectively hidden
+  back in the (possibly collapsed) backlog panel until the user went and
+  found it again. Now `pull: true` — the card sits right here, visibly, and
+  can be dragged straight from the tray into a stage column next, so the
+  two-step "assign, then place" flow stays in one visible spot instead of
+  needing to rediscover the card elsewhere. Dragging out emits `end` (same
+  shape as UnassignedBacklogPanel's) for the parent to act on.
 -->
 <script setup lang="ts">
+import { VueDraggable, type DraggableEvent } from "vue-draggable-plus";
 import { isEmpty, resolveAssigneeName } from "./AssigneeFocusTray.helpers";
 
 interface AssigneeFocusTrayProps {
@@ -25,26 +52,88 @@ interface AssigneeFocusTrayProps {
 }
 
 const props = defineProps<AssigneeFocusTrayProps>();
+const emit = defineEmits<{
+  assign: [taskId: string];
+  end: [payload: { taskId: string; targetStageId?: string }];
+  "card-activate": [taskId: string];
+}>();
 
 const hasNoTasks = computed(() => isEmpty(props.tasks));
+
+// Sortable-mutable mirror of props.tasks — same resync strategy as
+// UnassignedBacklogPanel.vue (no eager resync on drop; only on explicit
+// parent request via the exposed `resync()`).
+const draggableTasks = ref<Task[]>([]);
+watch(
+  () => props.tasks,
+  (next) => (draggableTasks.value = [...next]),
+  { immediate: true },
+);
 
 function assigneeNameFor(task: Task): string | undefined {
   return resolveAssigneeName(props.users, task.assigneeUserId);
 }
+
+function handleAdd(evt: DraggableEvent) {
+  const taskId = (evt.item as HTMLElement | undefined)?.dataset.taskId;
+  if (taskId) emit("assign", taskId);
+}
+
+// Fires when a drag STARTS in this tray, regardless of where it lands
+// (Sortable's onEnd is a source-side event — see UnassignedBacklogPanel's
+// identically-shaped handleListEnd). Always emit when there's a `taskId`
+// (matching UnassignedBacklogPanel's condition) even if `targetStageId` is
+// undefined — a drop back into this tray itself is exactly that case, and
+// the parent still needs to hear about it to clear its drop-target
+// highlight (Impeccable fourth critique P1: previously only emitting when
+// `targetStageId` was set meant a "changed my mind, dropped back in the
+// tray" drag never notified the parent at all, leaving whichever column
+// had last been hovered stuck highlighted).
+function handleEnd(evt: DraggableEvent) {
+  const taskId = (evt.item as HTMLElement | undefined)?.dataset.taskId;
+  const targetStageId = (evt.to as HTMLElement | undefined)?.dataset.stageId;
+  if (taskId) emit("end", { taskId, targetStageId });
+}
+
+function resync() {
+  draggableTasks.value = [...props.tasks];
+}
+
+defineExpose({ resync });
 </script>
 
 <template>
-  <section class="focus-tray">
-    <h2 class="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+  <section class="focus-tray rounded-lg border border-slate-200 bg-slate-100 p-3">
+    <h2 class="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-600" tabindex="-1">
       <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
         <circle cx="12" cy="7" r="4" />
       </svg>
       担当者フォーカス
     </h2>
-    <p v-if="hasNoTasks" class="empty-state text-sm text-slate-500">未完了タスクは0件です</p>
-    <div v-else class="max-h-80 grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-2 overflow-y-auto">
-      <TaskCard v-for="task in tasks" :key="task.id" :task="task" :assignee-name="assigneeNameFor(task)" />
-    </div>
+    <p v-if="hasNoTasks" class="empty-state text-sm text-slate-600">未完了タスクは0件です</p>
+    <VueDraggable
+      v-model="draggableTasks"
+      :group="{ name: 'kanban-cards', pull: true, put: true }"
+      :sort="false"
+      :animation="200"
+      :force-fallback="true"
+      :fallback-on-body="true"
+      ghost-class="task-card-ghost"
+      chosen-class="task-card-chosen"
+      fallback-class="task-card-drag-clone"
+      :on-move="preventSameListMove"
+      class="min-h-12 max-h-80 grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-2 overflow-y-auto"
+      @add="handleAdd"
+      @end="handleEnd"
+    >
+      <TaskCard
+        v-for="task in draggableTasks"
+        :key="task.id"
+        :task="task"
+        :assignee-name="assigneeNameFor(task)"
+        @activate="emit('card-activate', task.id)"
+      />
+    </VueDraggable>
   </section>
 </template>

@@ -26,6 +26,28 @@
   row (diagonal balance per UI/DESIGN.md's "Kanban Cards" note, minus its
   rejected colored-accent-bar rule); status text + optional progress bar
   bottom-left, assignee initial bottom-right.
+
+  Impeccable critique P0 ("no non-mouse path to any core interaction"):
+  drag was the only way to move or reassign a task, so a keyboard/
+  screen-reader user could not complete the primary workflow at all. The
+  card is now focusable and emits `activate` on Enter/Space/click (a plain
+  click — no drag movement — is safe alongside Sortable, which only starts
+  a drag past a movement threshold); every caller (kanban/index.vue
+  directly, or bubbled up through AssigneeFocusTray/UnassignedBacklogPanel)
+  opens a keyboard-operable action menu offering the same stage-move /
+  assign-on-move mutations dragging already performs.
+
+  Title is `line-clamp-2` with a `title` attribute carrying the full text
+  (Impeccable critique minor observation): an unclamped title could wrap
+  indefinitely and distort card height/grid rhythm across a column.
+
+  Impeccable re-critique P3 ("no affordance signaling a card opens an
+  action menu on click"): `cursor-grab` was the card's only visual cue, so
+  a mouse user who only ever drags had no reason to discover the
+  click-to-open-menu path built for keyboard parity. A small "⋯" hint now
+  fades in on hover/focus (`group-hover`/`group-focus-visible`) — decorative
+  only (`aria-hidden`, `pointer-events-none`), the whole card stays the
+  actual click/keyboard target via the existing aria-label.
 -->
 <script setup lang="ts">
 import { formatProgress, shouldShowProgress, type TaskProgress } from "./TaskCard.helpers";
@@ -37,6 +59,7 @@ interface TaskCardProps {
 }
 
 const props = defineProps<TaskCardProps>();
+const emit = defineEmits<{ activate: [] }>();
 
 const showProgress = computed(() => shouldShowProgress(props.progress));
 const progressLabel = computed(() => (props.progress ? formatProgress(props.progress) : ""));
@@ -46,19 +69,35 @@ const assigneeInitial = computed(() => props.assigneeName?.charAt(0) ?? "");
 
 <template>
   <div
-    class="card cursor-grab select-none rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm transition hover:shadow-md active:cursor-grabbing"
+    class="card group cursor-grab select-none rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 active:cursor-grabbing"
     :data-task-id="task.id"
+    role="button"
+    tabindex="0"
+    :aria-label="`${task.title}、操作メニューを開く`"
+    @click="emit('activate')"
+    @keydown.enter.prevent="emit('activate')"
+    @keydown.space.prevent="emit('activate')"
   >
     <div class="flex items-start justify-between gap-2">
-      <span class="task-title font-medium leading-snug text-slate-900">{{ task.title }}</span>
-      <PriorityBadge :priority="task.priority" />
+      <span class="task-title line-clamp-2 font-medium leading-snug text-slate-900" :title="task.title">{{
+        task.title
+      }}</span>
+      <span class="flex shrink-0 items-center gap-1">
+        <PriorityBadge :priority="task.priority" />
+        <span
+          class="pointer-events-none leading-none text-slate-400 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+          aria-hidden="true"
+        >
+          ⋯
+        </span>
+      </span>
     </div>
 
     <div v-if="showProgress" class="mt-2">
       <div class="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
         <div class="task-progress h-full rounded-full bg-primary-600" :style="{ width: `${progressPercent}%` }" />
       </div>
-      <span class="mt-1 block text-[11px] text-slate-400">{{ progressLabel }}</span>
+      <span class="mt-1 block text-[11px] text-slate-500">{{ progressLabel }}</span>
     </div>
 
     <div class="mt-2 flex items-center justify-between gap-2">

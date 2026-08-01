@@ -18,12 +18,29 @@
   - Requirement 2.5: the folded-away assignees remain individually
     inspectable (name + count each) via an expand toggle on the "+N名"
     chip.
-  - A leading "すべて" chip is always shown (not subject to maxVisible
-    truncation) and is the equivalent of AssigneeFilter's "" value.
-    Clicking any chip (including "すべて") sets `v-model`.
+  - Round 3 user feedback ("チーム負荷の「すべて」は...あまり意味がないですね"):
+    since board-wide filtering was already removed, a permanently-selected
+    "すべて" chip no longer did anything a plain deselect couldn't — removed.
+    Clicking a member's chip again now toggles the selection back to ""
+    (closing the focus tray), instead of requiring a separate "すべて" button.
+  - Impeccable critique P1 ("workload-chip full-red-fill breaks the
+    Badge-Only Color Rule"): the top-ranked assignee's *entire chip*
+    previously turned red just for being index 0 in a caller-provided sort,
+    even at routine counts on a 2-3 person team — a permanent false-alarm
+    for a "glance the board" user. The chip itself now only ever changes for
+    selection state (the existing primary-ring treatment); rank is
+    communicated solely through the shared `Badge` pill around the count,
+    same idiom `PriorityBadge`/`StatusBadge` already use everywhere else on
+    this screen.
+  - Impeccable re-critique P2 ("still rank-based, not threshold-based"):
+    that first fix only relocated the color, it didn't change *when* it
+    applies — index 0 always got "danger" regardless of whether that count
+    was actually high. Swapped to `isOverloaded(entry.count)` (see
+    ./TeamWorkloadSummary.helpers.ts) so the badge only turns red past an
+    actual overload line, not merely for outranking teammates.
 -->
 <script setup lang="ts">
-import { splitVisibleWorkload, type WorkloadCount } from "./TeamWorkloadSummary.helpers";
+import { isOverloaded, splitVisibleWorkload, type WorkloadCount } from "./TeamWorkloadSummary.helpers";
 
 // design.md: "既定値はコンポーネント内で定義し" — the default visible chip
 // count lives here, not in the caller.
@@ -52,7 +69,7 @@ function toggleRemainder() {
 }
 
 function selectAssignee(userId: string) {
-  selectedAssigneeUserId.value = userId;
+  selectedAssigneeUserId.value = selectedAssigneeUserId.value === userId ? "" : userId;
 }
 </script>
 
@@ -67,35 +84,19 @@ function selectAssignee(userId: string) {
       チーム負荷
     </span>
     <button
-      type="button"
-      class="workload-chip workload-chip-all inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ring-1 transition"
-      :class="
-        selectedAssigneeUserId === ''
-          ? 'bg-primary-600 text-white ring-primary-600'
-          : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50'
-      "
-      @click="selectAssignee('')"
-    >
-      すべて
-    </button>
-    <button
-      v-for="(entry, index) in visibleCounts"
+      v-for="entry in visibleCounts"
       :key="entry.user.id"
       type="button"
       class="workload-chip inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ring-1 transition"
-      :class="[
+      :class="
         selectedAssigneeUserId === entry.user.id
-          ? 'ring-2 ring-primary-600'
-          : index === 0 && entry.count > 0
-            ? 'bg-red-50 text-red-700 ring-red-200 hover:bg-red-100'
-            : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50',
-        selectedAssigneeUserId === entry.user.id && !(index === 0 && entry.count > 0) ? 'bg-primary-50 text-primary-700' : '',
-        selectedAssigneeUserId === entry.user.id && index === 0 && entry.count > 0 ? 'bg-red-50 text-red-700' : '',
-      ]"
+          ? 'bg-primary-50 text-primary-700 ring-2 ring-primary-600'
+          : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50'
+      "
       @click="selectAssignee(entry.user.id)"
     >
       <span class="font-medium">{{ entry.user.name }}</span>
-      <span :class="index === 0 && entry.count > 0 ? 'text-red-500' : 'text-slate-400'">{{ entry.count }}</span>
+      <Badge :tone="isOverloaded(entry.count) ? 'danger' : 'neutral'" :label="String(entry.count)" />
     </button>
     <button
       v-if="hasRemainder"
@@ -119,7 +120,7 @@ function selectAssignee(userId: string) {
         @click="selectAssignee(entry.user.id)"
       >
         <span class="font-medium">{{ entry.user.name }}</span>
-        <span class="text-slate-400">{{ entry.count }}</span>
+        <Badge :tone="isOverloaded(entry.count) ? 'danger' : 'neutral'" :label="String(entry.count)" />
       </button>
     </div>
   </div>

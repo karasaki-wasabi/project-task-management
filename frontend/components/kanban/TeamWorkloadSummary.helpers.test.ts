@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { remainderCount, splitVisibleWorkload, type WorkloadCount } from "./TeamWorkloadSummary.helpers";
+import { isOverloaded, remainderCount, splitVisibleWorkload, WORKLOAD_OVERLOAD_THRESHOLD, type WorkloadCount } from "./TeamWorkloadSummary.helpers";
 
 function makeUser(id: string, name: string): User {
   return { id, name, createdAt: "", updatedAt: "" };
@@ -81,5 +81,23 @@ describe("remainderCount (task 2.2, Requirement 2.4)", () => {
 
   it("returns the number of folded-away assignees for 10 entries with maxVisible 5", () => {
     expect(remainderCount(makeCounts(10), 5)).toBe(5);
+  });
+});
+
+describe("isOverloaded (Impeccable re-critique P2: threshold-based, not rank-based)", () => {
+  it("is false at and below the threshold", () => {
+    expect(isOverloaded(0)).toBe(false);
+    expect(isOverloaded(WORKLOAD_OVERLOAD_THRESHOLD)).toBe(false);
+  });
+
+  it("is true only past the threshold", () => {
+    expect(isOverloaded(WORKLOAD_OVERLOAD_THRESHOLD + 1)).toBe(true);
+  });
+
+  it("does not depend on rank — a lower count never overrides a higher one", () => {
+    // Regression guard for the original bug: index 0 (top of a
+    // caller-sorted list) always got flagged regardless of its count.
+    const topOfSortButNotOverloaded = 3;
+    expect(isOverloaded(topOfSortButNotOverloaded)).toBe(false);
   });
 });
