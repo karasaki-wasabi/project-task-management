@@ -7,7 +7,31 @@ on:
     branches: [main]
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # backend/frontendどちらの変更も含まない場合(ドキュメント・steering・spec等のみ)、
+      # 下流のtest/buildジョブはすべてスキップされる。ci.yml自体の変更は両方に
+      # フラグを立て、フィルタ変更によって意図せずジョブがスキップされないようにする。
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+
   backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     services:
       mysql:
@@ -53,6 +77,8 @@ jobs:
       - run: npm run build
 
   frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -75,6 +101,8 @@ jobs:
       - run: npm run generate
 
   docker-build:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -84,9 +112,9 @@ jobs:
 
       # Publishing (below) only happens on a push to main, using the
       # workflow's own auto-issued GITHUB_TOKEN (no PAT needed). On PRs this
-      # still builds both images (target: prod, the deployment artifacts)
-      # without pushing, so PR CI still catches Docker-specific build
-      # breakage the node-native backend/frontend jobs above can't see.
+      # still builds the changed image(s) (target: prod, the deployment
+      # artifacts) without pushing, so PR CI still catches Docker-specific
+      # build breakage the node-native backend/frontend jobs above can't see.
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
@@ -94,7 +122,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v6
+      - if: needs.changes.outputs.backend == 'true'
+        uses: docker/build-push-action@v6
         with:
           context: ./backend
           target: prod
@@ -103,7 +132,8 @@ jobs:
             ghcr.io/${{ github.repository }}-backend:latest
             ghcr.io/${{ github.repository }}-backend:${{ github.sha }}
 
-      - uses: docker/build-push-action@v6
+      - if: needs.changes.outputs.frontend == 'true'
+        uses: docker/build-push-action@v6
         with:
           context: ./frontend
           target: prod

@@ -28,7 +28,7 @@
 ## ローカル検証のスキップ
 
 - 差分が `.kiro/`、`.githooks/`、`*.md` などドキュメント・steering・spec関連のパスのみで、アプリのソースコード(`backend/`、`frontend/`のコード本体、`docker-compose.yml`等)を一切含まない場合、push前のローカルテスト/ビルド検証(`docker compose run ... npm run test` 等)は意味がないためスキップしてよい
-- GitHub Actions側のCI(`.github/workflows/ci.yml`)にはパスフィルタがなく、ドキュメントのみの変更でも全ジョブが実行される。これはローカル検証のスキップとは別物で、CI側の実行有無はこのルールでは変えない
+- GitHub Actions側のCI(`.github/workflows/ci.yml`)は`dorny/paths-filter`で`backend/**`・`frontend/**`の変更有無を判定し、変更のないジョブ(`backend`/`frontend`/`docker-build`)を自動スキップする。ドキュメントのみの変更では全ジョブがスキップされ、フロントエンドのみの変更では`backend`ジョブ(テスト・ビルド)がスキップされる。ローカル検証のスキップとは独立した仕組みなので、ローカル側の判断基準(上記)は変わらない
 
 ## push / PR
 
