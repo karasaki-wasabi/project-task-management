@@ -1,12 +1,11 @@
 <!--
-  Team workload summary + assignee selector, merged (task 2.2 original +
-  user feedback round 2: "担当者絞り込みの欄とチーム負荷の欄を共通化").
-  This is now the single control that drives kanban/index.vue's
-  `selectedAssigneeUserId` — the standalone AssigneeFilter dropdown was
-  removed from the kanban page. Design.md's original "TeamWorkloadSummary
-  is never filtered by the selection" still holds: this component always
-  renders every assignee's chip regardless of which one is selected, it
-  just also reports which chip was clicked.
+  Team workload summary + assignee selector, merged into a single control.
+  This is the single control that drives kanban/index.vue's
+  `selectedAssigneeUserId` — there is no separate assignee-filter dropdown.
+  This component always renders every assignee's chip regardless of which
+  one is selected; it never filters itself, it just reports which chip was
+  clicked. Clicking a member's chip again toggles the selection back to ""
+  (closing the focus tray).
 
   - Requirement 2.1/2.3: aggregation and descending sort order are the
     caller's responsibility (kanban/index.vue) — this component renders
@@ -18,26 +17,15 @@
   - Requirement 2.5: the folded-away assignees remain individually
     inspectable (name + count each) via an expand toggle on the "+N名"
     chip.
-  - Round 3 user feedback ("チーム負荷の「すべて」は...あまり意味がないですね"):
-    since board-wide filtering was already removed, a permanently-selected
-    "すべて" chip no longer did anything a plain deselect couldn't — removed.
-    Clicking a member's chip again now toggles the selection back to ""
-    (closing the focus tray), instead of requiring a separate "すべて" button.
-  - Impeccable critique P1 ("workload-chip full-red-fill breaks the
-    Badge-Only Color Rule"): the top-ranked assignee's *entire chip*
-    previously turned red just for being index 0 in a caller-provided sort,
-    even at routine counts on a 2-3 person team — a permanent false-alarm
-    for a "glance the board" user. The chip itself now only ever changes for
-    selection state (the existing primary-ring treatment); rank is
-    communicated solely through the shared `Badge` pill around the count,
-    same idiom `PriorityBadge`/`StatusBadge` already use everywhere else on
-    this screen.
-  - Impeccable re-critique P2 ("still rank-based, not threshold-based"):
-    that first fix only relocated the color, it didn't change *when* it
-    applies — index 0 always got "danger" regardless of whether that count
-    was actually high. Swapped to `isOverloaded(entry.count)` (see
-    ./TeamWorkloadSummary.helpers.ts) so the badge only turns red past an
-    actual overload line, not merely for outranking teammates.
+
+  The chip itself only ever changes appearance for selection state (the
+  primary-ring treatment); overload is communicated solely through the
+  shared `Badge` pill around the count (same idiom `PriorityBadge`/
+  `StatusBadge` use elsewhere on this screen), and only turns red past
+  `isOverloaded(entry.count)` (see ./TeamWorkloadSummary.helpers.ts) — never
+  merely for outranking teammates in a caller-provided sort. Coloring an
+  entire chip, or coloring by rank instead of an absolute threshold, both
+  produce false alarms on routine team-size distributions.
 -->
 <script setup lang="ts">
 import { isOverloaded, splitVisibleWorkload, type WorkloadCount } from "./TeamWorkloadSummary.helpers";

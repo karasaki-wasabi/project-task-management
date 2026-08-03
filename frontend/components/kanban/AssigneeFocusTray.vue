@@ -13,34 +13,26 @@
   - Requirement 1.5: an empty `tasks` list shows a zero-count message
     instead of an empty area.
 
-  User feedback round 3: this tray is now a drop TARGET (not just inert) —
-  dragging an unassigned card here assigns it to the currently-focused
-  user. It's a `VueDraggable` with `put: true`, sharing the same
-  `kanban-cards` Sortable group as the stage columns and backlog panel.
-  This component only reports which task was dropped (`assign` event);
-  the parent owns the actual API call, since it alone knows the currently
-  selected assignee and needs to also revert the optimistic drop (backend
-  constraint: `updateDevelopmentStage` only ever sets `assigneeUserId`
-  when the task doesn't already have one — reassigning an already-assigned
-  task is a no-op there, see `research.md`/parent component) — the parent
-  calls the exposed `resync()` after handling the drop either way. Also
-  now has a background/border like the other lanes, since it functions as
-  one (round-3 feedback).
+  This tray is a drop TARGET (not just inert) — dragging an unassigned
+  card here assigns it to the currently-focused user. It's a
+  `VueDraggable` with `put: true`, sharing the same `kanban-cards` Sortable
+  group as the stage columns and backlog panel. This component only
+  reports which task was dropped (`assign` event); the parent owns the
+  actual API call, since it alone knows the currently selected assignee
+  and needs to also revert the optimistic drop (backend constraint:
+  `updateDevelopmentStage` only ever sets `assigneeUserId` when the task
+  doesn't already have one — reassigning an already-assigned task is a
+  no-op there, see `research.md`/parent component) — the parent calls the
+  exposed `resync()` after handling the drop either way. Has a
+  background/border like the other lanes, since it functions as one.
 
-  Impeccable re-critique: `text-slate-500` labels here sit on this tray's
-  own `bg-slate-100`, measuring 4.34:1 — the first contrast fix pass only
-  touched the collapsed/base view and missed this combination inside an
-  actually-opened panel. Bumped to `text-slate-600` (6.92:1).
-
-  Round 3 follow-up ("未割り当て→担当者へのドラッグは問題ない。しかし、どこの
-  カンバンレーンに入れればいいかわかんない"): a card dropped here only gets
-  an assignee, not a development stage, so it stayed effectively hidden
-  back in the (possibly collapsed) backlog panel until the user went and
-  found it again. Now `pull: true` — the card sits right here, visibly, and
-  can be dragged straight from the tray into a stage column next, so the
-  two-step "assign, then place" flow stays in one visible spot instead of
-  needing to rediscover the card elsewhere. Dragging out emits `end` (same
-  shape as UnassignedBacklogPanel's) for the parent to act on.
+  Also `pull: true`: a card dropped here only gets an assignee, not a
+  development stage, so without this it would sit effectively hidden back
+  in the (possibly collapsed) backlog panel until the user went and found
+  it again. Instead the card sits right here, visibly, and can be dragged
+  straight from the tray into a stage column next, so the two-step
+  "assign, then place" flow stays in one visible spot. Dragging out emits
+  `end` (same shape as UnassignedBacklogPanel's) for the parent to act on.
 -->
 <script setup lang="ts">
 import { VueDraggable, type DraggableEvent } from "vue-draggable-plus";
@@ -85,10 +77,9 @@ function handleAdd(evt: DraggableEvent) {
 // (matching UnassignedBacklogPanel's condition) even if `targetStageId` is
 // undefined — a drop back into this tray itself is exactly that case, and
 // the parent still needs to hear about it to clear its drop-target
-// highlight (Impeccable fourth critique P1: previously only emitting when
-// `targetStageId` was set meant a "changed my mind, dropped back in the
-// tray" drag never notified the parent at all, leaving whichever column
-// had last been hovered stuck highlighted).
+// highlight. Emitting only when `targetStageId` is set would mean a
+// "changed my mind, dropped back in the tray" drag never notifies the
+// parent, leaving whichever column had last been hovered stuck highlighted.
 function handleEnd(evt: DraggableEvent) {
   const taskId = (evt.item as HTMLElement | undefined)?.dataset.taskId;
   const targetStageId = (evt.to as HTMLElement | undefined)?.dataset.stageId;

@@ -38,11 +38,10 @@ export function remainderCount(counts: WorkloadCount[], maxVisible: number): num
   return splitVisibleWorkload(counts, maxVisible).remainder.length;
 }
 
-// Impeccable re-critique P2 ("workload-chip red is still rank-based, not
-// threshold-based"): coloring whoever simply ranks #1 as "danger" flags a
-// routine distribution (e.g. 6/4/3 on a 3-person team) as if it were an
-// alarm — a false positive for a user who glances at the board and trusts
-// color over the actual numbers. Per-person active work in this app is
+// Coloring whoever simply ranks #1 as "danger" would flag a routine
+// distribution (e.g. 6/4/3 on a 3-person team) as if it were an alarm — a
+// false positive for a user who glances at the board and trusts color over
+// the actual numbers. Per-person active work in this app is
 // understood to be WIP-limited to a handful of tasks at once (not a
 // formalized/configurable setting yet), so a fixed line at 5 stands in for
 // "this person has more incomplete work than this tool is meant to let

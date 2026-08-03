@@ -19,7 +19,7 @@ function asHTMLElement(el: FakeElement): HTMLElement {
   return el as unknown as HTMLElement;
 }
 
-describe("preventSameListMove (drag-path regression: A→B→back-to-A must not be blocked)", () => {
+describe("preventSameListMove (A→B→back-to-A must not be blocked)", () => {
   it("blocks a move when the candidate list is the card's current live parent", () => {
     const listA = fakeElement();
     const dragged = fakeElement(listA);
