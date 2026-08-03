@@ -84,7 +84,7 @@ describe("remainderCount (task 2.2, Requirement 2.4)", () => {
   });
 });
 
-describe("isOverloaded (Impeccable re-critique P2: threshold-based, not rank-based)", () => {
+describe("isOverloaded (threshold-based, not rank-based)", () => {
   it("is false at and below the threshold", () => {
     expect(isOverloaded(0)).toBe(false);
     expect(isOverloaded(WORKLOAD_OVERLOAD_THRESHOLD)).toBe(false);
@@ -95,8 +95,8 @@ describe("isOverloaded (Impeccable re-critique P2: threshold-based, not rank-bas
   });
 
   it("does not depend on rank — a lower count never overrides a higher one", () => {
-    // Regression guard for the original bug: index 0 (top of a
-    // caller-sorted list) always got flagged regardless of its count.
+    // index 0 (top of a caller-sorted list) must not be flagged merely for
+    // being first; only its own count against the threshold matters.
     const topOfSortButNotOverloaded = 3;
     expect(isOverloaded(topOfSortButNotOverloaded)).toBe(false);
   });

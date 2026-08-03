@@ -5,13 +5,11 @@
   developmentStageId が未設定のタスクに絞り込み済み" — this component does
   not itself filter by stage, it only receives the already-filtered list).
 
-  Repositioned (user feedback round 2: "カンバン定義の左端に折りたたみ可能な
-  未割り当てがあるとよいです") from a full-width panel above the board into
-  the leftmost column of the board's own horizontally-scrolling row, so
-  dragging a backlog task into a stage column is a short reach rather than
-  a trip across the whole page. Collapsed state is now a narrow vertical
-  strip (same column height family as stage columns) instead of a
-  full-width bar.
+  Lives in the leftmost column of the board's own horizontally-scrolling
+  row (not a full-width panel above the board), so dragging a backlog task
+  into a stage column is a short reach rather than a trip across the whole
+  page. Collapsed state is a narrow vertical strip (same column height
+  family as stage columns) instead of a full-width bar.
 
   - Requirement 3.1/3.2: while collapsed (`expanded === false`, the default),
     only a count badge renders — no card/row for any task is drawn.
@@ -29,47 +27,36 @@
     declaratively by Sortable rather than by convention) and `sort: false`
     (order here is controlled by the sort `<select>`, not manual drag
     reordering).
-  - User feedback round 2 ("各カンバンは5件程度を目安に...縦スクロール"):
-    the expanded card list scrolls internally (`max-h-*` + overflow-y-auto)
-    rather than growing the page, matching the stage columns' treatment.
-  - User feedback round 3 (cancel-leaves-a-duplicate-card bug): resyncing
-    `draggableTasks` synchronously/immediately on every drag end fought
-    Sortable's own internal bookkeeping and its drop animation, producing
-    a stale duplicate DOM node until reload. Fixed by NOT resyncing
-    eagerly at all here — a successful move flows back through `props.tasks`
-    naturally (parent reloads, this component's own `watch(visibleTasks)`
-    picks it up). Only an aborted move (assignee-picker canceled) needs an
-    explicit revert, which the parent triggers via the exposed `resync()`
-    method — by the time a user clicks "cancel", Sortable's own drag
-    transition has long finished, so there's no timing race.
-  - User feedback round 3: collapse/expand now animates (width transition
-    on a single root element, swapping only the inner content) instead of
-    an abrupt swap between two different elements; the toggle icon is a
-    left/right chevron (this panel now collapses to a narrow side strip,
-    not a horizontal accordion) instead of the up/down chevron left over
-    from the earlier full-width layout.
-  - Round 3 follow-up ("開くときに中のカードが有効化されてからでてくるので、
-    一瞬縦のスクロールバーが表示されます"): rendering the card list
-    immediately when `expanded` flips true meant it laid out (and wrapped
-    titles, growing taller) while the panel was still narrow mid-transition,
-    flashing a vertical scrollbar for the ~300ms until the width settled.
-    Content now stays hidden until the width transition's `transitionend`
-    fires (`contentVisible`), so it only appears once the panel is already
-    at full width. Collapsing hides content immediately — no flash there,
-    since it can only ever get narrower.
-  - Impeccable third critique: this was the only lane on the board without
-    a heading landmark — every stage column and the focus tray has an
-    `<h2>`, but this panel's label was plain text inside its toggle
-    `<button>`, invisible to heading-based screen-reader navigation (a
-    standard technique independent of the column-jump skip links). The
-    label is now a real `<h2>` (nesting a heading inside a button is valid
-    HTML and keeps the toggle's click/keyboard behavior unchanged) —
-    fitting, since this is this project's own documented largest lane
-    (~50 items), not a minor one. The same empty-state contrast fix
-    applied to `AssigneeFocusTray.vue` last round (`text-slate-500` →
-    `text-slate-600`, 4.34:1 → 6.92:1) is applied here too, at line ~190 —
-    the identical pattern was missed here because the prior round's live
-    testing never hit "expanded and empty" for this specific panel.
+  - The expanded card list scrolls internally (`max-h-*` + overflow-y-auto)
+    rather than growing the page, matching the stage columns' treatment
+    (this panel's backlog can hold far more items than fit on screen).
+  - `draggableTasks` is deliberately NOT resynced eagerly on drag end:
+    doing so fights Sortable's own internal bookkeeping and its drop
+    animation, producing a stale duplicate DOM node until reload. A
+    successful move flows back through `props.tasks` naturally (parent
+    reloads, this component's own `watch(visibleTasks)` picks it up). Only
+    an aborted move (assignee-picker canceled) needs an explicit revert,
+    which the parent triggers via the exposed `resync()` method — by the
+    time a user clicks "cancel", Sortable's own drag transition has long
+    finished, so there's no timing race.
+  - Collapse/expand animates via a width transition on a single root
+    element, swapping only the inner content, instead of an abrupt swap
+    between two different elements; the toggle icon is a left/right
+    chevron since this panel collapses to a narrow side strip, not a
+    horizontal accordion.
+  - Content stays hidden until the width transition's `transitionend`
+    fires (`contentVisible`): rendering the card list immediately when
+    `expanded` flips true lays it out (wrapping titles, growing taller)
+    while the panel is still narrow mid-transition, flashing a vertical
+    scrollbar until the width settles. It only appears once the panel is
+    already at full width. Collapsing hides content immediately — no flash
+    there, since it can only ever get narrower.
+  - The panel's label is a real `<h2>` inside its toggle `<button>`
+    (nesting a heading inside a button is valid HTML and keeps the
+    toggle's click/keyboard behavior unchanged), giving this lane a
+    heading landmark like every stage column and the focus tray have —
+    important here since this is the project's largest lane (~50 items),
+    not a minor one.
 -->
 <script setup lang="ts">
 import { VueDraggable, type DraggableEvent } from "vue-draggable-plus";

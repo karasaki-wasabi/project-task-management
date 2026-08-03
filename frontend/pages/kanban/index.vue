@@ -5,30 +5,28 @@
   delete) has moved to /kanban/stages (frontend/pages/kanban/stages.vue);
   this page only reads stages to render the board's columns.
 
-  User feedback round 2: drag-and-drop uses vue-draggable-plus (Sortable.js)
-  instead of the browser-standard HTML5 Drag and Drop API, for lift/
-  cursor-follow/sibling-reflow animation the native API can't give without
-  heavy custom work (design.md Technology Stack already allowed this
-  library swap if UX warranted it). Each stage column's card list and
-  UnassignedBacklogPanel's/AssigneeFocusTray's lists are separate
-  `VueDraggable` instances sharing one Sortable `group` ("kanban-cards"),
-  so a card can be dragged between any of them.
+  Drag-and-drop uses vue-draggable-plus (Sortable.js) instead of the
+  browser-standard HTML5 Drag and Drop API, for lift/cursor-follow/
+  sibling-reflow animation the native API can't give without heavy custom
+  work (design.md Technology Stack allows this library swap). Each stage
+  column's card list and UnassignedBacklogPanel's/AssigneeFocusTray's
+  lists are separate `VueDraggable` instances sharing one Sortable `group`
+  ("kanban-cards"), so a card can be dragged between any of them.
 
-  User feedback round 3, resync strategy (fixes a bug where canceling the
-  assignee-picker left a stale duplicate card until reload): none of
-  these lists have a persisted "position" field, so we do NOT eagerly
-  force-resync `columnTasksByStageId`/child components' local mirrors on
-  every drag end anymore — that fought Sortable's own internal bookkeeping
-  and its drop animation. A successful move flows back naturally (API call
-  → `loadTasks()` → the `watch(tasks, ...)` below recomputes everything).
-  An ABORTED move (assignee-picker canceled) is the only case needing an
-  explicit revert, done once in `cancelPendingMove()` — by then Sortable's
-  transition has long finished, so there's no timing race.
+  Resync strategy: none of these lists have a persisted "position" field,
+  so `columnTasksByStageId`/child components' local mirrors are NOT
+  eagerly force-resynced on every drag end — that fights Sortable's own
+  internal bookkeeping and its drop animation. A successful move flows
+  back naturally (API call → `loadTasks()` → the `watch(tasks, ...)` below
+  recomputes everything). An ABORTED move (assignee-picker canceled) is
+  the only case needing an explicit revert, done once in
+  `cancelPendingMove()` — by then Sortable's transition has long finished,
+  so there's no timing race.
 
-  Also round 3: board-wide assignee filtering was removed (kept only in
-  AssigneeFocusTray) — a chip click now only drives the focus tray, not
-  also the stage board, since filtering both was redundant/confusing.
-  Dropping a card onto the focus tray assigns it to the focused user
+  Board-wide assignee filtering does not exist — filtering lives only in
+  AssigneeFocusTray. A chip click drives only the focus tray, not also the
+  stage board, since filtering both would be redundant. Dropping a card
+  onto the focus tray assigns it to the focused user
   (`handleFocusTrayAssign`), subject to the backend's existing constraint
   that `updateDevelopmentStage` only sets `assigneeUserId` when the task
   doesn't already have one (task-delivery-management Requirement 12.8) —
@@ -44,74 +42,42 @@
   Sortable group setting enforces "not itself a valid drop target"
   declaratively.
 
-  Impeccable critique fixes (dual-agent critique, 2026-08-02,
-  .impeccable/critique/2026-08-02T10-20-44Z__frontend-pages-kanban-index-vue.md):
-  - P0 "silent failure on focus-tray reassignment drop": the backend
-    constraint noted above (no-op on an already-assigned task) used to
-    revert with zero explanation. `handleFocusTrayAssign` now sets
-    `focusTrayError` and the template surfaces it via the shared
-    `ErrorAlert` (the same pattern every other page in this app already
-    uses for backend errors, per `.kiro/steering/error-handling.md`).
-  - P0 "no non-mouse path to any core interaction": every `TaskCard` (in
-    the stage board, the focus tray, and the backlog panel) is now
-    focusable and emits `activate`/`card-activate`, opening a keyboard-
-    operable action menu (`actionMenuTaskId`) that offers the exact same
-    stage-move / assign-on-move mutations dragging already performs — no
-    new capability, just a second input path to the same two writes.
-  - Both dialog-like overlays on this page (the assignee-picker prompt and
-    the new action menu) now get real dialog semantics via
-    `useDialogFocusTrap` — `aria-modal`, initial focus on open, a Tab trap,
-    and focus restored to whatever opened them on close.
-  - P1 "board overflows its own standard desktop width, wasting ~500px":
-    the board previously inherited `app.vue`'s shared `max-w-6xl` cap even
-    though it's the one surface that needs a horizontally-scrolling row
-    wider than that. Originally fixed with a `left-1/2 -translate-x-1/2
-    w-screen` wrapper scoped to just the board div — since replaced (user
-    feedback, see below) by opting this whole page out of the cap via
-    `definePageMeta({ fullWidth: true })`.
+  A failed focus-tray reassignment (backend no-op on an already-assigned
+  task) surfaces via `focusTrayError` and the shared `ErrorAlert` (the
+  same pattern every other page in this app uses for backend errors, per
+  `.kiro/steering/error-handling.md`) rather than reverting silently.
 
-  Impeccable re-critique fixes (2026-08-02, second pass,
-  .impeccable/critique/2026-08-02T10-57-00Z__frontend-pages-kanban-index-vue.md):
-  - P2 "no confirmation on a successful move": the very first critique
-    named this and only its failure half (the reassignment no-op) got
-    fixed. A move — by drag or by the keyboard action menu — used to end
-    in total silence. `announceMoveSuccess()` now sets `moveStatusMessage`
-    after every successful write, surfaced as a `role="status"
-    aria-live="polite"` banner (auto-clears after 2.5s) — this also gives
-    screen-reader users an announcement of the outcome they had zero
-    signal of before, not just a visual nicety.
-  - P1 "keyboard reach scales linearly with board position": reaching
-    column N meant Tabbing through every card in every prior column plus
-    the whole expanded backlog. Each stage-column heading, the backlog
-    toggle, and the focus tray heading now form a `<nav>` "column jump"
-    list (visually a `sr-only` skip-link style list, but see design.md's
-    restraint on hidden-until-focus chrome — kept genuinely visually
-    hidden except on focus, standard skip-link pattern) so a keyboard user
-    can jump directly to any lane's first card without walking every
-    card before it.
+  Every `TaskCard` (in the stage board, the focus tray, and the backlog
+  panel) is focusable and emits `activate`/`card-activate`, opening a
+  keyboard-operable action menu (`actionMenuTaskId`) that offers the exact
+  same stage-move / assign-on-move mutations dragging already performs —
+  a second input path to the same two writes, not a new capability. Both
+  dialog-like overlays on this page (the assignee-picker prompt and the
+  action menu) get real dialog semantics via `useDialogFocusTrap` —
+  `aria-modal`, initial focus on open, a Tab trap, and focus restored to
+  whatever opened them on close.
 
-  User-reported bug fix: dragging A→B→back-to-A (changing your mind
-  mid-drag) silently moved the card to B regardless of where it was
-  released. Root cause was in `preventSameListMove`
-  (composables/useSameListMoveGuard.ts), not here — Sortable's `evt.from`
-  in `onMove` is fixed at the ORIGINAL source list for the whole drag
-  gesture, not "current location," so returning to the origin list looked
-  identical to never having left it and got wrongly blocked. `evt.to` on
-  the `change`/`end` events used below is unaffected by this (it reflects
-  live hit-testing, not stale bookkeeping) and needed no change.
+  A move — by drag or by the keyboard action menu — announces its outcome:
+  `announceMoveSuccess()` sets `moveStatusMessage` after every successful
+  write, surfaced as a `role="status" aria-live="polite"` banner
+  (auto-clears after 2.5s), giving screen-reader users an announcement of
+  the outcome as well as sighted ones.
 
-  User feedback: the earlier `w-screen`-based board-only breakout caused a
-  faint page-wide horizontal scrollbar whenever the page ALSO had a
-  vertical scrollbar (short window, or a tall board) — `100vw` counts the
+  Each stage-column heading, the backlog toggle, and the focus tray
+  heading form a `<nav>` "column jump" list (visually a `sr-only`
+  skip-link style list, genuinely hidden except on focus, standard
+  skip-link pattern) so a keyboard user can jump directly to any lane's
+  first card instead of Tabbing through every card in every prior column.
+
+  This page opts its `<main>` out of app.vue's shared `max-w-6xl` cap via
+  `definePageMeta({ fullWidth: true })` — it is the one surface that needs
+  a horizontally-scrolling row wider than that, and every element on the
+  page (not just the board) shares this same single full width, so the
+  board never straddles outside its own `<main>`/parent structurally.
+  Deliberately no viewport units (`vw`) anywhere: `100vw` counts the
   vertical scrollbar's own width in most browsers, so it measures wider
-  than the actually-visible viewport the instant one appears. It also only
-  widened the board, leaving the title/workload-summary/dialogs above it
-  still capped at `max-w-6xl`, a width mismatch the user also flagged as
-  bad practice (the board straddling outside its own `<main>`/parent
-  structurally). Both fixed by opting this entire page out of `app.vue`'s
-  shared cap via `definePageMeta({ fullWidth: true })` instead — no
-  viewport units anywhere, and every element on the page (not just one
-  hand-picked div) now shares the same, single full width.
+  than the actually-visible viewport the instant a vertical scrollbar
+  appears (short window, or a tall board).
 -->
 <script setup lang="ts">
 import { VueDraggable, type DraggableEvent } from "vue-draggable-plus";
@@ -143,21 +109,17 @@ const backlogPanelRef = ref<{ resync: () => void } | null>(null);
 const pendingMoveDialogRef = ref<HTMLElement | null>(null);
 const actionMenuDialogRef = ref<HTMLElement | null>(null);
 
-// Impeccable fifth critique P0 ("rejected focus-tray reassignment makes the
-// source task vanish from its stage column until a hard reload"): the
-// obvious fix — re-run `syncColumnTasks()` — turned out not to be enough.
-// Root cause, found by logging `columnTasksByStageId` before/after: the
-// array was ALREADY correct the whole time (unchanged, since no API call
-// ever fires for a rejected move). Sortable's `put: true` group physically
-// moves the real DOM node into the tray via direct DOM APIs the instant
-// the drop lands — before our business logic ever runs, and entirely
-// outside Vue's virtual DOM. Because the reactive array's *content* never
-// actually changes, Vue's keyed diff has nothing to react to and leaves
-// the (physically relocated) DOM node exactly where Sortable put it — a
-// content-based re-sync can't undo a move Vue never knew happened. Forcing
-// the affected stage columns to fully remount (a fresh `:key`) is the
-// reliable fix: it makes Vue recreate the DOM nodes from the (already
-// correct) array instead of assuming nothing changed.
+// Bumped to force the affected stage columns to fully remount (a fresh
+// `:key`) after a rejected drop, rather than relying on a content-based
+// re-sync of `columnTasksByStageId`. Sortable's `put: true` group
+// physically moves the real DOM node into the tray via direct DOM APIs the
+// instant a drop lands — before any business logic runs, and entirely
+// outside Vue's virtual DOM. When a drop is rejected, the reactive array's
+// *content* never changes (no API call fires), so Vue's keyed diff has
+// nothing to react to and leaves the physically relocated DOM node exactly
+// where Sortable put it. Only a full remount makes Vue recreate the DOM
+// nodes from the (already correct) array instead of assuming nothing
+// changed.
 const boardRenderEpoch = ref(0);
 
 async function revertOptimisticMove() {
@@ -173,11 +135,9 @@ async function revertOptimisticMove() {
   boardRenderEpoch.value += 1;
 }
 
-// Impeccable re-critique P2 ("no confirmation on a successful move"): a
-// move used to end in total silence, visually and for screen readers
-// alike. `role="status" aria-live="polite"` announces it without
-// interrupting whatever the user is doing next, and clears itself so it
-// never reads as a persistent state.
+// `role="status" aria-live="polite"` announces a move's outcome (by drag
+// or keyboard) without interrupting whatever the user is doing next, and
+// clears itself so it never reads as a persistent state.
 const moveStatusMessage = ref<string | null>(null);
 let moveStatusTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -193,11 +153,10 @@ function stageName(stageId: string): string {
   return stages.value.find((s) => s.id === stageId)?.name ?? stageId;
 }
 
-// Impeccable re-critique P1 ("keyboard reach scales linearly with board
-// position"): a keyboard user reaching column N had to Tab through every
-// card in every prior column plus the whole expanded backlog. These jump
-// targets (rendered as standard sr-only-until-focus skip links) move focus
-// straight to a lane's first card without walking there.
+// Jump targets (rendered as standard sr-only-until-focus skip links) move
+// focus straight to a lane's first card, so a keyboard user reaching
+// column N doesn't have to Tab through every card in every prior column
+// plus the whole expanded backlog first.
 function focusLane(selector: string) {
   const container = document.querySelector<HTMLElement>(selector);
   if (!container) return;
@@ -211,9 +170,9 @@ function focusColumn(stageId: string) {
   focusLane(`.column[data-stage-id="${stageId}"]`);
 }
 
-// Keyboard/click-triggered alternative to dragging (Impeccable critique P0)
-// — same two mutations onDropOnStage/confirmPendingMove already perform,
-// just reachable without a mouse.
+// Keyboard/click-triggered alternative to dragging — same two mutations
+// onDropOnStage/confirmPendingMove already perform, just reachable
+// without a mouse.
 const actionMenuTaskId = ref<string | null>(null);
 const actionMenuTargetStageId = ref("");
 const actionMenuAssigneeUserId = ref("");
@@ -227,9 +186,8 @@ useDialogFocusTrap(
 useDialogFocusTrap(actionMenuDialogRef, isActionMenuOpen);
 
 // The single assignee selection driving the担当者フォーカス表示
-// (Requirement 1). "" = "すべて" (AssigneeFilter.vue's convention). Round 3:
-// no longer also filters the stage board (see header comment) — kept in
-// TeamWorkloadSummary's v-model purely to select who the focus tray shows.
+// (Requirement 1). "" = "すべて". Does not filter the stage board (see
+// header comment) — drives only which assignee the focus tray shows.
 const selectedAssigneeUserId = ref("");
 
 // Requirement 1.2/1.3: selected assignee's incomplete tasks, any/no stage.
@@ -251,8 +209,8 @@ function syncColumnTasks() {
     if (!nextIds.has(key)) delete columnTasksByStageId[key];
   }
   for (const stage of stages.value) {
-    // Round 3: always "all assignees" — the stage board is no longer
-    // filtered by selectedAssigneeUserId (that's the focus tray's job now).
+    // Always "all assignees" — the stage board is not filtered by
+    // selectedAssigneeUserId; that's the focus tray's job.
     columnTasksByStageId[stage.id] = computeTasksForStage(tasks.value, stage.id, "");
   }
 }
@@ -274,15 +232,13 @@ function userName(userId: string | null | undefined): string | undefined {
 async function onDropOnStage(targetStageId: string, taskId: string) {
   const task = tasks.value.find((t) => t.id === taskId);
   if (!task || task.developmentStageId === targetStageId) {
-    // Impeccable third critique P1 ("a canceled/no-op drag silently
-    // reorders the column, then silently un-reorders itself later"):
     // Sortable's `:model-value`/`@update:model-value` binding already
-    // optimistically permuted `columnTasksByStageId`'s mirror by the time
-    // this fires, even though nothing is being written here — without an
-    // explicit revert, the visual order stayed wrong until some *other*
+    // optimistically permutes `columnTasksByStageId`'s mirror by the time
+    // this fires, even when nothing is being written here — without an
+    // explicit revert, the visual order would stay wrong until some other
     // move anywhere on the board happened to trigger a reload. Snap it
     // back to the real order immediately instead, same as the picker's
-    // own `cancelPendingMove` already does for its abort path.
+    // own `cancelPendingMove` does for its abort path.
     syncColumnTasks();
     return;
   }
@@ -310,26 +266,25 @@ async function handleColumnDragEnd(evt: DraggableEvent) {
 }
 
 // Live-updated while dragging over a stage column, for the whole-lane
-// highlight (round 3: replaces the per-card insertion-point animation,
-// since order within a column isn't persisted — see main.css).
+// highlight (rather than a per-card insertion-point animation, since order
+// within a column isn't persisted — see main.css).
 function handleColumnChange(evt: DraggableEvent) {
   hoveredStageId.value = (evt.to as HTMLElement | undefined)?.dataset.stageId ?? null;
 }
 
-// UnassignedBacklogPanel doesn't resync itself on drop anymore; it only
-// bubbles up the move outcome for us to act on.
+// UnassignedBacklogPanel doesn't resync itself on drop; it only bubbles up
+// the move outcome for us to act on.
 //
-// Impeccable fourth critique P1 ("drop-target highlight sticks permanently
-// after any drag originating in the backlog panel or focus tray"): Sortable
-// fires `onEnd` on the SOURCE list only, so `hoveredStageId` — set by a
-// stage column's own `@change` while a drag hovers over it — was only ever
-// cleared by `handleColumnDragEnd` (a drag that both started AND ended in a
-// stage column). A drag starting here or in the focus tray never ran that
-// reset, leaving whichever column was last hovered permanently outlined,
-// even after a successful drop, a canceled one, or a drop back into this
-// very panel (no `targetStageId` at all). Clearing it unconditionally,
-// before checking `targetStageId`, covers all three cases the same way
-// `handleColumnDragEnd` already does for its own drags.
+// `hoveredStageId` is cleared unconditionally here, before checking
+// `targetStageId`. Sortable fires `onEnd` on the SOURCE list only, so
+// `hoveredStageId` — set by a stage column's own `@change` while a drag
+// hovers over it — is only ever cleared by `handleColumnDragEnd` (a drag
+// that both started AND ended in a stage column). A drag starting here or
+// in the focus tray would never run that reset otherwise, leaving
+// whichever column was last hovered permanently outlined, even after a
+// successful drop, a canceled one, or a drop back into this very panel (no
+// `targetStageId` at all). Clearing it unconditionally covers all three
+// cases the same way `handleColumnDragEnd` does for its own drags.
 async function handleBacklogDragEnd(payload: { taskId: string; targetStageId?: string }) {
   hoveredStageId.value = null;
   if (payload.targetStageId) {
@@ -351,22 +306,17 @@ async function handleFocusTrayDragEnd(payload: { taskId: string; targetStageId?:
 
 // A card was dropped onto the focus tray: assign it to the currently
 // focused user. Backend constraint (see header comment): this no-ops if
-// the task already has an assignee — previously that reverted with zero
-// explanation (Impeccable critique P0), so that case now sets
-// `focusTrayError` for the ErrorAlert instead of failing silently.
+// the task already has an assignee, in which case `focusTrayError` is set
+// for the ErrorAlert rather than failing silently.
 //
-// Impeccable fifth critique P0 ("rejected focus-tray reassignment makes
-// the source task vanish from its stage column until a hard reload"): when
-// the dragged card came from a STAGE COLUMN (not the backlog), Sortable's
-// `:model-value`/`@update:model-value` binding had already optimistically
+// On rejection, `revertOptimisticMove()` reverts every mirror a drag could
+// have optimistically touched (not just the tray itself): when the dragged
+// card came from a STAGE COLUMN (not the backlog), Sortable's
+// `:model-value`/`@update:model-value` binding has already optimistically
 // removed it from that column's `columnTasksByStageId` mirror by the time
-// this rejection branch runs — this only ever resynced the tray itself
-// (`focusTrayRef`), never the source column or the backlog, so a rejected
-// drop left the source looking like the task had vanished, with no write
-// having actually happened. Same failure family as the phantom-reorder fix
-// (round 3) and the stuck-highlight fix (round 4): revert every mirror a
-// drag could have optimistically touched, not just the one this handler
-// happens to own.
+// this rejection branch runs. Resyncing only the tray would leave the
+// source column looking like the task had vanished, even though no write
+// ever happened.
 async function handleFocusTrayAssign(taskId: string) {
   focusTrayError.value = null;
   const task = tasks.value.find((t) => t.id === taskId);
@@ -381,9 +331,9 @@ async function handleFocusTrayAssign(taskId: string) {
   focusTrayRef.value?.resync();
 }
 
-// Opens the keyboard/click action menu for a task (Impeccable critique P0)
-// — reached via TaskCard's `activate`/`card-activate` emit, wherever the
-// card happens to be rendered (stage board, focus tray, backlog panel).
+// Opens the keyboard/click action menu for a task — reached via TaskCard's
+// `activate`/`card-activate` emit, wherever the card happens to be
+// rendered (stage board, focus tray, backlog panel).
 function openActionMenu(taskId: string) {
   const task = tasks.value.find((t) => t.id === taskId);
   if (!task) return;
@@ -403,19 +353,17 @@ function closeActionMenu() {
 // the same step (Requirement 12.6/12.7), an already-assigned task just
 // moves. This keeps keyboard parity with drag rather than adding a new
 // capability drag doesn't have.
-// Impeccable sixth critique P1 ("action menu announces a false 'moved'
-// success on a same-stage no-op confirm"): `openActionMenu` defaults
-// `actionMenuTargetStageId` to the task's CURRENT stage, so confirming
-// without touching the select — an entirely ordinary "I just wanted to
-// check/reassign, not move it" click — used to fall through both branches
-// below (no write happens either way) straight into an unconditional
-// close+reload+announce, telling the user a move happened when nothing
-// was written. `onDropOnStage`'s identical same-stage case has always
-// handled this correctly (silent no-op, no announcement) — this only
-// ever announces (and only reloads) once a write actually occurred,
-// mirroring that. The confirm button is also disabled for this exact
-// case below, so this guard is defense-in-depth, not the only line of
-// defense.
+//
+// `wroteChange` tracks whether either branch actually performed a write:
+// `openActionMenu` defaults `actionMenuTargetStageId` to the task's
+// CURRENT stage, so confirming without touching the select — an entirely
+// ordinary "I just wanted to check/reassign, not move it" click — falls
+// through both branches below with no write. Announcing/reloading only
+// when `wroteChange` is true (mirroring `onDropOnStage`'s identical
+// same-stage no-op handling) avoids telling the user a move happened when
+// nothing was written. The confirm button is also disabled for this exact
+// case in the template, so this guard is defense-in-depth, not the only
+// line of defense.
 async function confirmActionMenu() {
   const task = actionMenuTask.value;
   if (!task || !actionMenuTargetStageId.value) return;
@@ -487,10 +435,10 @@ onMounted(async () => {
       {{ moveStatusMessage }}
     </p>
 
-    <!-- Impeccable re-critique P1: sr-only-until-focus skip links, the
-         standard "skip navigation" pattern — invisible to sighted mouse
-         users (no permanent chrome added), but let a keyboard user jump
-         straight to any lane instead of Tabbing through every card first. -->
+    <!-- sr-only-until-focus skip links, the standard "skip navigation"
+         pattern — invisible to sighted mouse users (no permanent chrome
+         added), but let a keyboard user jump straight to any lane instead
+         of Tabbing through every card first. -->
     <nav aria-label="レーンへ移動" class="flex flex-wrap gap-2">
       <button
         type="button"

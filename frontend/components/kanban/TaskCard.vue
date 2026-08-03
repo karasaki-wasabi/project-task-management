@@ -21,33 +21,28 @@
     `data-task-id` off the dragged element itself in its `onEnd` handler,
     so this component no longer needs a `draggable` prop or emit.
 
-  Visual layout (revised to match the approved Google Stitch mockup,
-  UI/screen.png): title top-left + priority badge top-right on the same
-  row (diagonal balance per UI/DESIGN.md's "Kanban Cards" note, minus its
-  rejected colored-accent-bar rule); status text + optional progress bar
-  bottom-left, assignee initial bottom-right.
+  Visual layout: title top-left + priority badge top-right on the same row;
+  status text + optional progress bar bottom-left, assignee initial
+  bottom-right.
 
-  Impeccable critique P0 ("no non-mouse path to any core interaction"):
-  drag was the only way to move or reassign a task, so a keyboard/
-  screen-reader user could not complete the primary workflow at all. The
-  card is now focusable and emits `activate` on Enter/Space/click (a plain
-  click — no drag movement — is safe alongside Sortable, which only starts
-  a drag past a movement threshold); every caller (kanban/index.vue
-  directly, or bubbled up through AssigneeFocusTray/UnassignedBacklogPanel)
-  opens a keyboard-operable action menu offering the same stage-move /
-  assign-on-move mutations dragging already performs.
+  Drag is not the only way to move or reassign a task: the card is
+  focusable and emits `activate` on Enter/Space/click (a plain click — no
+  drag movement — is safe alongside Sortable, which only starts a drag past
+  a movement threshold); every caller (kanban/index.vue directly, or
+  bubbled up through AssigneeFocusTray/UnassignedBacklogPanel) opens a
+  keyboard-operable action menu offering the same stage-move /
+  assign-on-move mutations dragging already performs. This keeps the
+  primary workflow reachable without a mouse.
 
-  Title is `line-clamp-2` with a `title` attribute carrying the full text
-  (Impeccable critique minor observation): an unclamped title could wrap
-  indefinitely and distort card height/grid rhythm across a column.
+  Title is `line-clamp-2` with a `title` attribute carrying the full text:
+  an unclamped title could wrap indefinitely and distort card height/grid
+  rhythm across a column.
 
-  Impeccable re-critique P3 ("no affordance signaling a card opens an
-  action menu on click"): `cursor-grab` was the card's only visual cue, so
-  a mouse user who only ever drags had no reason to discover the
-  click-to-open-menu path built for keyboard parity. A small "⋯" hint now
-  fades in on hover/focus (`group-hover`/`group-focus-visible`) — decorative
-  only (`aria-hidden`, `pointer-events-none`), the whole card stays the
-  actual click/keyboard target via the existing aria-label.
+  A small "⋯" hint fades in on hover/focus (`group-hover`/
+  `group-focus-visible`) to signal that clicking opens an action menu,
+  since `cursor-grab` alone only hints at dragging. It is decorative only
+  (`aria-hidden`, `pointer-events-none`) — the whole card stays the actual
+  click/keyboard target via the existing aria-label.
 -->
 <script setup lang="ts">
 import { formatProgress, shouldShowProgress, type TaskProgress } from "./TaskCard.helpers";
