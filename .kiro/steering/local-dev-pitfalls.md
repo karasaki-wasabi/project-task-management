@@ -1,6 +1,6 @@
 # ローカル開発環境の落とし穴
 
-[Purpose: ビルド・型チェック・ユニットテストをすべて通過しても実際には動かない、フロントエンド/バックエンド結線に関する既知の落とし穴を記録する]
+[Purpose: ビルド・型チェック・ユニットテストをすべて通過しても実際には動かない、実ブラウザでの操作によって初めて発覚する既知の落とし穴を記録する(フロントエンド/バックエンド結線に限らず、フロントエンド単体のライブラリ統合上の落とし穴も含む)]
 
 ## なぜこのファイルが必要か
 
@@ -20,6 +20,12 @@ SPAはブラウザから直接APIを呼ぶため、フロント/バックエン�
 Nuxtはデフォルトで `components/tasks/TaskNode.vue` を `<TasksTaskNode>` という**ディレクトリ名プレフィックス付き**のタグ名で自動登録する。テンプレート内で `<TaskNode>` のように素の名前で参照すると、ビルド・型チェックのエラーにはならず、未知のネイティブ要素として無音でレンダリングされ(Vue devモードのコンソール警告のみ)、機能が完全に壊れる。
 → `frontend/nuxt.config.ts` に `components: [{ path: "~/components", pathPrefix: false }]` を設定済み。サブディレクトリにコンポーネントを追加する際は、この設定があるおかげでディレクトリ名を気にせず素の名前で参照してよい。
 
+### 4. vue-draggable-plus(Sortable.js)の`chosenClass`/`ghostClass`/`dragClass`に複数クラス文字列を渡す
+Sortableはこれらのオプション値をそのまま`element.classList.add(value)`に渡す。Tailwindの複数ユーティリティクラスをスペース区切りの1文字列として渡すと(例: `"opacity-50 outline outline-2"`)、`classList.add()`はスペースを含む値で例外を投げる。ビルド・型チェックはすべて通過し、コンソールにもエラーが出ない場合がある一方、ドラッグ操作自体が完全に無反応になる(`chosen`/`ghost`状態が一切適用されないため、Sortableの内部初期化が失敗する)。実ブラウザで`page.on("pageerror", ...)`を仕込んで初めて例外が可視化された。
+→ 各状態(`chosen`/`ghost`/`drag-clone`等)ごとに、複数のTailwindユーティリティをまとめた単一のカスタムCSSクラス(例: `.task-card-chosen { opacity: 0.5; ... }`)を`frontend/assets/css/main.css`に定義し、Sortableへは常に単一トークンのクラス名のみを渡すこと。
+
+同様の理由で、ドラッグ中に追従するフォールバック要素(`fallback-class`で指定)には`transition: transform`を含むクラスを付与しないこと。SortableはドラッグClone要素の位置を毎フレーム`transform: translate3d(...)`で直接更新するが、Tailwindの`transition`ユーティリティ(`transform`を含む)が付いていると、この更新がイージングされてカーソルに追従できなくなる(見た目には「ゆっくりずれてついてくる」程度の症状になり、不具合と気づきにくい)。
+
 ## Playwright(E2E)実行時の注意
 
 `docker compose run` はコマンドごとに使い捨てコンテナを作るため、あるコマンドで `npx playwright install --with-deps chromium` してブラウザバイナリを入れても、**次の `docker compose run` invocationには一切残らない**。実行のたびに毎回インストールするコストを避けたい場合は、ホストにNode.jsがあれば `frontend/node_modules`/`package-lock.json` を汚さないスクラッチディレクトリ(例: `/tmp/.../scratchpad/pw`)に `@playwright/test` を単独インストールし、公開済みポート(`http://localhost:<FRONTEND_PORT>`)に対してホスト側から実行するのが安定する。
@@ -28,4 +34,4 @@ Nuxtはデフォルトで `components/tasks/TaskNode.vue` を `<TasksTaskNode>` 
 
 ## 検証の原則
 
-フロントエンド/バックエンドを結線するタスクでは、**ビルド成功・型チェック通過・ユニットテストグリーンだけで完了と判断しない**。必ず `docker compose up` で実際に両方を起動し、実ブラウザ(または Playwright)で該当機能を操作して確認すること。上記3件はすべてこの手順によってのみ発見された。
+フロントエンド/バックエンドを結線するタスク、および外部UIライブラリを統合するタスクでは、**ビルド成功・型チェック通過・ユニットテストグリーンだけで完了と判断しない**。必ず `docker compose up` で実際に起動し、実ブラウザ(または Playwright、`page.on("pageerror", ...)`のようなコンソール監視込み)で該当機能を操作して確認すること。上記4件はすべてこの手順によってのみ発見された。
