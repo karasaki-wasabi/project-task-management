@@ -1,0 +1,27 @@
+#!/bin/bash
+# .kiro/steering/commit-message.md のルールを機械的に強制する。
+# 有効化: git config core.hooksPath .githooks
+set -e
+
+msg_file="$1"
+subject=$(head -1 "$msg_file")
+
+fail() {
+  echo "❌ $1" >&2
+  echo "   .kiro/steering/commit-message.md を参照してください。" >&2
+  exit 1
+}
+
+if echo "$subject" | grep -qE '^[a-zA-Z]+(\([^)]*\))?!?: '; then
+  fail "コミットメッセージが Conventional Commits 形式です(例: feat:, fix:)。禁止されています。"
+fi
+
+if grep -qiE '^Co-Authored-By:' "$msg_file"; then
+  fail "Co-Authored-By はコミットメッセージに含めないでください。"
+fi
+
+if ! echo "$subject" | LC_ALL=C.UTF-8 grep -qP '[^\x00-\x7F]'; then
+  fail "subject に日本語が含まれていません。"
+fi
+
+exit 0
