@@ -20,6 +20,7 @@ Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロント
 - **rrule**: 繰り返しタスク生成の間隔計算。`exports`フィールドを持たないCJSパッケージのため、`import { RRule } from "rrule"`ではなくデフォルトインポート+分割代入で使う([[testing]]参照の元ネタ、tasks.md Implementation Notes task 10.3)
 - **@fastify/cors**: SPAからのクロスオリジンAPI呼び出しを許可(`origin: true`で反映、認証なし内部ツールという前提での判断)
 - **@playwright/test**: E2Eテスト。design.md/research.mdに指定がなく実装時に導入した判断(Nuxt/Vueでの標準的選択)
+- **vue-draggable-plus**(Sortable.jsラッパー): カンバンボードのドラッグ&ドロップ(持ち上げ・カーソル追従・ドロップ先レーンのハイライト)に使用。ブラウザ標準HTML5 Drag and Drop APIではこの種のアニメーションが実現できず、kanban-ux-redesignスペックの実装後改訂として導入([[local-dev-pitfalls]]に、ハマりやすい落とし穴を記録)
 
 ## Development Standards
 
