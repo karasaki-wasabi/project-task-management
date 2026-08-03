@@ -28,6 +28,14 @@
 - 上記形式に競合しないルールは、`.claude/skills/kiro-impl/SKILL.md` を参考にする
 - 競合した場合は、こちらのルールを優先する
 
+## 強制(commit-msgフック)
+
+上記ルールは `.githooks/commit-msg` で機械的に強制される(Conventional Commitsプレフィックス・Co-Authored-By・英語のみのsubjectを検出してコミット自体を拒否)。新しくcloneした環境では一度だけ有効化が必要:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## 例
 
 ```
