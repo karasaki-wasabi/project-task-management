@@ -3,7 +3,7 @@
 // event logging (task 10.2, design.md "Backend/recurrence", Requirements
 // 5.1, 5.2, 5.5-5.9, 5.6, 5.7, 8.3-8.7, 9.1-9.4, 10.2).
 import { randomUUID } from "node:crypto";
-import type { Delivery } from "@prisma/client";
+import type { Case } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 // `rrule` ships no "exports" map, so Node's native ESM loader (unlike
 // Vitest's transform, which masked this) can't always detect its named CJS
@@ -41,16 +41,16 @@ function validateRegisterInput(input: RegisterTemplateInput): void {
       throw badRequest("intervalValue must be a positive integer");
     }
   } else {
-    if (input.deliveryOffsetDays === undefined) {
-      throw badRequest("delivery_relative templates require deliveryOffsetDays");
+    if (input.caseOffsetDays === undefined) {
+      throw badRequest("case_relative templates require caseOffsetDays");
     }
-    if (!Number.isInteger(input.deliveryOffsetDays) || input.deliveryOffsetDays < 0) {
-      throw badRequest("deliveryOffsetDays must be a non-negative integer");
+    if (!Number.isInteger(input.caseOffsetDays) || input.caseOffsetDays < 0) {
+      throw badRequest("caseOffsetDays must be a non-negative integer");
     }
-    // design.md Logical Data Model: boundDeliveryId is only settable when
-    // kind="fixed_interval"; delivery_relative is always a global setting.
-    if (input.boundDeliveryId !== undefined) {
-      throw badRequest("boundDeliveryId cannot be set on a delivery_relative template");
+    // design.md Logical Data Model: boundCaseId is only settable when
+    // kind="fixed_interval"; case_relative is always a global setting.
+    if (input.boundCaseId !== undefined) {
+      throw badRequest("boundCaseId cannot be set on a case_relative template");
     }
   }
 }
@@ -88,9 +88,9 @@ export const recurrenceService = {
     return recurrenceRepository.list();
   },
 
-  // design.md Batch/Job Contract: fixed_interval only — delivery_relative
-  // generation happens exclusively via onDeliveryCreated/
-  // onDeliveryDueDateChanged (Requirement 5.1).
+  // design.md Batch/Job Contract: fixed_interval only — case_relative
+  // generation happens exclusively via onCaseCreated/
+  // onCaseEndDateChanged (Requirement 5.1).
   async generateDueInstances(asOf: Date, requestId: string = randomUUID()): Promise<Task[]> {
     const templates = await recurrenceRepository.listActiveByKind("fixed_interval");
     const created: Task[] = [];
@@ -110,17 +110,17 @@ export const recurrenceService = {
     return created;
   },
 
-  // Requirement 5.2, 5.8: one instance per active delivery_relative
-  // template, offset from the delivery's dueDate.
-  async onDeliveryCreated(delivery: Delivery, requestId: string = randomUUID()): Promise<Task[]> {
-    const templates = await recurrenceRepository.listActiveByKind("delivery_relative");
+  // Requirement 5.2, 5.8: one instance per active case_relative
+  // template, offset from the case's endDate.
+  async onCaseCreated(caseEntity: Case, requestId: string = randomUUID()): Promise<Task[]> {
+    const templates = await recurrenceRepository.listActiveByKind("case_relative");
     const created: Task[] = [];
 
     for (const template of templates) {
-      const rawDate = addDays(formatDateOnly(delivery.dueDate), -(template.deliveryOffsetDays ?? 0));
+      const rawDate = addDays(formatDateOnly(caseEntity.endDate), -(template.caseOffsetDays ?? 0));
       const scheduledDate = await resolveScheduledDate(parseDateOnly(rawDate), template.nonBusinessDayPolicy);
       if (scheduledDate === null) continue; // policy=skip
-      const instance = await tryCreateInstance(template, scheduledDate, delivery.id);
+      const instance = await tryCreateInstance(template, scheduledDate, caseEntity.id);
       if (instance) {
         created.push(instance);
         logInstanceGenerated(instance, requestId);
@@ -130,18 +130,18 @@ export const recurrenceService = {
   },
 
   // Requirement 5.4: recomputes the scheduled date of the still-incomplete
-  // auto-generated instance for each active delivery_relative template
-  // linked to this delivery; completed instances and templates with no
+  // auto-generated instance for each active case_relative template
+  // linked to this case; completed instances and templates with no
   // existing instance yet are left untouched (design.md Postconditions).
-  async onDeliveryDueDateChanged(delivery: Delivery): Promise<Task[]> {
-    const templates = await recurrenceRepository.listActiveByKind("delivery_relative");
+  async onCaseEndDateChanged(caseEntity: Case): Promise<Task[]> {
+    const templates = await recurrenceRepository.listActiveByKind("case_relative");
     const updated: Task[] = [];
 
     for (const template of templates) {
-      const existing = await recurrenceRepository.findIncompleteInstance(template.id, delivery.id);
+      const existing = await recurrenceRepository.findIncompleteInstance(template.id, caseEntity.id);
       if (!existing) continue;
 
-      const rawDate = addDays(formatDateOnly(delivery.dueDate), -(template.deliveryOffsetDays ?? 0));
+      const rawDate = addDays(formatDateOnly(caseEntity.endDate), -(template.caseOffsetDays ?? 0));
       const scheduledDate = await resolveScheduledDate(parseDateOnly(rawDate), template.nonBusinessDayPolicy);
       if (scheduledDate === null) continue;
 
@@ -218,7 +218,7 @@ function logInstanceGenerated(instance: Task, requestId: string): void {
 async function tryCreateInstance(
   template: RecurringTaskTemplate,
   scheduledDate: Date,
-  deliveryId?: string,
+  caseId?: string,
 ): Promise<Task | null> {
   let result;
   try {
@@ -226,7 +226,7 @@ async function tryCreateInstance(
       title: template.title,
       priority: template.priority,
       memo: template.defaultMemo ?? undefined,
-      deliveryId,
+      caseId,
       sourceTemplateId: template.id,
       scheduledDate,
     });
@@ -242,9 +242,9 @@ async function tryCreateInstance(
     throw error;
   }
   if (!result.ok) {
-    // A template's title/deliveryId are trusted internal inputs (already
+    // A template's title/caseId are trusted internal inputs (already
     // validated at template-registration time, or sourced from a real
-    // Delivery row) — reaching a validation_error here means an
+    // Case row) — reaching a validation_error here means an
     // unexpected invariant was violated, not a normal expected outcome for
     // this caller to handle gracefully.
     const message = result.error.type === "validation_error" ? result.error.message : result.error.type;

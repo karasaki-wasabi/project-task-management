@@ -29,8 +29,8 @@ export const recurrenceRepository = {
         kind: input.kind,
         intervalUnit: input.intervalUnit,
         intervalValue: input.intervalValue,
-        boundDeliveryId: input.boundDeliveryId,
-        deliveryOffsetDays: input.deliveryOffsetDays,
+        boundCaseId: input.boundCaseId,
+        caseOffsetDays: input.caseOffsetDays,
         defaultMemo: input.defaultMemo,
         nonBusinessDayPolicy: input.nonBusinessDayPolicy,
       },
@@ -61,12 +61,12 @@ export const recurrenceRepository = {
     return db.recurringTaskTemplate.findMany({ where: { kind, isActive: true } });
   },
 
-  // The one not-yet-completed instance a delivery_relative template has
-  // generated for a given delivery, if any (used by onDeliveryDueDateChanged
+  // The one not-yet-completed instance a case_relative template has
+  // generated for a given case, if any (used by onCaseEndDateChanged
   // to recompute its scheduled date rather than create a duplicate).
-  findIncompleteInstance(templateId: string, deliveryId: string): Promise<Task | null> {
+  findIncompleteInstance(templateId: string, caseId: string): Promise<Task | null> {
     return db.task.findFirst({
-      where: { sourceTemplateId: templateId, deliveryId, status: { not: "done" } },
+      where: { sourceTemplateId: templateId, caseId, status: { not: "done" } },
     });
   },
 

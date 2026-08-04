@@ -14,8 +14,8 @@ export interface RegisterTemplateInput {
   kind: RecurrenceKind;
   intervalUnit?: IntervalUnit;
   intervalValue?: number;
-  boundDeliveryId?: string;
-  deliveryOffsetDays?: number;
+  boundCaseId?: string;
+  caseOffsetDays?: number;
   defaultMemo?: string;
   nonBusinessDayPolicy: NonBusinessDayPolicy;
 }

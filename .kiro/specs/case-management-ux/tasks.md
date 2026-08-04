@@ -32,7 +32,7 @@
   - _Requirements: 1.1_
   - _Boundary: EventsService_
 
-- [ ] 2.3 recurrenceモジュールのメソッド名・参照フィールド追従
+- [x] 2.3 recurrenceモジュールのメソッド名・参照フィールド追従
   - `recurrence.service.ts`: `onDeliveryCreated`→`onCaseCreated`、`onDeliveryDueDateChanged`→`onCaseEndDateChanged`にリネームし、引数型を`Case`に変更、参照フィールドを`delivery.dueDate`→`case.endDate`に変更する。`tryCreateInstance`呼び出しの`deliveryId`引数を`caseId`に追従させる(2.1のリネーム後のフィールド名を使用)
   - `recurrence.types.ts`: `RegisterTemplateInput.boundDeliveryId`→`boundCaseId`、`deliveryOffsetDays`→`caseOffsetDays`にリネームする
   - `recurrence.routes.ts`: Zodスキーマの上記フィールド名と、`kind`列挙値`"delivery_relative"`→`"case_relative"`を変更する
