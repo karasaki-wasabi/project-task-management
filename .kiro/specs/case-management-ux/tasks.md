@@ -18,7 +18,7 @@
   - _Requirements: 1.1, 2.2, 2.5, 5.1, 5.4_
 
 - [ ] 2. Foundation: 依存モジュール(tasks/events/recurrence)の呼称・フィールド名追従
-- [ ] 2.1 (P) tasksモジュールのフィールド名リネーム
+- [x] 2.1 (P) tasksモジュールのフィールド名リネーム
   - `task.types.ts`/`task.repository.ts`/`task.routes.ts`/`task.service.ts`の`deliveryId`→`caseId`、`isRequiredForDelivery`→`isRequiredForCase`を一括変更する(強制false化・単独指定エラー等の既存ロジックは変更しない)
   - 既存のtask関連ユニット/統合テストのフィールド名を更新する
   - 観測可能な完了状態: 既存のtask関連テストが新フィールド名のまま全てgreenになる

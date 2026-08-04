@@ -15,8 +15,8 @@ const createTaskBodySchema = z.object({
   title: z.string(),
   priority,
   memo: z.string().optional(),
-  deliveryId: z.string().optional(),
-  isRequiredForDelivery: z.boolean().optional(),
+  caseId: z.string().optional(),
+  isRequiredForCase: z.boolean().optional(),
   assigneeUserId: z.string().optional(),
   parentTaskId: z.string().optional(),
 });
@@ -26,8 +26,8 @@ const updateTaskBodySchema = z
     title: z.string().optional(),
     priority: priority.optional(),
     memo: z.string().nullable().optional(),
-    deliveryId: z.string().nullable().optional(),
-    isRequiredForDelivery: z.boolean().optional(),
+    caseId: z.string().nullable().optional(),
+    isRequiredForCase: z.boolean().optional(),
     assigneeUserId: z.string().nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, { message: "at least one field must be provided" });
@@ -38,7 +38,7 @@ const updateDevelopmentStageBodySchema = z.object({
 const splitBodySchema = z.object({ parts: z.array(createTaskBodySchema) });
 const taskIdParamsSchema = z.object({ id: z.string() });
 const listQuerySchema = z.object({
-  deliveryId: z.string().optional(),
+  caseId: z.string().optional(),
   assigneeUserId: z.string().optional(),
 });
 

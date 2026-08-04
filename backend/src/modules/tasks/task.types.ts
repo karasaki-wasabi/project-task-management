@@ -14,8 +14,8 @@ export interface CreateTaskInput {
   title: string;
   priority: Priority;
   memo?: string;
-  deliveryId?: string;
-  isRequiredForDelivery?: boolean;
+  caseId?: string;
+  isRequiredForCase?: boolean;
   assigneeUserId?: string;
   parentTaskId?: string;
   // RecurrenceService-only fields (design.md "Backend/recurrence"
@@ -27,7 +27,7 @@ export interface CreateTaskInput {
 }
 
 export interface TaskListFilter {
-  deliveryId?: string;
+  caseId?: string;
   assigneeUserId?: string;
 }
 
@@ -35,8 +35,8 @@ export interface UpdateTaskInput {
   title?: string;
   priority?: Priority;
   memo?: string | null;
-  deliveryId?: string | null;
-  isRequiredForDelivery?: boolean;
+  caseId?: string | null;
+  isRequiredForCase?: boolean;
   assigneeUserId?: string | null;
 }
 

@@ -11,10 +11,10 @@ export const taskRepository = {
         title: input.title,
         priority: input.priority,
         memo: input.memo,
-        deliveryId: input.deliveryId,
-        // design.md TasksService Implementation Notes: "deliveryId未指定時は
-        // isRequiredForDeliveryをfalse固定にする".
-        isRequiredForDelivery: input.deliveryId ? (input.isRequiredForDelivery ?? false) : false,
+        caseId: input.caseId,
+        // design.md TasksService Implementation Notes: "caseId未指定時は
+        // isRequiredForCaseをfalse固定にする".
+        isRequiredForCase: input.caseId ? (input.isRequiredForCase ?? false) : false,
         assigneeUserId: input.assigneeUserId,
         parentTaskId: input.parentTaskId,
         // RecurrenceService-only (see task.types.ts CreateTaskInput comment).
@@ -50,7 +50,7 @@ export const taskRepository = {
   list(filter: TaskListFilter): Promise<Task[]> {
     return db.task.findMany({
       where: {
-        deliveryId: filter.deliveryId,
+        caseId: filter.caseId,
         assigneeUserId: filter.assigneeUserId,
       },
       orderBy: { createdAt: "asc" },
@@ -77,8 +77,8 @@ export const taskRepository = {
               title: input.title,
               priority: input.priority,
               memo: input.memo,
-              deliveryId: input.deliveryId,
-              isRequiredForDelivery: input.deliveryId ? (input.isRequiredForDelivery ?? false) : false,
+              caseId: input.caseId,
+              isRequiredForCase: input.caseId ? (input.isRequiredForCase ?? false) : false,
               assigneeUserId: input.assigneeUserId,
               parentTaskId: input.parentTaskId,
             },
