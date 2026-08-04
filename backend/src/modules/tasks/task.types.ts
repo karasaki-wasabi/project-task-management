@@ -18,6 +18,12 @@ export interface CreateTaskInput {
   isRequiredForDelivery?: boolean;
   assigneeUserId?: string;
   parentTaskId?: string;
+  // RecurrenceService-only fields (design.md "Backend/recurrence"
+  // Implementation Notes: instance generation goes through this internal
+  // function rather than duplicating the Prisma insert). Never set by the
+  // public POST /api/tasks route's own request schema.
+  sourceTemplateId?: string;
+  scheduledDate?: Date;
 }
 
 export interface TaskListFilter {

@@ -5,6 +5,7 @@
 // (task 1.4).
 import { Prisma } from "@prisma/client";
 import { db } from "../../shared/db.js";
+import { taskRepository } from "../tasks/task.repository.js";
 import type { RecurringTaskTemplate, RegisterTemplateInput, Task } from "./recurrence.types.js";
 
 export function isUniqueConstraintViolation(error: unknown): boolean {
@@ -56,20 +57,24 @@ export const recurrenceRepository = {
   // scheduled_date)` unique constraint (task 1.3) to reject a duplicate
   // occurrence. Callers catch `isUniqueConstraintViolation` and treat it as
   // "already generated" rather than an error.
+  //
+  // design.md "Backend/recurrence" Implementation Notes: instance creation
+  // goes through TasksService's own internal function (`taskRepository.create`)
+  // rather than duplicating the Prisma insert here, so any future business
+  // rule added to task creation (e.g. in TasksService/taskRepository)
+  // automatically also applies to recurrence-generated instances.
   createInstance(params: {
     template: RecurringTaskTemplate;
     scheduledDate: Date;
     deliveryId?: string;
   }): Promise<Task> {
-    return db.task.create({
-      data: {
-        title: params.template.title,
-        priority: params.template.priority,
-        memo: params.template.defaultMemo,
-        deliveryId: params.deliveryId,
-        sourceTemplateId: params.template.id,
-        scheduledDate: params.scheduledDate,
-      },
+    return taskRepository.create({
+      title: params.template.title,
+      priority: params.template.priority,
+      memo: params.template.defaultMemo ?? undefined,
+      deliveryId: params.deliveryId,
+      sourceTemplateId: params.template.id,
+      scheduledDate: params.scheduledDate,
     });
   },
 
