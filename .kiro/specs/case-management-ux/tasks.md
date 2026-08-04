@@ -25,7 +25,7 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6_
   - _Boundary: TasksService_
 
-- [ ] 2.2 (P) eventsモジュールのフィールド名リネーム
+- [x] 2.2 (P) eventsモジュールのフィールド名リネーム
   - `event.types.ts`/`event.repository.ts`/`event.routes.ts`/`event.service.ts`の`deliveryId`→`caseId`を変更する
   - 既存のevent関連テストのフィールド名を更新する
   - 観測可能な完了状態: 既存のevent関連テストが新フィールド名のまま全てgreenになる

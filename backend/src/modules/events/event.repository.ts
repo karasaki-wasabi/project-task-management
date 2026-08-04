@@ -10,7 +10,7 @@ export const eventRepository = {
       data: {
         title: input.title,
         occursAt: input.occursAt,
-        deliveryId: input.deliveryId,
+        caseId: input.caseId,
         assigneeUserId: input.assigneeUserId,
       },
     });

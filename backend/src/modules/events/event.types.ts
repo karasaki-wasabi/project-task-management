@@ -6,7 +6,7 @@ export type { Event } from "@prisma/client";
 export interface CreateEventInput {
   title: string;
   occursAt: Date;
-  deliveryId?: string;
+  caseId?: string;
   assigneeUserId?: string;
 }
 

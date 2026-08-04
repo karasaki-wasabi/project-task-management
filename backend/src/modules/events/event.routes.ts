@@ -9,7 +9,7 @@ import { eventsService } from "./event.service.js";
 const createEventBodySchema = z.object({
   title: z.string(),
   occursAt: z.coerce.date(),
-  deliveryId: z.string().optional(),
+  caseId: z.string().optional(),
   assigneeUserId: z.string().optional(),
 });
 const eventIdParamsSchema = z.object({ id: z.string() });
