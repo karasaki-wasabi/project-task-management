@@ -508,9 +508,12 @@ interface RecurrenceService {
 | Method | Endpoint | Request | Response | Errors |
 |--------|----------|---------|----------|--------|
 | POST | /api/recurring-templates | Omit<RecurringTaskTemplate, "id"\|"isActive"> | RecurringTaskTemplate | 400 |
+| GET | /api/recurring-templates | - | RecurringTaskTemplate[] | 500 |
 | POST | /api/recurring-templates/:id/stop | - | void | 404 |
 | DELETE | /api/recurring-templates/:id | - | void | 404 |
 | POST | /api/recurring-templates/generate-due | { asOf?: string } | Task[] | 400 |
+
+**(実装後の改訂)** `GET /api/recurring-templates`(一覧取得)は当初の本表になかったが、task 9.1自体が「登録したテンプレートが一覧から取得できることを確認できる状態にする」ことを明示的に要求しており、他の全モジュールも`GET <collection>`を提供する既存パターンに合わせて追加した(`recurrence.routes.ts`実装コメント参照)。
 
 ##### Batch / Job Contract
 - Trigger: `generateDueInstances(asOf)` は将来的には外部スケジューラ(呼び出し方式は本スペックのOut of Boundary)から日次相当で呼び出される想定。スケジューラ未選定の開発段階でも検証できるよう、`POST /api/recurring-templates/generate-due`から同一ロジックを手動実行できるようにする(`asOf`省略時は現在時刻を用いる。holidaysモジュールの手動同期と同じ設計パターン)
@@ -896,7 +899,7 @@ erDiagram
 - `Task.parentTaskId` は自己参照外部キー(null許容)。循環参照はアプリ層で禁止する
 - `Task.deliveryId` は null許容(納品未紐付けのバックログタスクを許容するため)
 - `RecurringTaskTemplate.boundDeliveryId` は `kind="fixed_interval"` のときのみ設定可能(オプション)。`kind="delivery_relative"` では常にnull(グローバル設定のため)
-- `(RecurringTaskTemplate.id, scheduledDate)` の組に一意制約を設け、生成の冪等性を担保する
+- `(Task.sourceTemplateId, Task.scheduledDate)` の組に一意制約を設け、生成の冪等性を担保する(`scheduledDate`は`RecurringTaskTemplate`ではなく生成された`Task`側が持つフィールド)
 - `NonBusinessDay.date` は論理削除されていないレコードの範囲で一意制約を持つ(生成カラム`date_active_key`経由、Physical Data Model参照)。`RecurringTaskTemplate.defaultMemo` は生成時にのみ `Task.memo` へコピーされ、以降はDB上の参照関係を持たない(コピー後は独立フィールド)
 - `Task.developmentStageId` は null許容の外部キー(`DevelopmentStage.id`参照)。既存の`Task.status`(未着手/進行中/完了/保留)とは独立したフィールドであり、一方の変更が他方の値に影響しない(要件12.9)
 - `DevelopmentStage.order` は同一マスタ内での並び順を表す整数。一意制約は設けず(`reorder`一括更新時の一時的な重複を許容するため)、常に`reorder`実行後の最終状態でアプリ層が連番になるよう保証する
@@ -917,7 +920,8 @@ erDiagram
 
 **For Relational Databases**:
 - 以下の全テーブルは `created_at`・`updated_at`・`deleted_at`(null許容)を共通で持つ(要件9.1〜9.3、詳細は Logical Data Model の共通監査カラム規約を参照)
-- `tasks(id, title, status, priority, memo, delivery_id, is_required_for_delivery, parent_task_id, assignee_user_id, source_template_id, development_stage_id, completed_at, created_at, updated_at, deleted_at)`
+- `tasks(id, title, status, priority, memo, delivery_id, is_required_for_delivery, parent_task_id, assignee_user_id, source_template_id, development_stage_id, scheduled_date, completed_at, created_at, updated_at, deleted_at)`
+  - `scheduled_date`: recurrence生成タスクの予定日(null許容、date型)。`(source_template_id, scheduled_date)`の一意制約(下記)により生成の冪等性を担保する
 - `deliveries(id, name, due_date, created_at, updated_at, deleted_at)`
 - `events(id, title, occurs_at, delivery_id, assignee_user_id, created_at, updated_at, deleted_at)`
 - `recurring_task_templates(id, title, priority, kind, interval_unit, interval_value, bound_delivery_id, delivery_offset_days, default_memo, non_business_day_policy, is_active, created_at, updated_at, deleted_at)`
@@ -929,7 +933,7 @@ erDiagram
 - `development_stages(id, name, order, created_at, updated_at, deleted_at)`
 - インデックス: `tasks(delivery_id)`, `tasks(parent_task_id)`, `tasks(completed_at)`, `tasks(development_stage_id)`, `events(delivery_id)`, 各テーブルの`deleted_at`(既定の一覧クエリが`deleted_at IS NULL`で絞り込むため)
 - ユニーク制約: `non_business_days(date_active_key)`にUNIQUE INDEXを設定する。MySQLはUNIQUE INDEXでnull値を重複可能として扱うため、論理削除済みレコード(`date_active_key`がnull)は制約の対象外となり、同日付の再登録を許可できる(PostgreSQLの部分ユニークインデックス相当をMySQLで実現する方法、research.md参照)
-- ユニーク制約: `recurring_task_templates`から生成された`tasks`は`(source_template_id, scheduled_date)`相当で重複防止(生成テーブルまたはタスク自体に`scheduled_date`列を持たせて制約化する)
+- ユニーク制約: `tasks(source_template_id, scheduled_date)`にUNIQUE INDEXを設定し、`recurring_task_templates`から生成された`tasks`の重複生成を防止する
 
 ## Error Handling
 
@@ -1001,6 +1005,8 @@ interface Task {
   parentTaskId?: string;
   assigneeUserId?: string;
   sourceTemplateId?: string;
+  developmentStageId?: string;
+  scheduledDate?: string;
   completedAt?: string;
   createdAt: string;
   updatedAt: string;
