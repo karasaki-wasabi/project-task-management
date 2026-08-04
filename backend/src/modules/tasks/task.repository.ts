@@ -17,6 +17,9 @@ export const taskRepository = {
         isRequiredForDelivery: input.deliveryId ? (input.isRequiredForDelivery ?? false) : false,
         assigneeUserId: input.assigneeUserId,
         parentTaskId: input.parentTaskId,
+        // RecurrenceService-only (see task.types.ts CreateTaskInput comment).
+        sourceTemplateId: input.sourceTemplateId,
+        scheduledDate: input.scheduledDate,
       },
     });
   },
