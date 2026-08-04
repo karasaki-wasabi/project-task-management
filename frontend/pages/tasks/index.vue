@@ -9,13 +9,13 @@ const route = useRoute();
 
 const tasks = ref<Task[]>([]);
 const assigneeUserId = ref("");
-const deliveryId = ref((route.query.deliveryId as string | undefined) ?? "");
+const caseId = ref((route.query.caseId as string | undefined) ?? "");
 
 const newTitle = ref("");
 const newPriority = ref<Priority>("medium");
 const newMemo = ref("");
 const newAssigneeUserId = ref("");
-const newIsRequiredForDelivery = ref(false);
+const newIsRequiredForCase = ref(false);
 const users = ref<User[]>([]);
 
 const splitTarget = ref<Task | null>(null);
@@ -30,7 +30,7 @@ function childrenOf(taskId: string): Task[] {
 async function load() {
   tasks.value = await api.listTasks({
     assigneeUserId: assigneeUserId.value || undefined,
-    deliveryId: deliveryId.value || undefined,
+    caseId: caseId.value || undefined,
   });
 }
 
@@ -39,18 +39,18 @@ async function createTask() {
     title: newTitle.value,
     priority: newPriority.value,
     memo: newMemo.value || undefined,
-    deliveryId: deliveryId.value || undefined,
+    caseId: caseId.value || undefined,
     // Requirement 3.3: only meaningful when the task is linked to a
-    // delivery; found missing entirely from this form while writing task
+    // case; found missing entirely from this form while writing task
     // 18.3's dashboard E2E test (no UI could ever mark a task required,
-    // so a delivery's progress could never show a nonzero requiredTotal).
-    isRequiredForDelivery: deliveryId.value ? newIsRequiredForDelivery.value : undefined,
+    // so a case's progress could never show a nonzero requiredTotal).
+    isRequiredForCase: caseId.value ? newIsRequiredForCase.value : undefined,
     // Requirement 7.1: assign to one pre-registered user at creation time.
     assigneeUserId: newAssigneeUserId.value || undefined,
   });
   newTitle.value = "";
   newMemo.value = "";
-  newIsRequiredForDelivery.value = false;
+  newIsRequiredForCase.value = false;
   await load();
 }
 
@@ -82,7 +82,7 @@ async function confirmSplit() {
   await load();
 }
 
-watch([assigneeUserId, deliveryId], load);
+watch([assigneeUserId, caseId], load);
 onMounted(async () => {
   await load();
   users.value = await api.listUsers();
@@ -126,8 +126,8 @@ onMounted(async () => {
         <option value="">担当者未設定</option>
         <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
       </select>
-      <label v-if="deliveryId" class="flex items-center gap-1.5 text-sm text-slate-700">
-        <input v-model="newIsRequiredForDelivery" type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+      <label v-if="caseId" class="flex items-center gap-1.5 text-sm text-slate-700">
+        <input v-model="newIsRequiredForCase" type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
         必須タスク
       </label>
       <button

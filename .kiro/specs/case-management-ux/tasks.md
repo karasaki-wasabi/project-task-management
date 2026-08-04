@@ -135,9 +135,9 @@
   - _Requirements: 1.2, 6.3_
   - _Boundary: dashboard page_
 
-- [ ] 8.3 (P) タスク管理一覧画面の表示ラベル追従
-  - `frontend/pages/tasks/index.vue`の案件関連の表示ラベル・パラメータ名(`deliveryId`→`caseId`)を「案件」表記に更新する(UI構造・フォームレイアウトは変更しない)
-  - 観測可能な完了状態: `/tasks`画面の案件フィルタ・案件選択ドロップダウンの表示が「案件」に統一されている
+- [x] 8.3 (P) タスク管理一覧画面の表示ラベル追従
+  - `frontend/pages/tasks/index.vue`の案件関連の表示ラベル・パラメータ名(`deliveryId`→`caseId`、`isRequiredForDelivery`→`isRequiredForCase`)を「案件」表記に更新する(UI構造・フォームレイアウトは変更しない)
+  - 観測可能な完了状態: `/tasks`画面のクエリパラメータ・必須タスクチェックボックスの表示条件・作成フォームの送信内容が`caseId`/`isRequiredForCase`に統一されている(このページに案件選択ドロップダウン自体は元々存在しないことをレビューで確認済み)
   - _Depends: 5_
   - _Requirements: 1.1, 1.2_
   - _Boundary: tasks page_
