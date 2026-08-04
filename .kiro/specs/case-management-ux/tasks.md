@@ -92,7 +92,7 @@
   - _Requirements: 1.1, 7.1, 7.2, 7.3_
   - _Boundary: cases index page_
 
-- [ ] 6.2 (P) 案件登録ポップアップ(CaseFormModal)の実装
+- [x] 6.2 (P) 案件登録ポップアップ(CaseFormModal)の実装
   - `frontend/components/cases/CaseFormModal.vue`を新規実装し、`shared/Modal.vue`をベースに名称・開始日・終了日の入力と、未割当タスク(`listTasks({ unassignedCase: true })`)のカード型リスト+選択トグル+必須トグル(選択時のみ活性化)を実装する
   - タスク名での絞り込み検索と「すべて選択」操作、割り当て可能なタスクが0件の場合の表示を実装する
   - `startDate > endDate`の場合はクライアント側でエラー表示し送信しないようにする
