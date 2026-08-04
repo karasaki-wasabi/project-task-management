@@ -70,15 +70,21 @@ describe("developmentStageRoutes (task 14.1)", () => {
     const app = await buildTestApp();
     const a = (await app.inject({ method: "POST", url: "/api/development-stages", payload: { name: "a" } })).json();
     const b = (await app.inject({ method: "POST", url: "/api/development-stages", payload: { name: "b" } })).json();
+    // reorder requires orderedIds to contain exactly the current set of
+    // stages (design.md precondition) — this DB can already have other
+    // stages (seed/demo data), so include them too; a/b first keeps the
+    // "did these two swap to the front" assertion below meaningful.
+    const existing = (await app.inject({ method: "GET", url: "/api/development-stages" })).json();
+    const others = existing.map((s: { id: string }) => s.id).filter((id: string) => id !== a.id && id !== b.id);
 
     const response = await app.inject({
       method: "POST",
       url: "/api/development-stages/reorder",
-      payload: { orderedIds: [b.id, a.id] },
+      payload: { orderedIds: [b.id, a.id, ...others] },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().map((s: { id: string }) => s.id)).toEqual([b.id, a.id]);
+    expect(response.json().slice(0, 2).map((s: { id: string }) => s.id)).toEqual([b.id, a.id]);
 
     await hardDelete([a.id, b.id]);
     await app.close();

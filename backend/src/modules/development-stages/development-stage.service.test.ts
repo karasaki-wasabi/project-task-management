@@ -48,12 +48,20 @@ describe("developmentStagesService (task 14.1)", () => {
   });
 
   it("reorders stages according to the given id order (Requirement 12.2)", async () => {
+    // reorder's precondition (design.md) is "orderedIds must contain
+    // exactly the current set of non-deleted stages" — this DB can already
+    // have other stages in it (seed/demo data, or ones other tests left
+    // behind), so the call below must include them too, not just the two
+    // this test creates. Putting a/b first keeps the assertions about
+    // their relative order and order values (0/1) meaningful regardless of
+    // how many other stages exist.
     const a = await developmentStagesService.create(`a-${randomUUID()}`);
     const b = await developmentStagesService.create(`b-${randomUUID()}`);
+    const others = (await developmentStagesService.list()).map((s) => s.id).filter((id) => id !== a.id && id !== b.id);
 
-    const reordered = await developmentStagesService.reorder([b.id, a.id]);
+    const reordered = await developmentStagesService.reorder([b.id, a.id, ...others]);
 
-    expect(reordered.map((s) => s.id)).toEqual([b.id, a.id]);
+    expect(reordered.slice(0, 2).map((s) => s.id)).toEqual([b.id, a.id]);
     expect(reordered[0].order).toBe(0);
     expect(reordered[1].order).toBe(1);
 
