@@ -162,7 +162,9 @@ frontend/components/
 
 frontend/composables/
 └── useApiClient.ts                 # 変更: Delivery→Case型改称(createCase/listCases/updateCase[汎用]/getCaseProgress/deleteCase)、
-                                     #        startDate/isCompleted追加、listTasksの unassignedCase フィルタ追加
+                                     #        startDate/isCompleted追加、listTasksの unassignedCase フィルタ追加、
+                                     #        AppEvent/RecurringTaskTemplate/RegisterTemplateInput/RecurrenceKindの
+                                     #        delivery系フィールド・列挙値もここで改称する(他に担当箇所がないため)
 
 frontend/e2e/
 ├── cases.spec.ts                   # 新規: 登録(タスク選択+必須指定)・検索・ステータスチップ・期限超過表示

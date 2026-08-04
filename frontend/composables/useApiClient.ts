@@ -17,8 +17,8 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   memo?: string | null;
-  deliveryId?: string | null;
-  isRequiredForDelivery: boolean;
+  caseId?: string | null;
+  isRequiredForCase: boolean;
   parentTaskId?: string | null;
   assigneeUserId?: string | null;
   sourceTemplateId?: string | null;
@@ -34,8 +34,8 @@ export interface CreateTaskInput {
   title: string;
   priority: Priority;
   memo?: string;
-  deliveryId?: string;
-  isRequiredForDelivery?: boolean;
+  caseId?: string;
+  isRequiredForCase?: boolean;
   assigneeUserId?: string;
   parentTaskId?: string;
 }
@@ -44,21 +44,23 @@ export interface UpdateTaskInput {
   title?: string;
   priority?: Priority;
   memo?: string | null;
-  deliveryId?: string | null;
-  isRequiredForDelivery?: boolean;
+  caseId?: string | null;
+  isRequiredForCase?: boolean;
   assigneeUserId?: string | null;
 }
 
-export interface Delivery {
+export interface Case {
   id: string;
   name: string;
-  dueDate: string;
+  startDate?: string | null;
+  endDate: string;
+  isCompleted: boolean;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
 }
 
-export interface DeliveryProgress {
+export interface CaseProgress {
   requiredTotal: number;
   requiredCompleted: number;
   requiredIncomplete: number;
@@ -69,7 +71,7 @@ export interface AppEvent {
   id: string;
   title: string;
   occursAt: string;
-  deliveryId?: string | null;
+  caseId?: string | null;
   assigneeUserId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -84,7 +86,7 @@ export interface User {
   deletedAt?: string | null;
 }
 
-export type RecurrenceKind = "fixed_interval" | "delivery_relative";
+export type RecurrenceKind = "fixed_interval" | "case_relative";
 export type IntervalUnit = "day" | "week" | "month";
 export type NonBusinessDayPolicy = "as_is" | "skip" | "next_business_day" | "previous_business_day";
 
@@ -95,8 +97,8 @@ export interface RecurringTaskTemplate {
   kind: RecurrenceKind;
   intervalUnit?: IntervalUnit | null;
   intervalValue?: number | null;
-  boundDeliveryId?: string | null;
-  deliveryOffsetDays?: number | null;
+  boundCaseId?: string | null;
+  caseOffsetDays?: number | null;
   defaultMemo?: string | null;
   nonBusinessDayPolicy: NonBusinessDayPolicy;
   isActive: boolean;
@@ -111,8 +113,8 @@ export interface RegisterTemplateInput {
   kind: RecurrenceKind;
   intervalUnit?: IntervalUnit;
   intervalValue?: number;
-  boundDeliveryId?: string;
-  deliveryOffsetDays?: number;
+  boundCaseId?: string;
+  caseOffsetDays?: number;
   defaultMemo?: string;
   nonBusinessDayPolicy: NonBusinessDayPolicy;
 }
@@ -159,8 +161,13 @@ export function useApiClient() {
     deleteUser: (id: string) => request<void>(`/api/users/${id}`, { method: "DELETE" }),
 
     // Tasks (design.md "Backend/tasks" API Contract)
-    listTasks: (filter: { deliveryId?: string; assigneeUserId?: string } = {}) =>
-      request<Task[]>("/api/tasks", { query: filter }),
+    listTasks: (filter: { caseId?: string; assigneeUserId?: string; unassignedCase?: boolean } = {}) =>
+      request<Task[]>("/api/tasks", {
+        query: {
+          ...filter,
+          unassignedCase: filter.unassignedCase ? "true" : undefined,
+        },
+      }),
     createTask: (input: CreateTaskInput) => request<Task>("/api/tasks", { method: "POST", body: input }),
     getTask: (id: string) => request<Task>(`/api/tasks/${id}`),
     updateTask: (id: string, input: UpdateTaskInput) => request<Task>(`/api/tasks/${id}`, { method: "PATCH", body: input }),
@@ -177,18 +184,18 @@ export function useApiClient() {
       }),
     deleteTask: (id: string) => request<void>(`/api/tasks/${id}`, { method: "DELETE" }),
 
-    // Deliveries (design.md "Backend/deliveries" API Contract)
-    listDeliveries: () => request<Delivery[]>("/api/deliveries"),
-    createDelivery: (input: { name: string; dueDate: string }) =>
-      request<Delivery>("/api/deliveries", { method: "POST", body: input }),
-    updateDeliveryDueDate: (id: string, dueDate: string) =>
-      request<Delivery>(`/api/deliveries/${id}`, { method: "PATCH", body: { dueDate } }),
-    getDeliveryProgress: (id: string) => request<DeliveryProgress>(`/api/deliveries/${id}/progress`),
-    deleteDelivery: (id: string) => request<void>(`/api/deliveries/${id}`, { method: "DELETE" }),
+    // Cases (design.md "Backend/cases" API Contract)
+    listCases: () => request<Case[]>("/api/cases"),
+    createCase: (input: { name: string; startDate?: string; endDate: string }) =>
+      request<Case>("/api/cases", { method: "POST", body: input }),
+    updateCase: (id: string, input: { name?: string; startDate?: string | null; endDate?: string; isCompleted?: boolean }) =>
+      request<Case>(`/api/cases/${id}`, { method: "PATCH", body: input }),
+    getCaseProgress: (id: string) => request<CaseProgress>(`/api/cases/${id}/progress`),
+    deleteCase: (id: string) => request<void>(`/api/cases/${id}`, { method: "DELETE" }),
 
     // Events (design.md "Backend/events" API Contract)
     listEvents: (filter: { assigneeUserId?: string } = {}) => request<AppEvent[]>("/api/events", { query: filter }),
-    createEvent: (input: { title: string; occursAt: string; deliveryId?: string; assigneeUserId?: string }) =>
+    createEvent: (input: { title: string; occursAt: string; caseId?: string; assigneeUserId?: string }) =>
       request<AppEvent>("/api/events", { method: "POST", body: input }),
     deleteEvent: (id: string) => request<void>(`/api/events/${id}`, { method: "DELETE" }),
 

@@ -75,10 +75,11 @@
   - _Requirements: 3.1_
   - _Boundary: TasksService_
 
-- [ ] 5. Core: フロントエンドAPIクライアントの改称・拡張
+- [x] 5. Core: フロントエンドAPIクライアントの改称・拡張
   - `useApiClient.ts`の`Delivery`/`DeliveryProgress`型と`listDeliveries/createDelivery/updateDeliveryDueDate/getDeliveryProgress/deleteDelivery`を`Case`/`CaseProgress`型と`listCases/createCase/updateCase(汎用)/getCaseProgress/deleteCase`に改称・拡張する
   - `Task`型の`deliveryId`/`isRequiredForDelivery`を`caseId`/`isRequiredForCase`に改称し、`listTasks`に`unassignedCase`フィルタ引数を追加する
-  - 観測可能な完了状態: フロントエンドの型チェック(`nuxi typecheck`または`vue-tsc`)が通り、`createCase`が`{ name, startDate?, endDate }`で201のレスポンス型を持つことを確認できる
+  - `AppEvent.deliveryId`→`caseId`、`RecurringTaskTemplate`/`RegisterTemplateInput`の`boundDeliveryId`→`boundCaseId`・`deliveryOffsetDays`→`caseOffsetDays`、`RecurrenceKind`の`"delivery_relative"`→`"case_relative"`も改称する(この共有クライアント以外に、タスク8.3/8.4が依存するこれらの型を改称する担当箇所がないため、本タスクの範囲に含める)
+  - 観測可能な完了状態: フロントエンドの型チェック(`nuxi typecheck`または`vue-tsc`)を実行すると、`useApiClient.ts`自体にはエラーが出ず、`createCase`が`{ name, startDate?, endDate }`で201のレスポンス型を持つことを確認できる(他の`.vue`ファイルの改称待ちによるエラーは後続タスクで解消される想定内のもの)
   - _Depends: 3.3, 4_
   - _Requirements: 1.1, 1.2_
 
