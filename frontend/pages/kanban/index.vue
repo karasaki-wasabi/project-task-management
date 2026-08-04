@@ -118,6 +118,7 @@ const stages = ref<DevelopmentStage[]>([]);
 
 const tasks = ref<Task[]>([]);
 const users = ref<User[]>([]);
+const cases = ref<Case[]>([]);
 const pendingMove = ref<{ taskId: string; targetStageId: string } | null>(null);
 const pendingAssigneeUserId = ref("");
 const hoveredStageId = ref<string | null>(null);
@@ -233,6 +234,10 @@ watch([tasks, stages], syncColumnTasks, { immediate: true });
 
 async function loadStages() {
   stages.value = await api.listDevelopmentStages();
+}
+
+async function loadCases() {
+  cases.value = await api.listCases();
 }
 
 async function loadTasks() {
@@ -412,6 +417,7 @@ onMounted(async () => {
   await loadStages();
   await loadTasks();
   users.value = await api.listUsers();
+  await loadCases();
 });
 </script>
 
@@ -526,6 +532,7 @@ onMounted(async () => {
       :task-id="detailTaskId"
       :users="users"
       :stages="stages"
+      :cases="cases"
       @close="closeTaskDetail"
       @saved="onTaskDetailSaved"
       @deleted="onTaskDetailDeleted"
