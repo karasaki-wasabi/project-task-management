@@ -61,7 +61,7 @@
   - _Requirements: 2.3, 2.4, 2.5, 5.3, 5.4, 6.1, 6.2, 8.1, 8.2_
   - _Boundary: CaseService_
 
-- [ ] 3.3 cases: ルート実装とアプリへの登録
+- [x] 3.3 cases: ルート実装とアプリへの登録
   - `case.routes.ts`に`POST/PATCH/GET/DELETE /api/cases`と`GET /api/cases/:id/progress`をZodバリデーション付きで実装する
   - `app.ts`の`deliveryRoutes`登録を`caseRoutes`に置き換える
   - 観測可能な完了状態: 実HTTP経路(`app.inject`)で`POST /api/cases`が201を返し、`startDate > endDate`を指定した`PATCH`が400を返すことを統合テストで確認できる

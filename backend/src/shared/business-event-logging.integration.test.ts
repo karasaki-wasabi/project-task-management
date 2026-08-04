@@ -1,10 +1,11 @@
 // RED: none of the affected Services emit business event logs yet (task
-// 10.2, Requirement 10.2 — "納品作成、繰り返しタスクインスタンス生成、各
+// 10.2, Requirement 10.2 — "案件作成、繰り返しタスクインスタンス生成、各
 // エンティティの削除など" broad-impact operations must log operation type +
 // target entity ID). This is a single cross-cutting test file (matching the
 // cross-cutting nature of this Integration task, mirroring how task 10.1's
-// wiring was tested inside delivery.service.test.ts) rather than scattering
-// near-identical describe blocks across 6+ module test files.
+// wiring was tested inside delivery.service.test.ts, later renamed to
+// case.service.test.ts in task 3.3) rather than scattering near-identical
+// describe blocks across 6+ module test files.
 import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -13,7 +14,7 @@ import { createLogger } from "./logger.js";
 import { db } from "./db.js";
 import { usersService } from "../modules/users/user.service.js";
 import { tasksService } from "../modules/tasks/task.service.js";
-import { deliveriesService } from "../modules/deliveries/delivery.service.js";
+import { caseService } from "../modules/cases/case.service.js";
 import { eventsService } from "../modules/events/event.service.js";
 import { holidaysService } from "../modules/holidays/holiday.service.js";
 import { recurrenceService } from "../modules/recurrence/recurrence.service.js";
@@ -55,17 +56,17 @@ function findEvent(event: string): Record<string, unknown> | undefined {
 }
 
 describe("business event logging (task 10.2)", () => {
-  it("logs delivery.created with the requestId and the new delivery's id (Requirement 10.2)", async () => {
-    let deliveryId: string | undefined;
+  it("logs case.created with the requestId and the new case's id (Requirement 10.2)", async () => {
+    let caseId: string | undefined;
     try {
-      const delivery = await deliveriesService.create({ name: `d-${randomUUID()}`, dueDate: new Date() }, "req-delivery-create");
-      deliveryId = delivery.id;
+      const caseEntity = await caseService.create({ name: `c-${randomUUID()}`, endDate: new Date() }, "req-case-create");
+      caseId = caseEntity.id;
 
-      const logged = findEvent("delivery.created");
-      expect(logged?.entityId).toBe(delivery.id);
-      expect(logged?.requestId).toBe("req-delivery-create");
+      const logged = findEvent("case.created");
+      expect(logged?.entityId).toBe(caseEntity.id);
+      expect(logged?.requestId).toBe("req-case-create");
     } finally {
-      if (deliveryId) await db.$executeRawUnsafe("DELETE FROM deliveries WHERE id = ?", deliveryId);
+      if (caseId) await db.$executeRawUnsafe("DELETE FROM cases WHERE id = ?", caseId);
     }
   });
 
@@ -140,19 +141,19 @@ describe("business event logging (task 10.2)", () => {
     }
   });
 
-  it("logs delivery.deleted with the deleted delivery's id", async () => {
-    let deliveryId: string | undefined;
+  it("logs case.deleted with the deleted case's id", async () => {
+    let caseId: string | undefined;
     try {
-      const delivery = await db.delivery.create({ data: { name: `d-${randomUUID()}`, dueDate: new Date() } });
-      deliveryId = delivery.id;
+      const caseEntity = await db.case.create({ data: { name: `c-${randomUUID()}`, endDate: new Date() } });
+      caseId = caseEntity.id;
 
-      await deliveriesService.delete(delivery.id, "req-delivery-delete");
+      await caseService.delete(caseEntity.id, "req-case-delete");
 
-      const logged = findEvent("delivery.deleted");
-      expect(logged?.entityId).toBe(delivery.id);
-      expect(logged?.requestId).toBe("req-delivery-delete");
+      const logged = findEvent("case.deleted");
+      expect(logged?.entityId).toBe(caseEntity.id);
+      expect(logged?.requestId).toBe("req-case-delete");
     } finally {
-      if (deliveryId) await db.$executeRawUnsafe("DELETE FROM deliveries WHERE id = ?", deliveryId);
+      if (caseId) await db.$executeRawUnsafe("DELETE FROM cases WHERE id = ?", caseId);
     }
   });
 
