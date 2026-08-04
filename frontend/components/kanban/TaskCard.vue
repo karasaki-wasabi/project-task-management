@@ -25,21 +25,39 @@
   status text + optional progress bar bottom-left, assignee initial
   bottom-right.
 
-  Drag is not the only way to move or reassign a task: the card is
-  focusable and emits `activate` on Enter/Space/click (a plain click — no
-  drag movement — is safe alongside Sortable, which only starts a drag past
-  a movement threshold); every caller (kanban/index.vue directly, or
-  bubbled up through AssigneeFocusTray/UnassignedBacklogPanel) opens a
-  keyboard-operable action menu offering the same stage-move /
-  assign-on-move mutations dragging already performs. This keeps the
-  primary workflow reachable without a mouse.
+  Clicking (or Enter/Space when focused) opens the task detail/edit/delete
+  popup (kanban-ux-redesign Requirement 8) — the card just emits
+  `activate`; every caller (kanban/index.vue directly, or bubbled up
+  through AssigneeFocusTray/UnassignedBacklogPanel) wires it straight to
+  opening that popup. The popup's edit mode is also the keyboard-accessible
+  way to move a task between development stages, since dragging itself has
+  no keyboard equivalent.
+
+  User-reported bug: clicking the card sometimes did nothing (1-2 times in
+  several attempts) right after a slight wiggle-then-release (just enough
+  for Sortable to show its ghost, without completing an actual reorder).
+  Drag libraries commonly suppress the native `click` that a completed
+  drag gesture would otherwise also fire, as a one-shot guard against
+  "drag also triggers whatever the click does" — plausible here too, given
+  Sortable's fallback mode drives its own synthetic mouse handling rather
+  than native HTML5 drag events. This wasn't reliably reproducible under
+  scripted automation (scripted mouse sequences didn't trigger the gap;
+  the report came from real interaction), so the exact mechanism is not
+  fully confirmed. Regardless, depending on the native `click` event here
+  is fragile by construction whenever a drag library shares the same
+  element: `pointerdown`/`pointerup` instead measure the release distance
+  from the press position directly and emit `activate` when it's below
+  `clickMoveThreshold`, without relying on whatever `click` handling (or
+  suppression) the drag library layers on top. Keyboard activation
+  (Enter/Space) is unaffected — it never went through `click` or Sortable
+  to begin with.
 
   Title is `line-clamp-2` with a `title` attribute carrying the full text:
   an unclamped title could wrap indefinitely and distort card height/grid
   rhythm across a column.
 
   A small "⋯" hint fades in on hover/focus (`group-hover`/
-  `group-focus-visible`) to signal that clicking opens an action menu,
+  `group-focus-visible`) to signal that clicking opens the detail popup,
   since `cursor-grab` alone only hints at dragging. It is decorative only
   (`aria-hidden`, `pointer-events-none`) — the whole card stays the actual
   click/keyboard target via the existing aria-label.
@@ -60,6 +78,23 @@ const showProgress = computed(() => shouldShowProgress(props.progress));
 const progressLabel = computed(() => (props.progress ? formatProgress(props.progress) : ""));
 const progressPercent = computed(() => (props.progress ? Math.round((props.progress.completed / props.progress.total) * 100) : 0));
 const assigneeInitial = computed(() => props.assigneeName?.charAt(0) ?? "");
+
+// See header comment: replaces `@click` for pointer input, which Sortable
+// can intermittently suppress right after any completed sort gesture.
+const clickMoveThreshold = 6;
+let pointerDownPos: { x: number; y: number } | null = null;
+
+function onPointerDown(event: PointerEvent) {
+  pointerDownPos = { x: event.clientX, y: event.clientY };
+}
+
+function onPointerUp(event: PointerEvent) {
+  const start = pointerDownPos;
+  pointerDownPos = null;
+  if (!start) return;
+  const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+  if (distance <= clickMoveThreshold) emit("activate");
+}
 </script>
 
 <template>
@@ -68,8 +103,9 @@ const assigneeInitial = computed(() => props.assigneeName?.charAt(0) ?? "");
     :data-task-id="task.id"
     role="button"
     tabindex="0"
-    :aria-label="`${task.title}、操作メニューを開く`"
-    @click="emit('activate')"
+    :aria-label="`${task.title}、詳細を開く`"
+    @pointerdown="onPointerDown"
+    @pointerup="onPointerUp"
     @keydown.enter.prevent="emit('activate')"
     @keydown.space.prevent="emit('activate')"
   >

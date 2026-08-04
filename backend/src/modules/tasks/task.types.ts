@@ -31,6 +31,15 @@ export interface TaskListFilter {
   assigneeUserId?: string;
 }
 
+export interface UpdateTaskInput {
+  title?: string;
+  priority?: Priority;
+  memo?: string | null;
+  deliveryId?: string | null;
+  isRequiredForDelivery?: boolean;
+  assigneeUserId?: string | null;
+}
+
 export type TaskError =
   | { type: "not_found"; taskId: string }
   | { type: "incomplete_children"; taskId: string }

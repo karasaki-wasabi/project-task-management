@@ -67,6 +67,14 @@
   - 既存タスクを複数タスクに分割する機能を実装し、分割後の各タスクに元タスクの納品紐付け・優先度を引き継がせる
   - 親タスクに未完了の子タスクが存在する状態での完了操作を拒否し、理由を返すことを確認できる状態にする
   - _Requirements: 2.1, 2.2, 2.3, 2.4_
+
+- [x] 3.3 タスク詳細取得・汎用編集APIとカンバン画面への統合
+  - `GET /api/tasks/:id`でタスク詳細を取得できるようにする(存在しないIDは404)
+  - `PATCH /api/tasks/:id`でタイトル・優先度・メモ・納品紐付け・必須フラグ・担当者を部分更新できるようにする。`updateDevelopmentStage`と異なり担当者は常に上書きする
+  - `deliveryId`を`null`に更新した場合、`isRequiredForDelivery`を作成時と同じルールでfalseに固定する
+  - カンバン画面のタスクカード操作メニューに「詳細/編集」を追加し、詳細閲覧・編集・削除ができるモーダル(`TaskDetailModal.vue`)を実装する(このモーダルのUI所有権・以後の改修は`kanban-ux-redesign`スペックの`frontend/components/kanban/`配下コンポーネント群に属する。カード操作方法自体の刷新は同スペックのRequirement 8/9・tasks.md task 6を参照)
+  - _Requirements: 1.1, 1.2, 1.5, 1.6, 7.1, 9.1, 9.2, 9.3, 9.4_
+  - _Boundary: TasksService, kanban/index.vue_
   - _Boundary: TasksService_
 
 - [ ] 4. Deliveries: 納品管理

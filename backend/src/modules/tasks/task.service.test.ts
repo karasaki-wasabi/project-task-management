@@ -115,6 +115,105 @@ describe("tasksService (task 3.1)", () => {
     expect(result.error).toEqual({ type: "not_found", taskId: expect.any(String) });
   });
 
+  it("gets a task by id (Requirement 1.2)", async () => {
+    const created = await tasksService.create({ title: "detail me", priority: "medium" });
+    if (!created.ok) throw new Error("setup failed");
+
+    const result = await tasksService.getById(created.value.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.id).toBe(created.value.id);
+    expect(result.value.title).toBe("detail me");
+
+    await hardDeleteTasks([created.value.id]);
+  });
+
+  it("returns not_found when getting a non-existent task", async () => {
+    const result = await tasksService.getById(randomUUID());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.type).toBe("not_found");
+  });
+
+  it("updates title, priority, and memo (Requirement 1.1, 1.5, 1.6)", async () => {
+    const created = await tasksService.create({ title: "original", priority: "low", memo: "old memo" });
+    if (!created.ok) throw new Error("setup failed");
+
+    const result = await tasksService.update(created.value.id, { title: "renamed", priority: "high", memo: "new memo" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.title).toBe("renamed");
+    expect(result.value.priority).toBe("high");
+    expect(result.value.memo).toBe("new memo");
+
+    await hardDeleteTasks([created.value.id]);
+  });
+
+  it("rejects updating to an empty title", async () => {
+    const created = await tasksService.create({ title: "keep me", priority: "low" });
+    if (!created.ok) throw new Error("setup failed");
+
+    const result = await tasksService.update(created.value.id, { title: "   " });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.type).toBe("validation_error");
+
+    await hardDeleteTasks([created.value.id]);
+  });
+
+  it("updates assigneeUserId, overwriting an existing assignee (Requirement 7.2)", async () => {
+    const originalAssignee = await db.user.create({ data: { name: `orig-${randomUUID()}` } });
+    const newAssignee = await db.user.create({ data: { name: `new-${randomUUID()}` } });
+    const created = await tasksService.create({
+      title: "assign me",
+      priority: "low",
+      assigneeUserId: originalAssignee.id,
+    });
+    if (!created.ok) throw new Error("setup failed");
+
+    const result = await tasksService.update(created.value.id, { assigneeUserId: newAssignee.id });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.assigneeUserId).toBe(newAssignee.id);
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteUsers([originalAssignee.id, newAssignee.id]);
+  });
+
+  it("forces isRequiredForDelivery to false when deliveryId is cleared", async () => {
+    const delivery = await db.delivery.create({ data: { name: `d-${randomUUID()}`, dueDate: new Date() } });
+    const created = await tasksService.create({
+      title: "linked",
+      priority: "low",
+      deliveryId: delivery.id,
+      isRequiredForDelivery: true,
+    });
+    if (!created.ok) throw new Error("setup failed");
+
+    const result = await tasksService.update(created.value.id, { deliveryId: null });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.deliveryId).toBeNull();
+    expect(result.value.isRequiredForDelivery).toBe(false);
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteDeliveries([delivery.id]);
+  });
+
+  it("returns not_found when updating a non-existent task", async () => {
+    const result = await tasksService.update(randomUUID(), { title: "ghost" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.type).toBe("not_found");
+  });
+
   it("filters the list by deliveryId and assigneeUserId (Requirement 7.2)", async () => {
     const delivery = await db.delivery.create({ data: { name: `d-${randomUUID()}`, dueDate: new Date() } });
     const user = await db.user.create({ data: { name: `u-${randomUUID()}` } });
