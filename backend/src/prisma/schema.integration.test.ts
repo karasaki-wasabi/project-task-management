@@ -19,17 +19,17 @@ afterAll(async () => {
 describe("physical schema (task 1.3)", () => {
   it("round-trips a record through every domain table", async () => {
     const user = await prisma.user.create({ data: { name: `user-${randomUUID()}` } });
-    const delivery = await prisma.delivery.create({
-      data: { name: `delivery-${randomUUID()}`, dueDate: new Date("2026-08-01") },
+    const caseEntity = await prisma.case.create({
+      data: { name: `case-${randomUUID()}`, endDate: new Date("2026-08-01") },
     });
     const parentTask = await prisma.task.create({
-      data: { title: "parent", priority: "high", deliveryId: delivery.id, assigneeUserId: user.id },
+      data: { title: "parent", priority: "high", caseId: caseEntity.id, assigneeUserId: user.id },
     });
     const childTask = await prisma.task.create({
       data: { title: "child", priority: "medium", parentTaskId: parentTask.id },
     });
     const event = await prisma.event.create({
-      data: { title: "kickoff", occursAt: new Date("2026-08-01T09:00:00Z"), deliveryId: delivery.id },
+      data: { title: "kickoff", occursAt: new Date("2026-08-01T09:00:00Z"), caseId: caseEntity.id },
     });
     const template = await prisma.recurringTaskTemplate.create({
       data: {
@@ -47,7 +47,7 @@ describe("physical schema (task 1.3)", () => {
 
     expect(user.id).toBeTruthy();
     expect(childTask.parentTaskId).toBe(parentTask.id);
-    expect(event.deliveryId).toBe(delivery.id);
+    expect(event.caseId).toBe(caseEntity.id);
     expect(template.kind).toBe("fixed_interval");
     expect(holiday.source).toBe("manual");
 
@@ -56,7 +56,7 @@ describe("physical schema (task 1.3)", () => {
     await prisma.task.delete({ where: { id: parentTask.id } });
     await prisma.recurringTaskTemplate.delete({ where: { id: template.id } });
     await prisma.nonBusinessDay.delete({ where: { id: holiday.id } });
-    await prisma.delivery.delete({ where: { id: delivery.id } });
+    await prisma.case.delete({ where: { id: caseEntity.id } });
     await prisma.user.delete({ where: { id: user.id } });
   });
 

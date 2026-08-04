@@ -150,7 +150,7 @@
   - _Boundary: recurrence page_
 
 - [ ] 9. Validation: バックエンド統合テスト・E2E・回帰確認
-- [ ] 9.1 バックエンド統合テストの追加・更新
+- [x] 9.1 バックエンド統合テストの追加・更新
   - `POST /api/cases`(タスク未選択でも201)、`PATCH /api/cases/:id`(name/startDate/endDate/isCompletedの独立更新)、`DELETE /api/cases/:id`後の`Task`/`Event`のdetach、recurrenceの`endDate`基準生成/再計算を実HTTP経路で検証する
   - 観測可能な完了状態: 上記シナリオを検証する統合テストが全てgreenになる
   - _Depends: 3.3, 2.3_
