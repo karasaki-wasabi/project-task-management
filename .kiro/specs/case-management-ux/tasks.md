@@ -43,7 +43,7 @@
   - _Boundary: RecurrenceService_
 
 - [ ] 3. Core: バックエンド `cases` モジュールの実装
-- [ ] 3.1 cases: 型・リポジトリ層の実装(旧deliveryの改称・拡張)
+- [x] 3.1 cases: 型・リポジトリ層の実装(旧deliveryの改称・拡張)
   - `backend/src/modules/deliveries/`を`cases/`へ改称し、`case.types.ts`(`Case`, `CreateCaseInput`, `UpdateCaseInput`, `CaseProgress`)と`case.repository.ts`を実装する
   - `name`/`startDate`(nullable)/`endDate`/`isCompleted`のCRUDを実装し、削除時は既存同様`Task`/`Event`の`caseId`をnullにdetachしてから削除する
   - 観測可能な完了状態: リポジトリ層のユニット/統合テストで、作成した`Case`が`startDate`なしでも登録できること、削除後に紐づくタスクの`caseId`が`null`になることを確認できる
