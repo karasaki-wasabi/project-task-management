@@ -10,7 +10,7 @@
   - 観測可能な完了状態: `npx prisma validate`が通り、生成されたPrisma Clientの型に`Case`/`caseId`/`isRequiredForCase`/`case_relative`が現れる
   - _Requirements: 1.1, 2.2, 2.5, 5.1, 5.4_
 
-- [ ] 1.2 既存マイグレーションの削除とスキーマの再生成・適用
+- [x] 1.2 既存マイグレーションの削除とスキーマの再生成・適用
   - `backend/src/prisma/migrations/`配下の既存マイグレーション(`20260731051829_init_domain_schema`, `20260731141826_add_development_stages`)を削除する
   - 開発DB(Docker Compose `mysql`)のデータをリセットする
   - `docker compose exec backend npx prisma migrate dev --name init_domain_schema`でリネーム後のスキーマから単一の初期マイグレーションを生成・適用する
@@ -172,3 +172,6 @@
   - 観測可能な完了状態: 両E2Eファイルが「案件」表記のまま成功する
   - _Depends: 8.2, 7_
   - _Requirements: 1.1, 1.2_
+
+## Implementation Notes
+- タスク1.2: `non_business_days.date_active_key`はPrismaが`Unsupported("date")?`としてしか表現できないSTORED GENERATED COLUMN(+UNIQUE INDEX)であるため、`prisma migrate dev`をこのテーブルに対して再実行すると、生成列/UNIQUE INDEXをdriftとして検知し、それらをDROPする追従マイグレーションを自動生成してしまう(実際に1回発生し、生成された不要マイグレーションを削除して再対応した)。このハンドエディット済みマイグレーション(`20260804102439_init_domain_schema`)を今後再適用する際は`prisma migrate dev`ではなく`prisma migrate deploy`(diffなしでファイルをそのまま適用)を使うこと。マイグレーションSQL自体にも同内容の警告コメントを追加済み。
