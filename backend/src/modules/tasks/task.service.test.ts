@@ -238,6 +238,50 @@ describe("tasksService (task 3.1)", () => {
     await hardDeleteUsers([user.id]);
   });
 
+  // RED: unassignedCase does not exist on TaskListFilter yet (task 4,
+  // design.md "Backend/tasks > TasksService.list 未割当フィルタ拡張",
+  // Requirement 3.1).
+  it("filters the list to only unassigned tasks when unassignedCase is true (Requirement 3.1)", async () => {
+    const caseRecord = await db.case.create({ data: { name: `c-${randomUUID()}`, endDate: new Date() } });
+
+    const unassigned = await tasksService.create({ title: "no case yet", priority: "low" });
+    const assigned = await tasksService.create({
+      title: "already has a case",
+      priority: "low",
+      caseId: caseRecord.id,
+    });
+    if (!unassigned.ok || !assigned.ok) throw new Error("setup failed");
+
+    const byUnassignedCase = await tasksService.list({ unassignedCase: true });
+    const ids = byUnassignedCase.map((t) => t.id);
+    expect(ids).toContain(unassigned.value.id);
+    expect(ids).not.toContain(assigned.value.id);
+
+    await hardDeleteTasks([unassigned.value.id, assigned.value.id]);
+    await hardDeleteCases([caseRecord.id]);
+  });
+
+  // Regression: unassignedCase absent (or any non-true value coming through
+  // the route layer as undefined) must not change existing caseId-filter
+  // behavior (task 4, design.md same section).
+  it("keeps existing caseId-filter behavior unchanged when unassignedCase is not set (regression)", async () => {
+    const caseRecord = await db.case.create({ data: { name: `c-${randomUUID()}`, endDate: new Date() } });
+
+    const matching = await tasksService.create({
+      title: "still matches caseId filter",
+      priority: "low",
+      caseId: caseRecord.id,
+    });
+    const nonMatching = await tasksService.create({ title: "still unassigned", priority: "low" });
+    if (!matching.ok || !nonMatching.ok) throw new Error("setup failed");
+
+    const byCase = await tasksService.list({ caseId: caseRecord.id });
+    expect(byCase.map((t) => t.id)).toEqual([matching.value.id]);
+
+    await hardDeleteTasks([matching.value.id, nonMatching.value.id]);
+    await hardDeleteCases([caseRecord.id]);
+  });
+
   it("soft-deletes a task and excludes it from list (Requirement 9.3, 9.4)", async () => {
     const created = await tasksService.create({ title: "delete me", priority: "low" });
     if (!created.ok) throw new Error("setup failed");

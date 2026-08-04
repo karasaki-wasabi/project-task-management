@@ -40,6 +40,10 @@ const taskIdParamsSchema = z.object({ id: z.string() });
 const listQuerySchema = z.object({
   caseId: z.string().optional(),
   assigneeUserId: z.string().optional(),
+  // design.md "Backend/tasks > TasksService.list 未割当フィルタ拡張":
+  // z.literal("true") rather than z.coerce.boolean(), since z.coerce.boolean()
+  // treats the string "false" as truthy.
+  unassignedCase: z.literal("true").optional(),
 });
 
 function parseOrBadRequest<T>(schema: z.ZodType<T>, data: unknown): T {
@@ -160,6 +164,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/tasks", async (request) => {
     const query = parseOrBadRequest(listQuerySchema, request.query);
-    return tasksService.list(query);
+    return tasksService.list({
+      caseId: query.caseId,
+      assigneeUserId: query.assigneeUserId,
+      unassignedCase: query.unassignedCase === "true",
+    });
   });
 }

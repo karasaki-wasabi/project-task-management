@@ -50,7 +50,10 @@ export const taskRepository = {
   list(filter: TaskListFilter): Promise<Task[]> {
     return db.task.findMany({
       where: {
-        caseId: filter.caseId,
+        // design.md "Backend/tasks > TasksService.list 未割当フィルタ拡張":
+        // unassignedCase is exclusive and takes priority over any caseId
+        // also present on the filter.
+        caseId: filter.unassignedCase ? null : filter.caseId,
         assigneeUserId: filter.assigneeUserId,
       },
       orderBy: { createdAt: "asc" },

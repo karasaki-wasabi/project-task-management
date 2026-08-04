@@ -68,7 +68,7 @@
   - _Depends: 3.2_
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 5.1, 5.2, 5.3, 6.3, 7.1, 8.1_
 
-- [ ] 4. (P) Core: 未割当タスク取得フィルタの追加
+- [x] 4. (P) Core: 未割当タスク取得フィルタの追加
   - `task.routes.ts`のクエリスキーマに`unassignedCase: z.literal("true").optional()`を追加し、`task.repository.ts`の`list()`で指定時に`caseId IS NULL`で絞り込む
   - 観測可能な完了状態: `GET /api/tasks?unassignedCase=true`が案件未設定のタスクのみを返すことを統合テストで確認できる
   - _Depends: 2.1_
