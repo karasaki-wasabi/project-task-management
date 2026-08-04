@@ -72,14 +72,20 @@
   - _Depends: 4.2_
 
 - [x] 5.2 (P) 担当者フォーカスとチーム負荷のE2Eテストを追加する
-  - 担当者フィルタで特定の担当者を選択すると、フォーカス領域と開発段階別ボードの両方がその担当者のタスクに連動して更新されることを検証する
+  - 担当者フィルタで特定の担当者を選択すると、フォーカス領域にその担当者のタスクが表示されることを検証する(**実装後の改訂によりRequirement 4を修正**: 開発段階別ボード側は絞り込まない。フォーカス領域と二重表示になるためボード側の絞り込みは廃止された。詳細はrequirements.md Requirement 4参照)
   - 「すべて」に戻すとフォーカス領域が非表示に戻ることを検証する
-  - 観測可能な完了状態: 新規E2Eテストが追加され、担当者選択に応じたフォーカス領域とボードの連動、および「すべて」に戻したときの非表示化がPlaywrightで確認できる
+  - 観測可能な完了状態: 新規E2Eテストが追加され、担当者選択に応じたフォーカス領域の表示切り替え、および「すべて」に戻したときの非表示化がPlaywrightで確認できる
   - _Requirements: 1.1, 1.2, 4.2, 4.3_
   - _Boundary: kanban e2e (新規specファイル)_
   - _Depends: 4.2_
 
 - [x] 5.3 (P) 開発段階未設定バックログのE2Eテストを追加する
+  - 折りたたみ表示の展開、タイトル検索、優先度/作成日時ソートを検証する
+  - 展開済み一覧の行を開発段階別ボードの列へドラッグ&ドロップし、担当者未設定の場合は担当者選択が求められ、選択後に移動が完了することを検証する
+  - 観測可能な完了状態: 新規E2Eテストが追加され、展開・検索・ソート、および展開済み一覧からのドラッグ移動(担当者選択フローを含む)がPlaywrightで確認できる
+  - _Requirements: 3.2, 3.3, 3.4, 3.5_
+  - _Boundary: kanban e2e (新規specファイル)_
+  - _Depends: 4.2_
 
 - [x] 6. タスクカードのクリック/ドラッグ操作を刷新し、担当者フォーカス欄への担当変更ドラッグを実装する
 - [x] 6.1 TaskDetailModalコンポーネントを実装する(閲覧/編集モード、オーバーレイ表示)
@@ -138,9 +144,3 @@
 
 ## Implementation Notes
 - The shared local dev DB accumulated ~63 development stages / ~114 tasks from repeated e2e runs across this feature's tasks, wide enough to break Playwright's `locator.dragTo()` (real cursor simulation requires both elements to fit in one viewport). `kanban-backlog.spec.ts` works around this by dispatching `dragstart`/`dragover`/`drop` DOM events directly, which exercises the same production handlers (confirmed: `onDropOnStage` reads the dragged task id from a `draggedTaskId` ref set via the `@dragstart` emit, not from `dataTransfer` contents or cursor position). If this recurs, clean up `e2e-*`-prefixed dev-DB rows before running drag-based specs.
-  - 折りたたみ表示の展開、タイトル検索、優先度/作成日時ソートを検証する
-  - 展開済み一覧の行を開発段階別ボードの列へドラッグ&ドロップし、担当者未設定の場合は担当者選択が求められ、選択後に移動が完了することを検証する
-  - 観測可能な完了状態: 新規E2Eテストが追加され、展開・検索・ソート、および展開済み一覧からのドラッグ移動(担当者選択フローを含む)がPlaywrightで確認できる
-  - _Requirements: 3.2, 3.3, 3.4, 3.5_
-  - _Boundary: kanban e2e (新規specファイル)_
-  - _Depends: 4.2_

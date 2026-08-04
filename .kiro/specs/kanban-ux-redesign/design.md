@@ -116,19 +116,23 @@ frontend/
 │       │                                  # チーム負荷サマリー、開発段階未設定バックログ、開発段階別ボードを配置
 │       └── stages.vue                    # 新規: 開発段階マスタ管理画面 (Requirement 7)
 ├── components/
-│   └── kanban/
-│       ├── AssigneeFocusTray.vue         # 選択中担当者の未完了タスク一覧 (Requirement 1)
-│       ├── TeamWorkloadSummary.vue        # 担当者別件数サマリー、上位N名+まとめ表示 (Requirement 2)
-│       ├── UnassignedBacklogPanel.vue     # 開発段階未設定タスクの折りたたみ/展開・検索・ソート (Requirement 3)
-│       ├── TaskCard.vue                   # 状態・優先度・進捗表示を一元化したカード/リスト行 (Requirement 5)
-│       └── DevelopmentStageManager.vue    # 既存のマスタ管理UI・ロジックの移設先 (Requirement 7)
+│   ├── kanban/
+│   │   ├── AssigneeFocusTray.vue         # 選択中担当者の未完了タスク一覧 (Requirement 1)
+│   │   ├── TeamWorkloadSummary.vue        # 担当者別件数サマリー、上位N名+まとめ表示 (Requirement 2)
+│   │   ├── UnassignedBacklogPanel.vue     # 開発段階未設定タスクの折りたたみ/展開・検索・ソート (Requirement 3)
+│   │   ├── TaskCard.vue                   # 状態・優先度・進捗表示を一元化したカード/リスト行 (Requirement 5)
+│   │   ├── TaskDetailModal.vue            # 【実装後の改訂】タスク詳細の閲覧・編集・削除ポップアップ (Requirement 8)
+│   │   └── DevelopmentStageManager.vue    # 既存のマスタ管理UI・ロジックの移設先 (Requirement 7)
+│   └── shared/
+│       └── Modal.vue                     # 【実装後の改訂】汎用ダイアログシェル(オーバーレイ・アニメーション・フォーカストラップ) (Requirement 8.9-8.11)
 ```
 
 > `TaskCard.vue`は開発段階別ボードのカード、フォーカストレイ、展開済みバックログ一覧の行の3箇所で共用する。~~`draggable`propで、開発段階別ボード内でのみドラッグ元として振る舞う。~~ **(実装後の改訂)** ドラッグ機構が`vue-draggable-plus`へ移行したことに伴い、`draggable` propは廃止された。ドラッグの所有権はカード単体ではなく、各表示箇所を包む`VueDraggable`リストコンポーネント側が持つ(`group`設定の`pull`/`put`で、バックログ一覧は「ドラッグ元専用」、開発段階別ボードとフォーカストレイは「ドラッグ元にもドロップ先にもなれる」という区別を宣言的に表現する)。
 
 ### Modified Files
-- `frontend/pages/kanban/index.vue` — 開発段階マスタ管理UI(既存の`stage-list`セクション)を削除し、`/kanban/stages`への導線リンクを追加。担当者フィルタ・`AssigneeFocusTray`・`TeamWorkloadSummary`・`UnassignedBacklogPanel`を組み込み、既存の`tasksForStage`等の`computed`を担当者フィルタ・子タスク進捗算出に対応させて拡張する。
+- `frontend/pages/kanban/index.vue` — 開発段階マスタ管理UI(既存の`stage-list`セクション)を削除し、`/kanban/stages`への導線リンクを追加。担当者フィルタ・`AssigneeFocusTray`・`TeamWorkloadSummary`・`UnassignedBacklogPanel`を組み込み、既存の`tasksForStage`等の`computed`を担当者フィルタ・子タスク進捗算出に対応させて拡張する。カード操作(クリック=詳細ポップアップ、ドラッグ=移動)・担当者フォーカス欄への担当変更ドラッグも実装後の改訂で追加。
 - `frontend/e2e/kanban.spec.ts` — 開発段階の登録手順を`/kanban/stages`への遷移を含む形に更新する(既存テストは`/kanban`上に登録フォームがある前提のため)。
+- `frontend/app.vue` — 【実装後の改訂】(1) `/kanban`ページの`fullWidth`ルートメタに応じて`main`要素の`max-w-6xl`制限を切り替えるロジック、(2) アクティブなナビゲーションリンクの表示色バグ修正。詳細は「実装後の改訂」3.・Boundary Commitmentsの「Allowed Dependencies」参照。
 
 ## System Flows
 
@@ -225,6 +229,12 @@ interface AssigneeFocusTrayProps {
   tasks: Task[]; // 呼び出し側(kanban/index.vue)が選択担当者・未完了で絞り込み済みのタスク配列
   users: User[]; // 担当者名解決用
 }
+
+// emits(実装後の改訂、Requirement 3・9でドラッグ元/ドロップ先を兼ねるようになった際に追加):
+//   assign: [taskId: string]                                    — Requirement 9: ドロップされたタスクの担当変更を呼び出し側に依頼
+//   end: [payload: { taskId: string; targetStageId?: string }]  — カードがこの領域からドラッグアウトされた
+//   "card-activate": [taskId: string]                           — カードのクリック/Enter/Spaceで詳細ポップアップを開く
+// expose: { resync: () => void }                                — 呼び出し側がドラッグ中断時に表示を巻き戻すために呼ぶ
 ```
 
 **Implementation Notes**
@@ -252,6 +262,9 @@ interface TeamWorkloadSummaryProps {
   counts: WorkloadCount[]; // 呼び出し側が降順ソート済みで渡す
   maxVisible?: number; // 既定値はコンポーネント内で定義し、これを超える件数は「+N名」にまとめる
 }
+
+// v-model(担当者フォーカスの選択操作、Requirement 4): defineModel<string>()相当。
+// 選択中の担当者userId、空文字列は「未選択」。担当者チップのクリックで更新される。
 ```
 
 ##### State Management
@@ -278,6 +291,11 @@ interface UnassignedBacklogPanelProps {
   tasks: Task[]; // 呼び出し側が developmentStageId が未設定のタスクに絞り込み済み
   users: User[];
 }
+
+// emits:
+//   end: [payload: { taskId: string; targetStageId?: string }]  — カードがこの一覧からドラッグアウトされた(ドラッグ元専用、`put: false`)
+//   "card-activate": [taskId: string]                           — カードのクリック/Enter/Spaceで詳細ポップアップを開く
+// expose: { resync: () => void }                                — 呼び出し側がドラッグ中断時に表示を巻き戻すために呼ぶ
 ```
 
 ##### State Management
