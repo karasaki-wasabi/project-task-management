@@ -14,6 +14,7 @@ import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
 import { holidaysService } from "../holidays/holiday.service.js";
 import { formatDateOnly, parseDateOnly } from "../holidays/holiday.repository.js";
+import { tasksService } from "../tasks/task.service.js";
 import { isUniqueConstraintViolation, recurrenceRepository } from "./recurrence.repository.js";
 import type {
   IntervalUnit,
@@ -207,17 +208,47 @@ function logInstanceGenerated(instance: Task, requestId: string): void {
   businessEventLogger.logBusinessEvent("recurring_task_instance.generated", { requestId, entityId: instance.id });
 }
 
+// Goes through TasksService.create — the module's single declared entry
+// point for writing a Task row — rather than a recurrence-local Prisma
+// insert, so any business rule TasksService.create gains in the future
+// (validation, side effects, etc.) automatically also covers
+// recurrence-generated instances instead of silently diverging from them
+// (design.md general architecture principle: cross-module communication
+// goes through a module's Service interface).
 async function tryCreateInstance(
   template: RecurringTaskTemplate,
   scheduledDate: Date,
   deliveryId?: string,
 ): Promise<Task | null> {
+  let result;
   try {
-    return await recurrenceRepository.createInstance({ template, scheduledDate, deliveryId });
+    result = await tasksService.create({
+      title: template.title,
+      priority: template.priority,
+      memo: template.defaultMemo ?? undefined,
+      deliveryId,
+      sourceTemplateId: template.id,
+      scheduledDate,
+    });
   } catch (error) {
+    // Idempotent by construction: relies on the `(source_template_id,
+    // scheduled_date)` unique constraint (task 1.3) to reject a duplicate
+    // occurrence. TasksService.create only intercepts foreign-key
+    // violations itself (returning a validation_error Result below), so a
+    // unique-constraint violation still surfaces here as a thrown error.
     if (isUniqueConstraintViolation(error)) {
       return null; // already generated for this (template, scheduledDate) — idempotent no-op
     }
     throw error;
   }
+  if (!result.ok) {
+    // A template's title/deliveryId are trusted internal inputs (already
+    // validated at template-registration time, or sourced from a real
+    // Delivery row) — reaching a validation_error here means an
+    // unexpected invariant was violated, not a normal expected outcome for
+    // this caller to handle gracefully.
+    const message = result.error.type === "validation_error" ? result.error.message : result.error.type;
+    throw new Error(`recurrence: failed to create task instance: ${message}`);
+  }
+  return result.value;
 }

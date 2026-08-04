@@ -1,11 +1,19 @@
-// Persistence for RecurringTaskTemplates and their generated Task instances
-// (task 9.1 template CRUD + task 9.2 instance generation, design.md
+// Persistence for RecurringTaskTemplates (task 9.1 template CRUD, design.md
 // "Backend/recurrence"). Soft-delete / audit-column behavior and the
 // default `deletedAt: null` filter come from the shared `db` client
 // (task 1.4).
+//
+// Creating a generated Task instance is deliberately NOT a method here:
+// that goes through TasksService.create (see recurrence.service.ts's
+// `tryCreateInstance`) — design.md's general architecture principle is
+// that cross-module communication happens via a module's Service
+// interface, not by one module's repository reaching into another
+// module's tables directly. `findIncompleteInstance`/
+// `updateInstanceScheduledDate` below are read/reschedule operations on
+// instances this module already owns by `sourceTemplateId`, not a second
+// creation path.
 import { Prisma } from "@prisma/client";
 import { db } from "../../shared/db.js";
-import { taskRepository } from "../tasks/task.repository.js";
 import type { RecurringTaskTemplate, RegisterTemplateInput, Task } from "./recurrence.types.js";
 
 export function isUniqueConstraintViolation(error: unknown): boolean {
@@ -51,31 +59,6 @@ export const recurrenceRepository = {
 
   listActiveByKind(kind: RecurringTaskTemplate["kind"]): Promise<RecurringTaskTemplate[]> {
     return db.recurringTaskTemplate.findMany({ where: { kind, isActive: true } });
-  },
-
-  // Idempotent by construction: relies on the `(source_template_id,
-  // scheduled_date)` unique constraint (task 1.3) to reject a duplicate
-  // occurrence. Callers catch `isUniqueConstraintViolation` and treat it as
-  // "already generated" rather than an error.
-  //
-  // design.md "Backend/recurrence" Implementation Notes: instance creation
-  // goes through TasksService's own internal function (`taskRepository.create`)
-  // rather than duplicating the Prisma insert here, so any future business
-  // rule added to task creation (e.g. in TasksService/taskRepository)
-  // automatically also applies to recurrence-generated instances.
-  createInstance(params: {
-    template: RecurringTaskTemplate;
-    scheduledDate: Date;
-    deliveryId?: string;
-  }): Promise<Task> {
-    return taskRepository.create({
-      title: params.template.title,
-      priority: params.template.priority,
-      memo: params.template.defaultMemo ?? undefined,
-      deliveryId: params.deliveryId,
-      sourceTemplateId: params.template.id,
-      scheduledDate: params.scheduledDate,
-    });
   },
 
   // The one not-yet-completed instance a delivery_relative template has

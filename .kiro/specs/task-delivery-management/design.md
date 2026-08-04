@@ -384,7 +384,7 @@ interface TasksService {
 | GET | /api/tasks | Query: deliveryId?, assigneeUserId? | Task[] | 500 |
 
 **Implementation Notes**
-- Integration: RecurrenceServiceは本サービスの`create`相当の内部関数を通じてタスクインスタンスを生成する(公開APIを経由せずモジュール内関数呼び出しとする)
+- Integration: RecurrenceServiceは`TasksService.create`(Service層の関数)を直接呼び出してタスクインスタンスを生成する(公開APIは経由しないが、Repository層への直接アクセスもしない — モジュール間はService層経由でのみ連携するという一般原則に従う。**(実装後の改訂)** 当初`recurrence.repository.ts`が`taskRepository.create`(Repository層)を直接呼び出す実装になっていたが、ドキュメント整理時の監査で発見し、`TasksService.create`を呼ぶよう修正した。将来`TasksService.create`にバリデーション等の業務ルールが追加された際、繰り返し生成タスクだけそれを迂回してしまうリスクを防ぐため)
 - Validation: Zodスキーマで`CreateTaskInput`を検証し、`deliveryId`未指定時は`isRequiredForDelivery`を`false`固定にする
 - `UpdateTaskInput`は`{ title?, priority?, memo?: string | null, deliveryId?: string | null, isRequiredForDelivery?: boolean, assigneeUserId?: string | null }`。少なくとも1フィールドの指定を必須とする。カンバン画面の「タスク詳細/編集」導線(GET /api/tasks/:idで詳細取得後、フォーム編集→PATCH /api/tasks/:id)から利用する
 - Risks: 多階層の深い入れ子は一覧描画コストに影響し得るため、フロントは遅延展開(折りたたみ)を前提に設計する
