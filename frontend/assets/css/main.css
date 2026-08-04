@@ -33,6 +33,14 @@
 
 .task-card-ghost {
   opacity: 0.25;
+  /* User-reported bug: a slight move-then-release (just enough to show
+     this ghost, without completing an actual reorder) would sometimes
+     swallow the very next click — Sortable's cleanup of the ghost/clone
+     elements isn't necessarily synchronous with `mouseup`, so a fast
+     follow-up click could land on a still-present ghost/clone instead of
+     the real TaskCard underneath. Neither element is itself interactive,
+     so making both click-through is a safe fix. */
+  pointer-events: none;
 }
 
 .task-card-drag-clone {
@@ -54,6 +62,38 @@
      moving target instead of tracking the cursor 1:1. Disabling
      transitions on the clone specifically restores instant tracking. */
   transition: none !important;
+  /* Same click-swallowing bug as `.task-card-ghost` above: this clone
+     sits at `fallbackOnBody`, positioned exactly under the cursor at
+     release, which is exactly where a fast follow-up click lands if the
+     clone hasn't been removed yet. */
+  pointer-events: none;
+}
+
+/* Shared Modal (frontend/components/shared/Modal.vue) open/close
+   animation, driven by Vue's `<Transition name="modal">`. One transition
+   timeline covers both the backdrop (fade) and the panel (fade + slight
+   scale/rise), via a nested selector for `.modal-panel` rather than a
+   second nested `<Transition>` — user feedback: the popup appearing with
+   no animation at all read as broken/instant, and asked for a real
+   open/close transition. */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.15s ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-active .modal-panel,
+.modal-leave-active .modal-panel {
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+.modal-enter-from .modal-panel,
+.modal-leave-to .modal-panel {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.97);
 }
 
 /* User feedback: hovering a valid drop target while dragging should

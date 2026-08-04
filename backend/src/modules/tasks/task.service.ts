@@ -6,7 +6,7 @@ import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { err, ok, type Result } from "../../shared/result.js";
 import { taskRepository } from "./task.repository.js";
-import type { CreateTaskInput, Task, TaskError, TaskListFilter, TaskStatus } from "./task.types.js";
+import type { CreateTaskInput, Task, TaskError, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
 
 function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
@@ -32,6 +32,14 @@ export const tasksService = {
       }
       throw error;
     }
+  },
+
+  async getById(taskId: string): Promise<Result<Task, TaskError>> {
+    const task = await taskRepository.findById(taskId);
+    if (!task) {
+      return err({ type: "not_found", taskId });
+    }
+    return ok(task);
   },
 
   async updateStatus(taskId: string, status: TaskStatus): Promise<Result<Task, TaskError>> {
@@ -83,6 +91,55 @@ export const tasksService = {
       }
       if (isForeignKeyViolation(error)) {
         return err({ type: "validation_error", message: "developmentStageId or assigneeUserId does not exist" });
+      }
+      throw error;
+    }
+  },
+
+  // General field edit (title/priority/memo/deliveryId/isRequiredForDelivery/
+  // assigneeUserId), distinct from the kanban-move-specific
+  // updateDevelopmentStage above: an explicit edit always overwrites
+  // assigneeUserId, it doesn't defer to "only if currently unassigned".
+  async update(taskId: string, input: UpdateTaskInput): Promise<Result<Task, TaskError>> {
+    const current = await taskRepository.findById(taskId);
+    if (!current) {
+      return err({ type: "not_found", taskId });
+    }
+
+    const data: UpdateTaskInput = {};
+    if (input.title !== undefined) {
+      const title = input.title.trim();
+      if (title.length === 0) {
+        return err({ type: "validation_error", message: "title is required" });
+      }
+      data.title = title;
+    }
+    if (input.priority !== undefined) data.priority = input.priority;
+    if (input.memo !== undefined) data.memo = input.memo;
+    if (input.assigneeUserId !== undefined) data.assigneeUserId = input.assigneeUserId;
+
+    // design.md TasksService Implementation Notes: "deliveryId未指定時は
+    // isRequiredForDeliveryをfalse固定にする" — applied here on the merged
+    // (post-update) deliveryId, same rule as create.
+    if (input.deliveryId !== undefined) {
+      data.deliveryId = input.deliveryId;
+      data.isRequiredForDelivery = input.deliveryId === null ? false : (input.isRequiredForDelivery ?? current.isRequiredForDelivery);
+    } else if (input.isRequiredForDelivery !== undefined) {
+      if (current.deliveryId === null) {
+        return err({ type: "validation_error", message: "isRequiredForDelivery requires a deliveryId" });
+      }
+      data.isRequiredForDelivery = input.isRequiredForDelivery;
+    }
+
+    try {
+      const task = await taskRepository.update(taskId, data);
+      return ok(task);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) {
+        return err({ type: "not_found", taskId });
+      }
+      if (isForeignKeyViolation(error)) {
+        return err({ type: "validation_error", message: "deliveryId or assigneeUserId does not exist" });
       }
       throw error;
     }

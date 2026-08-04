@@ -40,6 +40,15 @@ export interface CreateTaskInput {
   parentTaskId?: string;
 }
 
+export interface UpdateTaskInput {
+  title?: string;
+  priority?: Priority;
+  memo?: string | null;
+  deliveryId?: string | null;
+  isRequiredForDelivery?: boolean;
+  assigneeUserId?: string | null;
+}
+
 export interface Delivery {
   id: string;
   name: string;
@@ -153,6 +162,8 @@ export function useApiClient() {
     listTasks: (filter: { deliveryId?: string; assigneeUserId?: string } = {}) =>
       request<Task[]>("/api/tasks", { query: filter }),
     createTask: (input: CreateTaskInput) => request<Task>("/api/tasks", { method: "POST", body: input }),
+    getTask: (id: string) => request<Task>(`/api/tasks/${id}`),
+    updateTask: (id: string, input: UpdateTaskInput) => request<Task>(`/api/tasks/${id}`, { method: "PATCH", body: input }),
     addChildTask: (parentId: string, input: CreateTaskInput) =>
       request<Task>(`/api/tasks/${parentId}/children`, { method: "POST", body: input }),
     splitTask: (id: string, parts: CreateTaskInput[]) =>

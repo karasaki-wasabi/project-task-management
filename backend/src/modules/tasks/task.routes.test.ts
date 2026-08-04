@@ -82,6 +82,61 @@ describe("taskRoutes (task 3.1)", () => {
     await app.close();
   });
 
+  it("GET /api/tasks/:id returns a task, 404 for unknown id", async () => {
+    const app = await buildTestApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/tasks",
+      payload: { title: "detail route", priority: "medium" },
+    });
+    const { id } = created.json();
+
+    const okResponse = await app.inject({ method: "GET", url: `/api/tasks/${id}` });
+    expect(okResponse.statusCode).toBe(200);
+    expect(okResponse.json().id).toBe(id);
+
+    const missingResponse = await app.inject({ method: "GET", url: `/api/tasks/${randomUUID()}` });
+    expect(missingResponse.statusCode).toBe(404);
+
+    await hardDeleteTasks([id]);
+    await app.close();
+  });
+
+  it("PATCH /api/tasks/:id updates task fields, 404 for unknown id, 400 for empty title", async () => {
+    const app = await buildTestApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/tasks",
+      payload: { title: "editable", priority: "low", memo: "old" },
+    });
+    const { id } = created.json();
+
+    const okResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/tasks/${id}`,
+      payload: { title: "edited", priority: "high", memo: "new" },
+    });
+    expect(okResponse.statusCode).toBe(200);
+    expect(okResponse.json()).toMatchObject({ title: "edited", priority: "high", memo: "new" });
+
+    const badResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/tasks/${id}`,
+      payload: { title: "" },
+    });
+    expect(badResponse.statusCode).toBe(400);
+
+    const missingResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/tasks/${randomUUID()}`,
+      payload: { title: "ghost" },
+    });
+    expect(missingResponse.statusCode).toBe(404);
+
+    await hardDeleteTasks([id]);
+    await app.close();
+  });
+
   it("GET /api/tasks lists tasks and excludes deleted ones", async () => {
     const app = await buildTestApp();
     const created = await app.inject({

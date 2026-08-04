@@ -1,35 +1,29 @@
-// E2E regression: dragging an already-assigned task from a stage column
-// into a DIFFERENT assignee's focus tray must show the reassignment error
-// and leave the task exactly where it was — not silently vanish it from
-// its stage column.
+// E2E regression/behavior: dragging an already-assigned task from a stage
+// column into a DIFFERENT assignee's focus tray reassigns it (overwriting
+// the existing assignee) rather than being rejected.
 //
-// User-reported via Impeccable critique (5th round): the error message
-// itself worked, but `handleFocusTrayAssign`'s rejection branch only
-// re-synced the focus tray, never the source stage column. Root cause
-// (found by logging `columnTasksByStageId` before/after): the array was
-// never actually wrong — Sortable physically relocates the real DOM node
-// into the tray via direct DOM APIs the instant the drop lands, entirely
-// outside Vue's virtual DOM, so a content-based re-sync had nothing to
-// diff against and left the (physically relocated) node stuck. Fixed by
-// forcing the affected stage columns to remount (a bumped `:key`) instead
-// of relying on Vue noticing a content change that never happened, plus an
-// `await nextTick()` so a same-drag source-side model update from Sortable
-// can't land after the revert and clobber it.
+// This spec used to assert the opposite (a rejection, with an error
+// message and the task left untouched) — that was a deliberate
+// implementation constraint mirroring the backend's `updateDevelopmentStage`
+// endpoint, which never overwrites an existing assignee. kanban-ux-redesign
+// Requirement 9 reverses this: dropping onto the focus tray now always
+// reassigns, via the general `updateTask` API (task-delivery-management
+// task 3.3) rather than `updateDevelopmentStage`, since that overwrite
+// restriction was specific to stage-column moves (Requirement 12.8) and
+// never applied to this drop target as a documented rule.
 //
 // Same manual-mouse-events rationale as ./drag.ts's `dragCardTo` — Sortable
 // (`forceFallback` mode) doesn't use native HTML5 drag events.
 import { expect, test } from "@playwright/test";
 import { dragCardTo } from "./drag";
 
-test("dragging an already-assigned task into a different assignee's focus tray shows the error and leaves the task in its stage column (regression)", async ({
-  page,
-}) => {
+test("dragging an already-assigned task into a different assignee's focus tray reassigns it (Requirement 9)", async ({ page }) => {
   const suffix = Date.now();
-  const userAName = `e2e-reject-user-a-${suffix}`;
-  const userBName = `e2e-reject-user-b-${suffix}`;
-  const stageName = `e2e-reject-stage-${suffix}`;
-  const taskTitle = `e2e-reject-task-${suffix}`;
-  const userATaskTitle = `e2e-reject-task-a-${suffix}`;
+  const userAName = `e2e-reassign-user-a-${suffix}`;
+  const userBName = `e2e-reassign-user-b-${suffix}`;
+  const stageName = `e2e-reassign-stage-${suffix}`;
+  const taskTitle = `e2e-reassign-task-${suffix}`;
+  const userATaskTitle = `e2e-reassign-task-a-${suffix}`;
 
   await page.goto("/users");
   await page.getByPlaceholder("ユーザー名").fill(userAName);
@@ -99,14 +93,14 @@ test("dragging an already-assigned task into a different assignee's focus tray s
   await expect(focusTray).toBeVisible();
 
   // Drag the (user-B-assigned) task from its stage column into user A's
-  // focus tray. The backend rejects reassigning an already-assigned task,
-  // so this must be a no-op: error shown, task stays in its column.
+  // focus tray. This now reassigns it to user A (Requirement 9): no error,
+  // it disappears from user B's implied ownership and shows up in user A's
+  // focus tray, still placed in the same stage column.
   const cardInColumn = stageColumn.locator(".card[data-task-id]", { hasText: taskTitle });
   await dragCardTo(page, cardInColumn, focusTray);
 
-  await expect(page.locator('[role="alert"]')).toContainText("既に担当者が設定されているタスクは、ここでは再割り当てできません");
+  await expect(page.locator('[role="alert"]')).not.toBeVisible();
+  await expect(page.locator('[role="status"]')).toContainText(taskTitle);
+  await expect(focusTray.getByText(taskTitle)).toBeVisible();
   await expect(stageCardList.getByText(taskTitle)).toBeVisible();
-  await expect(focusTray.getByText(taskTitle)).not.toBeVisible();
-  // A rejected move must not announce a false success.
-  await expect(page.locator('[role="status"]')).not.toBeVisible();
 });

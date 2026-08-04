@@ -13,18 +13,18 @@
   - Requirement 1.5: an empty `tasks` list shows a zero-count message
     instead of an empty area.
 
-  This tray is a drop TARGET (not just inert) — dragging an unassigned
-  card here assigns it to the currently-focused user. It's a
-  `VueDraggable` with `put: true`, sharing the same `kanban-cards` Sortable
-  group as the stage columns and backlog panel. This component only
-  reports which task was dropped (`assign` event); the parent owns the
-  actual API call, since it alone knows the currently selected assignee
-  and needs to also revert the optimistic drop (backend constraint:
-  `updateDevelopmentStage` only ever sets `assigneeUserId` when the task
-  doesn't already have one — reassigning an already-assigned task is a
-  no-op there, see `research.md`/parent component) — the parent calls the
-  exposed `resync()` after handling the drop either way. Has a
-  background/border like the other lanes, since it functions as one.
+  This tray is a drop TARGET (not just inert) — dragging any card here
+  (assigned or not) reassigns it to the currently-focused user
+  (kanban-ux-redesign Requirement 9). It's a `VueDraggable` with
+  `put: true`, sharing the same `kanban-cards` Sortable group as the stage
+  columns and backlog panel. This component only reports which task was
+  dropped (`assign` event); the parent owns the actual API call (the
+  general `updateTask` API, not `updateDevelopmentStage` — that one
+  deliberately preserves an existing assignee for stage-column moves,
+  which doesn't apply to this drop target) and needs to also revert the
+  optimistic drop on failure — the parent calls the exposed `resync()`
+  after handling the drop either way. Has a background/border like the
+  other lanes, since it functions as one.
 
   Also `pull: true`: a card dropped here only gets an assignee, not a
   development stage, so without this it would sit effectively hidden back

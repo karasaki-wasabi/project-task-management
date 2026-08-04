@@ -34,7 +34,11 @@ export async function dragCardTo(page: Page, card: Locator, target: Locator): Pr
   await page.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2);
   await page.mouse.down();
   // Let Sortable register the "chosen" state before moving — matches real
-  // user timing and avoids the drag being interpreted as a click.
+  // user timing and avoids the drag being interpreted as a click. No
+  // Sortable `delay` option is set (kanban-ux-redesign Requirement 8.1/8.6
+  // distinguishes a click from a drag by movement threshold alone, not a
+  // timed press-and-hold), so this wait just needs to clear the "chosen"
+  // state, not any activation delay.
   await page.waitForTimeout(150);
 
   await target.scrollIntoViewIfNeeded();

@@ -2,7 +2,7 @@
 // audit-column behavior and the default `deletedAt: null` list filter come
 // from the shared `db` client (task 1.4).
 import { db } from "../../shared/db.js";
-import type { CreateTaskInput, Task, TaskListFilter, TaskStatus } from "./task.types.js";
+import type { CreateTaskInput, Task, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
 
 export const taskRepository = {
   create(input: CreateTaskInput): Promise<Task> {
@@ -33,6 +33,10 @@ export const taskRepository = {
     id: string,
     data: { developmentStageId: string | null; assigneeUserId?: string },
   ): Promise<Task> {
+    return db.task.update({ where: { id }, data });
+  },
+
+  update(id: string, data: UpdateTaskInput): Promise<Task> {
     return db.task.update({ where: { id }, data });
   },
 

@@ -81,6 +81,61 @@
 
 - [x] 5.3 (P) 開発段階未設定バックログのE2Eテストを追加する
 
+- [x] 6. タスクカードのクリック/ドラッグ操作を刷新し、担当者フォーカス欄への担当変更ドラッグを実装する
+- [x] 6.1 TaskDetailModalコンポーネントを実装する(閲覧/編集モード、オーバーレイ表示)
+  - `taskId`が設定されるたびに`GET /api/tasks/:id`で詳細を取得し、既定で閲覧モード(タイトル・状態・優先度・担当者・開発段階・メモを表示のみ)を表示する
+  - 編集ボタンで編集モードに切り替え、タイトル・優先度・担当者・開発段階・メモを編集可能にする
+  - 保存時、`PATCH /api/tasks/:id`(汎用フィールド)を呼び、開発段階が変更されていれば続けて`PATCH /api/tasks/:id/development-stage`を呼ぶ。保存後は閲覧モードへ戻り、`saved`イベントで呼び出し側に通知する
+  - 削除は確認ステップを挟んで`DELETE /api/tasks/:id`を呼び、成功時に`deleted`イベントを発行する
+  - `fixed inset-0`の半透明背景の上に中央寄せで表示するオーバーレイとして実装する(ページ内の通常フローにインライン表示しない、Requirement 8.9)。当初はインライン表示になっておりポップアップとして認識できないというフィードバックを受けて修正した
+  - 観測可能な完了状態: カードクリックでオーバーレイポップアップが開き、閲覧→編集→保存→閲覧の一連の操作、および削除確認からの削除がブラウザで確認できる
+  - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.8, 8.9_
+  - _Boundary: TaskDetailModal.vue_
+
+- [x] 6.2 kanban/index.vueの操作メニューを廃止し、詳細ポップアップとSortableの移動量閾値に置き換える
+  - `actionMenuTaskId`等の操作メニュー関連の状態・関数・テンプレートを削除する
+  - `TaskCard`の`activate`/`card-activate`を、`TaskDetailModal`を開く単一の処理に統合する
+  - 開発段階別ボード・担当者フォーカス欄・未割り当てバックログの各`VueDraggable`は`delay`オプションを設定せず、Sortable既定の移動量閾値のみでクリックとドラッグを区別する(当初`delay`による長押し猶予を採用したが、実際の操作感が不自然だったため撤回。詳細はdesign.md「実装後の改訂」4.参照)
+  - 担当者未設定タスクを開発段階列へドラッグ移動する際、既存の担当者選択フロー(`pendingMove`)が維持されることを確認する
+  - 観測可能な完了状態: 動かさないクリックで詳細ポップアップ、意味のある距離を動かせば即座にドラッグ移動が発生し、キーボード専用の操作メニューがどこにも表示されないことを確認できる
+  - 廃止した操作メニューに依存していた`e2e/kanban-action-menu-noop.spec.ts`は削除した。`e2e/drag.ts`の`dragCardTo`は`delay`オプションが存在しないため、mousedown後の待機は元の150msのまま(Sortableの「chosen」状態が安定するのを待つだけの待機で、活性化猶予ではない)
+  - _Requirements: 6.1, 6.2, 8.1, 8.6, 8.7, 8.8_
+  - _Boundary: kanban/index.vue, AssigneeFocusTray.vue, UnassignedBacklogPanel.vue, TaskCard.vue_
+  - _Depends: 6.1_
+
+- [x] 6.3 (P) 担当者フォーカス欄へのドラッグで担当者を上書き変更できるようにする
+  - `AssigneeFocusTray`の`@assign`ハンドラを、`updateTaskDevelopmentStage`ではなく`updateTask`(汎用編集API、`assigneeUserId`のみ指定)を呼ぶように変更し、既存の担当者を問わず上書きする
+  - ドロップ先の担当者が現在の担当者と同一の場合はAPI呼び出しを行わない
+  - API呼び出し失敗時はエラーを画面に表示し、カード表示を変更前の状態へ戻す
+  - 観測可能な完了状態: 既に担当者が設定されたタスクを担当者フォーカス欄へドラッグすると担当者が変更され、同一担当者へのドロップでは何も起きないことをブラウザで確認できる
+  - 従来の拒否挙動を検証していた`e2e/kanban-tray-reject.spec.ts`は、上書き成功を検証する`e2e/kanban-tray-reassign.spec.ts`へ書き換えた
+  - _Requirements: 9.1, 9.2, 9.3, 9.4_
+  - _Boundary: kanban/index.vue, AssigneeFocusTray.vue_
+
+- [x] 7. 詳細ポップアップを共通Modalコンポーネント化し、アニメーションとクリック不具合を修正する
+- [x] 7.1 共通Modalコンポーネント(frontend/components/shared/Modal.vue)を新設する
+  - `open`/`ariaLabel` propと`close` emit、`title`/デフォルト/`actions`スロットを持つ汎用ダイアログシェルを実装する
+  - `<Transition name="modal">`でオーバーレイ+パネルの開閉アニメーションを実装する(main.cssに`.modal-enter-*`/`.modal-leave-*`を追加)
+  - 内部で`useDialogFocusTrap`を保持し、背景クリック・Escキー・右上の閉じるボタンのいずれでも`close`を発行する
+  - 観測可能な完了状態: ブラウザでポップアップの表示・非表示にフェード+スケールのアニメーションが確認でき、右上のバツボタン・背景クリック・Escいずれでも閉じられる
+  - _Requirements: 8.9, 8.10, 8.11_
+  - _Boundary: Modal.vue_
+
+- [x] 7.2 TaskDetailModalをModalベースに書き換える
+  - 独自実装していたオーバーレイ・フォーカストラップ・閉じるボタンを撤去し、共通`Modal`の`title`/デフォルト/`actions`スロットへ委譲する
+  - `title`スロットには編集フォームのローカル`title` refを渡し、編集中の入力がヘッダーにも反映されるようにする
+  - 観測可能な完了状態: 既存の閲覧/編集/削除の一連の操作がすべて変わらず動作することをブラウザで確認できる
+  - _Requirements: 8.1-8.8_
+  - _Boundary: TaskDetailModal.vue_
+  - _Depends: 7.1_
+
+- [x] 7.3 タスクカードの直後クリックが空振りする不具合を修正する
+  - `TaskCard`の`activate`発火をネイティブ`click`イベントから`pointerdown`/`pointerup`の座標差分判定(`clickMoveThreshold`、6px)へ変更する
+  - `main.css`の`.task-card-ghost`/`.task-card-drag-clone`に`pointer-events: none`を追加する(ドラッグ完了直後に残存する要素がクリックを奪う可能性への対策)
+  - 観測可能な完了状態: タスクカードを少し動かしてから離した直後にクリックしても、詳細ポップアップが確実に開くことを繰り返し確認できる
+  - _Requirements: 8.1, 8.12_
+  - _Boundary: TaskCard.vue_
+
 ## Implementation Notes
 - The shared local dev DB accumulated ~63 development stages / ~114 tasks from repeated e2e runs across this feature's tasks, wide enough to break Playwright's `locator.dragTo()` (real cursor simulation requires both elements to fit in one viewport). `kanban-backlog.spec.ts` works around this by dispatching `dragstart`/`dragover`/`drop` DOM events directly, which exercises the same production handlers (confirmed: `onDropOnStage` reads the dragged task id from a `draggedTaskId` ref set via the `@dragstart` emit, not from `dataTransfer` contents or cursor position). If this recurs, clean up `e2e-*`-prefixed dev-DB rows before running drag-based specs.
   - 折りたたみ表示の展開、タイトル検索、優先度/作成日時ソートを検証する

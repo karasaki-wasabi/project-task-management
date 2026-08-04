@@ -21,6 +21,16 @@ const createTaskBodySchema = z.object({
   parentTaskId: z.string().optional(),
 });
 const updateStatusBodySchema = z.object({ status: taskStatus });
+const updateTaskBodySchema = z
+  .object({
+    title: z.string().optional(),
+    priority: priority.optional(),
+    memo: z.string().nullable().optional(),
+    deliveryId: z.string().nullable().optional(),
+    isRequiredForDelivery: z.boolean().optional(),
+    assigneeUserId: z.string().nullable().optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, { message: "at least one field must be provided" });
 const updateDevelopmentStageBodySchema = z.object({
   developmentStageId: z.string().nullable(),
   assigneeUserId: z.string().optional(),
@@ -71,6 +81,27 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       return;
     }
     reply.status(201).send(result.value);
+  });
+
+  app.get("/api/tasks/:id", async (request, reply) => {
+    const params = parseOrBadRequest(taskIdParamsSchema, request.params);
+    const result = await tasksService.getById(params.id);
+    if (!result.ok) {
+      reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
+      return;
+    }
+    reply.status(200).send(result.value);
+  });
+
+  app.patch("/api/tasks/:id", async (request, reply) => {
+    const params = parseOrBadRequest(taskIdParamsSchema, request.params);
+    const body = parseOrBadRequest(updateTaskBodySchema, request.body);
+    const result = await tasksService.update(params.id, body);
+    if (!result.ok) {
+      reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
+      return;
+    }
+    reply.status(200).send(result.value);
   });
 
   app.patch("/api/tasks/:id/status", async (request, reply) => {

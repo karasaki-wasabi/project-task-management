@@ -27,11 +27,11 @@
   AssigneeFocusTray. A chip click drives only the focus tray, not also the
   stage board, since filtering both would be redundant. Dropping a card
   onto the focus tray assigns it to the focused user
-  (`handleFocusTrayAssign`), subject to the backend's existing constraint
-  that `updateDevelopmentStage` only sets `assigneeUserId` when the task
-  doesn't already have one (task-delivery-management Requirement 12.8) —
-  this spec does not change backend behavior, so reassigning an
-  already-assigned task via this drop silently no-ops and reverts.
+  (`handleFocusTrayAssign`), always overwriting any existing assignee
+  (kanban-ux-redesign Requirement 9) via the general `updateTask` API —
+  distinct from `updateDevelopmentStage`'s stage-column-move semantics
+  (task-delivery-management Requirement 12.8), which this does not touch
+  or change.
 
   Judgment call carried over from the pre-redesign version
   (requirements.md/design.md are silent on this): a task never has a
@@ -42,26 +42,45 @@
   Sortable group setting enforces "not itself a valid drop target"
   declaratively.
 
-  A failed focus-tray reassignment (backend no-op on an already-assigned
-  task) surfaces via `focusTrayError` and the shared `ErrorAlert` (the
-  same pattern every other page in this app uses for backend errors, per
+  A failed focus-tray reassignment (a real API error) surfaces via
+  `focusTrayError` and the shared `ErrorAlert` (the same pattern every
+  other page in this app uses for backend errors, per
   `.kiro/steering/error-handling.md`) rather than reverting silently.
+  (kanban-ux-redesign Requirement 9: dropping a card on the focus tray
+  always reassigns it to the focused user, overwriting any existing
+  assignee via the general `updateTask` API — this is a deliberate later
+  amendment; see design.md "実装後の改訂" 4. It used to be a no-op guarded
+  against `updateDevelopmentStage`'s assignee-preserving constraint, which
+  no longer applies here.)
 
   Every `TaskCard` (in the stage board, the focus tray, and the backlog
-  panel) is focusable and emits `activate`/`card-activate`, opening a
-  keyboard-operable action menu (`actionMenuTaskId`) that offers the exact
-  same stage-move / assign-on-move mutations dragging already performs —
-  a second input path to the same two writes, not a new capability. Both
-  dialog-like overlays on this page (the assignee-picker prompt and the
-  action menu) get real dialog semantics via `useDialogFocusTrap` —
-  `aria-modal`, initial focus on open, a Tab trap, and focus restored to
-  whatever opened them on close.
+  panel) is focusable and emits `activate`/`card-activate`, which now
+  opens the task detail/edit/delete popup (`TaskDetailModal`, via
+  `detailTaskId`) directly (kanban-ux-redesign Requirement 8 — this
+  replaces an earlier keyboard-operable "action menu" dialog that offered
+  a stage-move-only shortcut; that dialog is gone, and the popup's edit
+  mode absorbs its keyboard-accessible stage move via a development-stage
+  select). Dragging is separated from a plain click/tap by Sortable's own
+  default movement-threshold behavior (no `delay` option set) — a click or
+  tap with no pointer movement never starts a sort, so the underlying
+  `click` fires normally and opens the popup; moving the pointer any
+  meaningful distance starts the drag immediately instead (an earlier
+  version of this feature used Sortable's `delay` — a timed press-and-hold
+  — for this instead, but real usage found holding still for a fixed delay
+  before moving felt unnatural compared to "just drag it," so that was
+  reverted in favor of this movement-based distinction, which is also what
+  this codebase already relied on before this feature existed). The
+  assignee-picker prompt still gets real dialog semantics via
+  `useDialogFocusTrap` — `aria-modal`, initial focus on open, a Tab trap,
+  and focus restored to whatever opened it on close (the detail/edit
+  popup manages its own instance of the same composable).
 
-  A move — by drag or by the keyboard action menu — announces its outcome:
-  `announceMoveSuccess()` sets `moveStatusMessage` after every successful
-  write, surfaced as a `role="status" aria-live="polite"` banner
-  (auto-clears after 2.5s), giving screen-reader users an announcement of
-  the outcome as well as sighted ones.
+  A move — by drag or a save that changes development stage in the detail
+  popup — announces its outcome: `announceMoveSuccess()` sets
+  `moveStatusMessage` after every successful write, surfaced as a
+  `role="status" aria-live="polite"` banner (auto-clears after 2.5s),
+  giving screen-reader users an announcement of the outcome as well as
+  sighted ones.
 
   Each stage-column heading, the backlog toggle, and the focus tray
   heading form a `<nav>` "column jump" list (visually a `sr-only`
@@ -107,7 +126,6 @@ const focusTrayError = ref<string | null>(null);
 const focusTrayRef = ref<{ resync: () => void } | null>(null);
 const backlogPanelRef = ref<{ resync: () => void } | null>(null);
 const pendingMoveDialogRef = ref<HTMLElement | null>(null);
-const actionMenuDialogRef = ref<HTMLElement | null>(null);
 
 // Bumped to force the affected stage columns to fully remount (a fresh
 // `:key`) after a rejected drop, rather than relying on a content-based
@@ -170,20 +188,16 @@ function focusColumn(stageId: string) {
   focusLane(`.column[data-stage-id="${stageId}"]`);
 }
 
-// Keyboard/click-triggered alternative to dragging — same two mutations
-// onDropOnStage/confirmPendingMove already perform, just reachable
-// without a mouse.
-const actionMenuTaskId = ref<string | null>(null);
-const actionMenuTargetStageId = ref("");
-const actionMenuAssigneeUserId = ref("");
-const isActionMenuOpen = computed(() => actionMenuTaskId.value !== null);
-const actionMenuTask = computed(() => tasks.value.find((t) => t.id === actionMenuTaskId.value) ?? null);
+// タスク詳細/編集/削除モーダル。TaskCardのactivate(クリック/Enter/Space)で
+// 直接開く一本化された導線(kanban-ux-redesign Requirement 8.1)。ステージ
+// 移動のキーボード操作は、このモーダルの編集モードにある開発段階選択項目が
+// 兼ねる(Requirement 8.8)。
+const detailTaskId = ref<string | null>(null);
 
 useDialogFocusTrap(
   pendingMoveDialogRef,
   computed(() => pendingMove.value !== null),
 );
-useDialogFocusTrap(actionMenuDialogRef, isActionMenuOpen);
 
 // The single assignee selection driving the担当者フォーカス表示
 // (Requirement 1). "" = "すべて". Does not filter the stage board (see
@@ -305,83 +319,71 @@ async function handleFocusTrayDragEnd(payload: { taskId: string; targetStageId?:
 }
 
 // A card was dropped onto the focus tray: assign it to the currently
-// focused user. Backend constraint (see header comment): this no-ops if
-// the task already has an assignee, in which case `focusTrayError` is set
-// for the ErrorAlert rather than failing silently.
+// focused user, overwriting any existing assignee (kanban-ux-redesign
+// Requirement 9). Uses the general `updateTask` API (task-delivery-
+// management task 3.3) rather than `updateDevelopmentStage`, since the
+// latter deliberately never overwrites an existing assignee (that rule is
+// specific to stage-column moves, Requirement 12.8, and doesn't apply to
+// this drop target) and also isn't the right fit here (this drop never
+// changes developmentStageId).
 //
-// On rejection, `revertOptimisticMove()` reverts every mirror a drag could
-// have optimistically touched (not just the tray itself): when the dragged
+// No-ops (skipping the API call and any announcement) when the task
+// already has the focused user as its assignee — otherwise every drop
+// would announce a "change" that didn't happen.
+//
+// On a real API failure, `focusTrayError` surfaces it via the shared
+// ErrorAlert (`.kiro/steering/error-handling.md`) and
+// `revertOptimisticMove()` reverts every mirror a drag could have
+// optimistically touched (not just the tray itself): when the dragged
 // card came from a STAGE COLUMN (not the backlog), Sortable's
 // `:model-value`/`@update:model-value` binding has already optimistically
 // removed it from that column's `columnTasksByStageId` mirror by the time
-// this rejection branch runs. Resyncing only the tray would leave the
-// source column looking like the task had vanished, even though no write
-// ever happened.
+// this catch runs. Resyncing only the tray would leave the source column
+// looking like the task had vanished, even though no write ever happened.
 async function handleFocusTrayAssign(taskId: string) {
   focusTrayError.value = null;
   const task = tasks.value.find((t) => t.id === taskId);
-  if (task && !task.assigneeUserId && selectedAssigneeUserId.value) {
-    await api.updateTaskDevelopmentStage(taskId, task.developmentStageId ?? null, selectedAssigneeUserId.value);
+  if (!task || !selectedAssigneeUserId.value) {
+    focusTrayRef.value?.resync();
+    return;
+  }
+  if (task.assigneeUserId === selectedAssigneeUserId.value) {
+    focusTrayRef.value?.resync();
+    return;
+  }
+  try {
+    await api.updateTask(taskId, { assigneeUserId: selectedAssigneeUserId.value });
     await loadTasks();
     announceMoveSuccess(`「${task.title}」を${userName(selectedAssigneeUserId.value) ?? ""}に割り当てました`);
-  } else if (task?.assigneeUserId) {
-    focusTrayError.value = "既に担当者が設定されているタスクは、ここでは再割り当てできません。";
+  } catch (e) {
+    focusTrayError.value = e instanceof Error ? e.message : String(e);
     await revertOptimisticMove();
   }
   focusTrayRef.value?.resync();
 }
 
-// Opens the keyboard/click action menu for a task — reached via TaskCard's
+// Opens the detail/edit/delete modal for a task — reached via TaskCard's
 // `activate`/`card-activate` emit, wherever the card happens to be
 // rendered (stage board, focus tray, backlog panel).
-function openActionMenu(taskId: string) {
-  const task = tasks.value.find((t) => t.id === taskId);
-  if (!task) return;
-  actionMenuTaskId.value = taskId;
-  actionMenuTargetStageId.value = task.developmentStageId ?? "";
-  actionMenuAssigneeUserId.value = "";
+function openTaskDetail(taskId: string) {
+  detailTaskId.value = taskId;
 }
 
-function closeActionMenu() {
-  actionMenuTaskId.value = null;
-  actionMenuTargetStageId.value = "";
-  actionMenuAssigneeUserId.value = "";
+function closeTaskDetail() {
+  detailTaskId.value = null;
 }
 
-// Same two writes onDropOnStage/confirmPendingMove already perform for a
-// drag — an unassigned task moving to a new stage must pick an assignee in
-// the same step (Requirement 12.6/12.7), an already-assigned task just
-// moves. This keeps keyboard parity with drag rather than adding a new
-// capability drag doesn't have.
-//
-// `wroteChange` tracks whether either branch actually performed a write:
-// `openActionMenu` defaults `actionMenuTargetStageId` to the task's
-// CURRENT stage, so confirming without touching the select — an entirely
-// ordinary "I just wanted to check/reassign, not move it" click — falls
-// through both branches below with no write. Announcing/reloading only
-// when `wroteChange` is true (mirroring `onDropOnStage`'s identical
-// same-stage no-op handling) avoids telling the user a move happened when
-// nothing was written. The confirm button is also disabled for this exact
-// case in the template, so this guard is defense-in-depth, not the only
-// line of defense.
-async function confirmActionMenu() {
-  const task = actionMenuTask.value;
-  if (!task || !actionMenuTargetStageId.value) return;
-  const targetStageId = actionMenuTargetStageId.value;
-  let wroteChange = false;
-  if (!task.assigneeUserId) {
-    if (!actionMenuAssigneeUserId.value) return;
-    await api.updateTaskDevelopmentStage(task.id, targetStageId, actionMenuAssigneeUserId.value);
-    wroteChange = true;
-  } else if (targetStageId !== (task.developmentStageId ?? "")) {
-    await api.updateTaskDevelopmentStage(task.id, targetStageId);
-    wroteChange = true;
-  }
-  closeActionMenu();
-  if (wroteChange) {
-    await loadTasks();
-    announceMoveSuccess(`「${task.title}」を${stageName(targetStageId)}に移動しました`);
-  }
+// TaskDetailModal自身が保存後に閲覧モードへ戻るため、ここではモーダルを
+// 閉じずに一覧の再取得と結果アナウンスのみ行う。
+async function onTaskDetailSaved(task: Task) {
+  await loadTasks();
+  announceMoveSuccess(`「${task.title}」を更新しました`);
+}
+
+async function onTaskDetailDeleted(deleted: { id: string; title: string }) {
+  detailTaskId.value = null;
+  await loadTasks();
+  announceMoveSuccess(`「${deleted.title}」を削除しました`);
 }
 
 async function confirmPendingMove() {
@@ -476,7 +478,7 @@ onMounted(async () => {
         :users="users"
         @assign="handleFocusTrayAssign"
         @end="handleFocusTrayDragEnd"
-        @card-activate="openActionMenu"
+        @card-activate="openTaskDetail"
       />
     </template>
 
@@ -520,57 +522,14 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div
-      v-if="actionMenuTask"
-      ref="actionMenuDialogRef"
-      class="task-action-menu space-y-3 rounded-lg bg-white p-4 ring-1 ring-slate-200"
-      role="dialog"
-      aria-modal="true"
-      :aria-label="`${actionMenuTask.title}の操作`"
-      @keydown.esc="closeActionMenu"
-    >
-      <p class="text-sm font-medium text-slate-900">{{ actionMenuTask.title }}</p>
-      <div class="flex flex-wrap items-center gap-2">
-        <label class="text-xs font-medium text-slate-500" for="action-menu-stage">移動先</label>
-        <select
-          id="action-menu-stage"
-          v-model="actionMenuTargetStageId"
-          class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-        >
-          <option v-for="stage in stages" :key="stage.id" :value="stage.id">{{ stage.name }}</option>
-        </select>
-        <template v-if="!actionMenuTask.assigneeUserId">
-          <label class="text-xs font-medium text-slate-500" for="action-menu-assignee">担当者</label>
-          <select
-            id="action-menu-assignee"
-            v-model="actionMenuAssigneeUserId"
-            class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            <option value="" disabled>担当者を選択</option>
-            <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
-          </select>
-        </template>
-        <button
-          type="button"
-          :disabled="
-            !actionMenuTargetStageId ||
-            (!actionMenuTask.assigneeUserId && !actionMenuAssigneeUserId) ||
-            (!!actionMenuTask.assigneeUserId && actionMenuTargetStageId === (actionMenuTask.developmentStageId ?? ''))
-          "
-          class="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-          @click="confirmActionMenu"
-        >
-          移動する
-        </button>
-        <button
-          type="button"
-          class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          @click="closeActionMenu"
-        >
-          キャンセル
-        </button>
-      </div>
-    </div>
+    <TaskDetailModal
+      :task-id="detailTaskId"
+      :users="users"
+      :stages="stages"
+      @close="closeTaskDetail"
+      @saved="onTaskDetailSaved"
+      @deleted="onTaskDetailDeleted"
+    />
 
     <div class="board flex items-start gap-4 overflow-x-auto pb-2">
       <UnassignedBacklogPanel
@@ -578,7 +537,7 @@ onMounted(async () => {
         :tasks="backlogTasks"
         :users="users"
         @end="handleBacklogDragEnd"
-        @card-activate="openActionMenu"
+        @card-activate="openTaskDetail"
       />
 
       <div
@@ -616,7 +575,7 @@ onMounted(async () => {
             :task="task"
             :assignee-name="userName(task.assigneeUserId)"
             :progress="taskProgressById.get(task.id)"
-            @activate="openActionMenu(task.id)"
+            @activate="openTaskDetail(task.id)"
           />
         </VueDraggable>
       </div>
