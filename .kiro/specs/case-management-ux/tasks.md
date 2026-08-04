@@ -102,7 +102,7 @@
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 9.2_
   - _Boundary: CaseFormModal_
 
-- [ ] 6.3 (P) 案件詳細/編集ポップアップ(CaseDetailModal)の実装
+- [x] 6.3 (P) 案件詳細/編集ポップアップ(CaseDetailModal)の実装
   - `frontend/components/cases/CaseDetailModal.vue`を新規実装し、`TaskDetailModal`と同じ閲覧→編集→保存→閲覧のフローで、閲覧モードに開始日・終了日・完了状態・必須タスク進捗・関連タスクの簡易リストを表示する
   - 編集モードに名称・開始日・終了日の入力と「この案件を完了にする」トグル(必須タスクの完了状況と無関係に切替可能)を実装する
   - 閲覧モードのactionsスロットに、`TaskDetailModal`と同様のインライン確認ステップを持つ削除操作を実装し、成功時に`deleted`イベントを発行する
