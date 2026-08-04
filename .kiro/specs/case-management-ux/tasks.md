@@ -168,7 +168,7 @@
   - _Depends: 7_
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7_
 
-- [ ] 9.4 既存E2Eの表記回帰確認・更新
+- [x] 9.4 既存E2Eの表記回帰確認・更新
   - `frontend/e2e/dashboard.spec.ts`と`frontend/e2e/kanban-tray-reassign.spec.ts`内の「納品」表記・セレクタを「案件」に更新し、既存シナリオが変わらず成功することを確認する
   - 観測可能な完了状態: 両E2Eファイルが「案件」表記のまま成功する
   - _Depends: 8.2, 7_
@@ -176,3 +176,4 @@
 
 ## Implementation Notes
 - タスク1.2: `non_business_days.date_active_key`はPrismaが`Unsupported("date")?`としてしか表現できないSTORED GENERATED COLUMN(+UNIQUE INDEX)であるため、`prisma migrate dev`をこのテーブルに対して再実行すると、生成列/UNIQUE INDEXをdriftとして検知し、それらをDROPする追従マイグレーションを自動生成してしまう(実際に1回発生し、生成された不要マイグレーションを削除して再対応した)。このハンドエディット済みマイグレーション(`20260804102439_init_domain_schema`)を今後再適用する際は`prisma migrate dev`ではなく`prisma migrate deploy`(diffなしでファイルをそのまま適用)を使うこと。マイグレーションSQL自体にも同内容の警告コメントを追加済み。
+- タスク9.4: 開発DBがE2E実行間でリセットされないため、繰り返しテスト実行により`cases`/`users`等にテストデータが蓄積し続けている。これが2つの実害を生んでいる: (1) `frontend/pages/index.vue`の期限超過パネルは`overdueCases.value.slice(0, DISPLAY_LIMIT)`(DISPLAY_LIMIT=5)で**ソートなしに**先頭5件のみ表示するため、蓄積した古い期限超過案件に埋もれて新規作成した案件がパネルの表示範囲に入らないことがある(件数自体を示す「すべての案件を見る(N件)」リンクの`overdueCases.length`は非キャップなので、件数ベースの検証や`/cases`の検索ボックス経由での確認であれば影響を受けない)。(2) `kanban-tray-reassign.spec.ts`・`kanban-backlog.spec.ts`のように、蓄積したユーザー数/タスク数を前提にした検証が他のE2E実行と合わせて実行すると不安定になるテストが既に存在する(いずれも本スペックの変更前から存在する既知の課題で、今回は対応していない)。将来的にE2Eスイート全体の安定性を上げる場合は、(a) 期限超過パネルに`upcomingEvents`同様のソートを入れる、(b) E2E実行前に開発DBをリセットする仕組みを導入する、のいずれかが有効な対策になる。
