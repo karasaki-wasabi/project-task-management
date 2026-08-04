@@ -17,7 +17,7 @@ function makeTask(overrides: Partial<Task> & { id: string }): Task {
     title: `task-${overrides.id}`,
     status: "not_started",
     priority: "medium",
-    isRequiredForDelivery: false,
+    isRequiredForCase: false,
     createdAt: "",
     updatedAt: "",
     ...overrides,
