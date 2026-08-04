@@ -50,7 +50,7 @@
   - _Requirements: 2.2, 2.5, 5.1, 8.1, 8.2_
   - _Boundary: CaseRepository_
 
-- [ ] 3.2 cases: Service層の実装(作成・汎用更新・進捗算出・削除・recurrence連携)
+- [x] 3.2 cases: Service層の実装(作成・汎用更新・進捗算出・削除・recurrence連携)
   - `case.service.ts`に作成(`isCompleted`は常にfalse固定)・汎用更新(`name`/`startDate`/`endDate`/`isCompleted`を独立して更新可能)・削除を実装する
   - `startDate > endDate`の場合に作成・更新の両方で`badRequest`を返すバリデーションを実装する
   - `getProgress`で`isOverdueWithIncomplete = !isCompleted && endDate < now && requiredIncomplete > 0`を算出する
