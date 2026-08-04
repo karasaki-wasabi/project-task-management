@@ -142,9 +142,9 @@
   - _Requirements: 1.1, 1.2_
   - _Boundary: tasks page_
 
-- [ ] 8.4 (P) 繰り返し設定画面の表示ラベル・フィールド名追従
-  - `frontend/pages/recurrence/index.vue`の案件連動テンプレートの表示ラベル・フィールド名(`boundDeliveryId`等)を「案件」表記・新フィールド名に更新する
-  - 観測可能な完了状態: `/recurrence`画面のテンプレート作成フォームで「案件連動」種別を選ぶと、紐づける案件の選択肢が「案件」表記で表示される
+- [x] 8.4 (P) 繰り返し設定画面の表示ラベル・フィールド名追従
+  - `frontend/pages/recurrence/index.vue`の案件連動テンプレートの表示ラベル・フィールド名(`deliveryOffsetDays`→`caseOffsetDays`、`kind`の`"delivery_relative"`→`"case_relative"`とそのラベル)を「案件」表記・新フィールド名に更新する
+  - 観測可能な完了状態: `/recurrence`画面のテンプレート作成フォームで種別を選ぶと「案件連動」と表示され、オフセット日数の入力・既存テンプレート一覧の種別表示が「案件」表記に統一されている(`boundCaseId`はcase_relativeテンプレートには設定不可というバックエンドの業務ルールにより、このページに案件選択ドロップダウン自体は元々存在しないことをレビューで確認済み)
   - _Depends: 5, 2.3_
   - _Requirements: 1.1, 1.2_
   - _Boundary: recurrence page_

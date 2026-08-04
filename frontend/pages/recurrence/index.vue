@@ -14,7 +14,7 @@ const templatePriority = ref<Priority>("medium");
 const templateKind = ref<RecurrenceKind>("fixed_interval");
 const intervalUnit = ref<IntervalUnit>("week");
 const intervalValue = ref(1);
-const deliveryOffsetDays = ref(0);
+const caseOffsetDays = ref(0);
 const defaultMemo = ref("");
 const nonBusinessDayPolicy = ref<NonBusinessDayPolicy>("as_is");
 
@@ -35,7 +35,7 @@ async function registerTemplate() {
     kind: templateKind.value,
     intervalUnit: templateKind.value === "fixed_interval" ? intervalUnit.value : undefined,
     intervalValue: templateKind.value === "fixed_interval" ? intervalValue.value : undefined,
-    deliveryOffsetDays: templateKind.value === "delivery_relative" ? deliveryOffsetDays.value : undefined,
+    caseOffsetDays: templateKind.value === "case_relative" ? caseOffsetDays.value : undefined,
     defaultMemo: defaultMemo.value || undefined,
     nonBusinessDayPolicy: nonBusinessDayPolicy.value,
   });
@@ -113,7 +113,7 @@ onMounted(() => {
           class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="fixed_interval">固定間隔</option>
-          <option value="delivery_relative">納品連動</option>
+          <option value="case_relative">案件連動</option>
         </select>
 
         <template v-if="templateKind === 'fixed_interval'">
@@ -134,10 +134,10 @@ onMounted(() => {
         </template>
         <template v-else>
           <input
-            v-model.number="deliveryOffsetDays"
+            v-model.number="caseOffsetDays"
             type="number"
             min="0"
-            placeholder="納品日からのオフセット日数"
+            placeholder="案件終了日からのオフセット日数"
             class="w-48 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </template>
@@ -190,7 +190,7 @@ onMounted(() => {
           <tbody>
             <tr v-for="template in templates" :key="template.id" class="border-b border-slate-100 last:border-0">
               <td class="px-3 py-2 font-medium text-slate-900">{{ template.title }}</td>
-              <td class="px-3 py-2 text-slate-600">{{ template.kind === "fixed_interval" ? "固定間隔" : "納品連動" }}</td>
+              <td class="px-3 py-2 text-slate-600">{{ template.kind === "fixed_interval" ? "固定間隔" : "案件連動" }}</td>
               <td class="px-3 py-2">
                 <Badge :tone="template.isActive ? 'success' : 'neutral'" :label="template.isActive ? '有効' : '停止中'" />
               </td>
