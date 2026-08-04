@@ -30,7 +30,7 @@ enum Priority {
 
 enum RecurrenceKind {
   fixed_interval
-  delivery_relative
+  case_relative
 }
 
 enum IntervalUnit {
@@ -65,20 +65,22 @@ model User {
   @@map("users")
 }
 
-model Delivery {
-  id        String    @id @default(uuid())
-  name      String
-  dueDate   DateTime  @map("due_date")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+model Case {
+  id          String    @id @default(uuid())
+  name        String
+  startDate   DateTime? @map("start_date") @db.Date
+  endDate     DateTime  @map("end_date")
+  isCompleted Boolean   @default(false) @map("is_completed")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
 
   tasks           Task[]
   events          Event[]
   boundTemplates  RecurringTaskTemplate[]
 
   @@index([deletedAt])
-  @@map("deliveries")
+  @@map("cases")
 }
 
 model Task {
@@ -87,8 +89,8 @@ model Task {
   status                TaskStatus @default(not_started)
   priority              Priority
   memo                  String?    @db.Text
-  deliveryId            String?    @map("delivery_id")
-  isRequiredForDelivery Boolean    @default(false) @map("is_required_for_delivery")
+  caseId                String?    @map("case_id")
+  isRequiredForCase     Boolean    @default(false) @map("is_required_for_case")
   parentTaskId          String?    @map("parent_task_id")
   assigneeUserId        String?    @map("assignee_user_id")
   sourceTemplateId      String?    @map("source_template_id")
@@ -99,7 +101,7 @@ model Task {
   updatedAt             DateTime   @updatedAt @map("updated_at")
   deletedAt             DateTime?  @map("deleted_at")
 
-  delivery         Delivery?               @relation(fields: [deliveryId], references: [id])
+  case             Case?                   @relation(fields: [caseId], references: [id])
   parentTask       Task?                   @relation("TaskChildren", fields: [parentTaskId], references: [id])
   childTasks       Task[]                  @relation("TaskChildren")
   assigneeUser     User?                   @relation(fields: [assigneeUserId], references: [id])
@@ -107,7 +109,7 @@ model Task {
   developmentStage DevelopmentStage?       @relation(fields: [developmentStageId], references: [id])
 
   @@unique([sourceTemplateId, scheduledDate])
-  @@index([deliveryId])
+  @@index([caseId])
   @@index([parentTaskId])
   @@index([completedAt])
   @@index([deletedAt])
@@ -119,16 +121,16 @@ model Event {
   id             String    @id @default(uuid())
   title          String
   occursAt       DateTime  @map("occurs_at")
-  deliveryId     String?   @map("delivery_id")
+  caseId         String?   @map("case_id")
   assigneeUserId String?   @map("assignee_user_id")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   deletedAt      DateTime? @map("deleted_at")
 
-  delivery     Delivery? @relation(fields: [deliveryId], references: [id])
+  case         Case?     @relation(fields: [caseId], references: [id])
   assigneeUser User?     @relation(fields: [assigneeUserId], references: [id])
 
-  @@index([deliveryId])
+  @@index([caseId])
   @@index([deletedAt])
   @@map("events")
 }
@@ -140,8 +142,8 @@ model RecurringTaskTemplate {
   kind                 RecurrenceKind
   intervalUnit         IntervalUnit?         @map("interval_unit")
   intervalValue        Int?                  @map("interval_value")
-  boundDeliveryId      String?               @map("bound_delivery_id")
-  deliveryOffsetDays   Int?                  @map("delivery_offset_days")
+  boundCaseId          String?               @map("bound_case_id")
+  caseOffsetDays       Int?                  @map("case_offset_days")
   defaultMemo          String?               @db.Text @map("default_memo")
   nonBusinessDayPolicy NonBusinessDayPolicy  @map("non_business_day_policy")
   isActive             Boolean               @default(true) @map("is_active")
@@ -149,7 +151,7 @@ model RecurringTaskTemplate {
   updatedAt            DateTime              @updatedAt @map("updated_at")
   deletedAt            DateTime?             @map("deleted_at")
 
-  boundDelivery  Delivery? @relation(fields: [boundDeliveryId], references: [id])
+  case           Case? @relation(fields: [boundCaseId], references: [id])
   generatedTasks Task[]
 
   @@index([deletedAt])
