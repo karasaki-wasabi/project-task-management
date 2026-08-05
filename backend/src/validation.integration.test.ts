@@ -236,10 +236,9 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
     }
   });
 
-  it("DELETE /api/cases/:id detaches linked Task/Event caseId to null end-to-end (Requirements 8.1, 8.2)", async () => {
+  it("DELETE /api/cases/:id detaches linked Task caseId to null end-to-end (Requirements 8.1, 8.2)", async () => {
     const { app } = buildTestApp();
     const taskIds: string[] = [];
-    const eventIds: string[] = [];
     const caseIds: string[] = [];
     try {
       const caseEntity = await app
@@ -256,26 +255,12 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
         .then((r) => r.json());
       taskIds.push(task.id);
 
-      const event = await app
-        .inject({
-          method: "POST",
-          url: "/api/events",
-          payload: { title: "e2e detach event", occursAt: "2041-10-11T09:00:00Z", caseId: caseEntity.id },
-        })
-        .then((r) => r.json());
-      eventIds.push(event.id);
-
       const deleteResponse = await app.inject({ method: "DELETE", url: `/api/cases/${caseEntity.id}` });
       expect(deleteResponse.statusCode).toBe(204);
 
       const fetchedTask = await app.inject({ method: "GET", url: `/api/tasks/${task.id}` }).then((r) => r.json());
       expect(fetchedTask.caseId).toBeNull();
-
-      const events = await app.inject({ method: "GET", url: "/api/events" }).then((r) => r.json());
-      const fetchedEvent = events.find((e: { id: string }) => e.id === event.id);
-      expect(fetchedEvent.caseId).toBeNull();
     } finally {
-      await hardDelete("events", eventIds);
       await hardDelete("tasks", taskIds);
       await hardDelete("cases", caseIds);
       await app.close();
@@ -437,11 +422,11 @@ describe("12.7: ログ相関とフロントエンドエラー記録の統合検�
   it("a server-side exception logs the stack trace + requestId, correlated with the access log (Requirement 10.3, 10.5)", async () => {
     const { app, lines } = buildTestApp();
     try {
-      const response = await app.inject({ method: "DELETE", url: `/api/events/${randomUUID()}` });
+      const response = await app.inject({ method: "DELETE", url: `/api/cases/${randomUUID()}` });
 
       expect(response.statusCode).toBe(404);
       const errorLine = lines.find((l) => l.err !== undefined);
-      const accessLine = lines.find((l) => l.path?.toString().startsWith("/api/events/") && l.statusCode === 404);
+      const accessLine = lines.find((l) => l.path?.toString().startsWith("/api/cases/") && l.statusCode === 404);
       expect(errorLine).toBeTruthy();
       expect((errorLine?.err as Record<string, unknown>).stack).toEqual(expect.any(String));
       expect(errorLine?.requestId).toBe(accessLine?.requestId);
