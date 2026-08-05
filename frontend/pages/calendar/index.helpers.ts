@@ -7,10 +7,7 @@
 // frontend/pages/kanban/index.helpers.ts and
 // frontend/components/shared/DatePicker.helpers.ts.
 //
-// `buildCaseSegments` (design.md's CalendarHelpers interface also declares
-// this) is deliberately NOT implemented here — it belongs to a separate task
-// (3.2) and is intentionally left out so this file's exports stay scoped to
-// task 3.1's boundary.
+import type { DateCell } from "~/components/shared/DatePicker.helpers";
 
 // Map keys throughout this module are `YYYY-MM-DD` local-calendar-day
 // strings, matching frontend/components/shared/DatePicker.helpers.ts's
@@ -110,4 +107,90 @@ export function shiftMonth(year: number, month: number, delta: number): { year: 
     year: year + yearOffset,
     month: normalizedMonth + 1,
   };
+}
+
+// Requirement 3.1, 3.2, 3.3, 3.4.
+export type CaseSegmentPosition = "point" | "start" | "middle" | "end" | "single";
+
+export interface CaseSegmentView {
+  caseId: string;
+  name: string;
+  isCompleted: boolean;
+  position: CaseSegmentPosition;
+}
+
+// Requirement 3.1-3.4: for each date key present in `cells` (the visible
+// month grid, per generateMonthGrid — this may include leading/trailing
+// days from adjacent months), computes which cases have a segment on that
+// day and what position that segment occupies.
+//
+// - Both startDate and endDate set: the case is a bar. The day matching
+//   startDate is "start", the day matching endDate is "end", days strictly
+//   between are "middle". If startDate === endDate (single-day case), that
+//   one day is "single" instead of being both start and end (Requirement
+//   3.1).
+// - Only one of startDate/endDate set: "point" on whichever date is set
+//   (Requirement 3.2).
+// - Neither set: the case is excluded entirely (Requirement 3.3).
+// - Only the portion of the range that overlaps `cells` is included
+//   (Requirement 3.4) — a case's true start/end may fall outside the
+//   visible grid; days from `cells` that fall inside the range but aren't
+//   the case's actual start/end render as "middle" (bar continues off
+//   both edges of the grid), and no dates outside `cells` are invented.
+export function buildCaseSegments(cells: DateCell[], cases: Case[]): Map<string, CaseSegmentView[]> {
+  const segmentsByDate = new Map<string, CaseSegmentView[]>();
+
+  const addSegment = (dateKey: string, segment: CaseSegmentView) => {
+    const existing = segmentsByDate.get(dateKey);
+    if (existing) {
+      existing.push(segment);
+    } else {
+      segmentsByDate.set(dateKey, [segment]);
+    }
+  };
+
+  for (const caseItem of cases) {
+    const startKey = caseItem.startDate ? toLocalDateKey(caseItem.startDate) : null;
+    const endKey = caseItem.endDate ? toLocalDateKey(caseItem.endDate) : null;
+
+    if (startKey === null && endKey === null) {
+      continue;
+    }
+
+    const base = { caseId: caseItem.id, name: caseItem.name, isCompleted: caseItem.isCompleted };
+
+    if (startKey !== null && endKey === null) {
+      if (cells.some((cell) => cell.date === startKey)) {
+        addSegment(startKey, { ...base, position: "point" });
+      }
+      continue;
+    }
+
+    if (startKey === null && endKey !== null) {
+      if (cells.some((cell) => cell.date === endKey)) {
+        addSegment(endKey, { ...base, position: "point" });
+      }
+      continue;
+    }
+
+    // Both set (startKey/endKey are non-null past this point).
+    if (startKey === endKey) {
+      if (cells.some((cell) => cell.date === startKey)) {
+        addSegment(startKey!, { ...base, position: "single" });
+      }
+      continue;
+    }
+
+    for (const cell of cells) {
+      if (cell.date < startKey! || cell.date > endKey!) {
+        continue;
+      }
+
+      const position: CaseSegmentPosition =
+        cell.date === startKey ? "start" : cell.date === endKey ? "end" : "middle";
+      addSegment(cell.date, { ...base, position });
+    }
+  }
+
+  return segmentsByDate;
 }
