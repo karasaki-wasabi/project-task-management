@@ -25,7 +25,7 @@
 -->
 <script setup lang="ts">
 import { computeTodayIso, generateMonthGrid, weekdayKanji, type DateCell } from "~/components/shared/DatePicker.helpers";
-import { buildTaskMarkersByDate, truncateDayMarkers } from "./index.helpers";
+import { buildCaseSegments, buildTaskMarkersByDate, truncateDayMarkers, type CaseSegmentPosition, type CaseSegmentView } from "./index.helpers";
 
 const api = useApiClient();
 
@@ -39,6 +39,7 @@ const year = ref(now.getFullYear());
 const month = ref(now.getMonth() + 1); // 1-indexed, matches generateMonthGrid
 
 const tasks = ref<Task[]>([]);
+const cases = ref<Case[]>([]);
 const loaded = ref(false);
 const error = ref<string | null>(null);
 
@@ -73,6 +74,35 @@ function visibleMarkersFor(cell: DateCell) {
   return truncateDayMarkers(markersByDate.value.get(cell.date) ?? []);
 }
 
+// Requirement 3.1-3.4: case period bars/point markers, computed against the
+// currently visible month grid (so a case's range is clipped to the cells
+// actually on screen, per buildCaseSegments's contract). Requirement 5.3 —
+// unlike tasks, this is intentionally NOT filtered by assignee (cases have
+// no assignee field, and case bars must always show all cases).
+const caseSegmentsByDate = computed<Map<string, CaseSegmentView[]>>(() => buildCaseSegments(monthGrid.value, cases.value));
+
+function caseSegmentsFor(cell: DateCell): CaseSegmentView[] {
+  return caseSegmentsByDate.value.get(cell.date) ?? [];
+}
+
+// Requirement 3.1, 3.4: start/single get a rounded left edge, end/single get
+// a rounded right edge, middle stays square -- together, adjacent day cells'
+// segments for the same case visually read as one continuous bar (see
+// research.md "Light Discovery結果 3": per-cell chips, not pixel-positioned
+// bars).
+function caseSegmentRoundingClass(position: CaseSegmentPosition): string {
+  switch (position) {
+    case "single":
+      return "rounded";
+    case "start":
+      return "rounded-l";
+    case "end":
+      return "rounded-r";
+    default:
+      return "";
+  }
+}
+
 function cellDayClass(cell: DateCell): string {
   if (!cell.inCurrentMonth) return "text-slate-300";
   if (cell.isToday) return "font-semibold text-primary-600";
@@ -84,7 +114,7 @@ function cellDayClass(cell: DateCell): string {
 async function load() {
   error.value = null;
   try {
-    tasks.value = await api.listTasks();
+    [tasks.value, cases.value] = await Promise.all([api.listTasks(), api.listCases()]);
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -121,6 +151,26 @@ onMounted(load);
           >
             <div class="text-xs tabular-nums" :class="cellDayClass(cell)">
               {{ Number(cell.date.slice(8, 10)) }}
+            </div>
+
+            <div v-if="caseSegmentsFor(cell).length > 0" class="space-y-0.5">
+              <template v-for="segment in caseSegmentsFor(cell)" :key="`${segment.caseId}-${segment.position}`">
+                <div v-if="segment.position === 'point'" class="flex items-center gap-1 px-1 py-0.5 text-[11px] leading-tight">
+                  <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="segment.isCompleted ? 'bg-slate-400' : 'bg-primary-500'" />
+                  <span class="min-w-0 flex-1 truncate" :class="segment.isCompleted ? 'text-slate-500 line-through' : 'text-slate-800'">{{ segment.name }}</span>
+                </div>
+                <div
+                  v-else
+                  class="truncate px-1 py-0.5 text-[11px] leading-tight ring-1"
+                  :class="[
+                    caseSegmentRoundingClass(segment.position),
+                    segment.isCompleted ? 'bg-slate-100 text-slate-500 line-through ring-slate-200' : 'bg-primary-100 text-primary-800 ring-primary-200',
+                  ]"
+                >
+                  <span v-if="segment.position === 'start' || segment.position === 'single'">{{ segment.name }}</span>
+                  <span v-else>{{ " " }}</span>
+                </div>
+              </template>
             </div>
 
             <div class="space-y-0.5">
