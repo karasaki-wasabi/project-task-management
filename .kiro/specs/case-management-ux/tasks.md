@@ -210,7 +210,7 @@
   - _Depends: 11.2_
   - _Boundary: TimePicker.vue_
 
-- [ ] 12.2 DateTimePicker.vueの実装
+- [x] 12.2 DateTimePicker.vueの実装
   - `frontend/components/shared/DateTimePicker.vue`を新規実装し、claude design 4d/4e確定版(日付/時刻タブ切り替え)を、`DatePicker`のカレンダー表示と`TimePicker`のホイール表示を内部で流用して実装する
   - `v-model`(`string`、ISO 8601日時、空文字は未設定)を持つ
   - 観測可能な完了状態: ブラウザでピッカーを開き、日付タブ・時刻タブの切り替えができ、上部の表示で選択中の日付・時刻が常に確認できることを確認できる
