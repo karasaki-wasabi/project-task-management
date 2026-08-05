@@ -13,6 +13,41 @@
 // caseId ref is populated from the route query).
 import { expect, test } from "@playwright/test";
 
+// Drives shared/DatePicker.vue (task 11.2/14.1) to an exact date via its
+// real UI (month nav + day-cell click + 決定) — no bypassing the picker.
+// `container` is the form/modal locator scoping the trigger button whose
+// accessible name is `triggerName` (e.g. "開始日"/"終了日").
+async function setDateViaPicker(
+  container: import("@playwright/test").Locator,
+  triggerName: string,
+  isoDate: string,
+) {
+  const trigger = container.getByRole("button", { name: triggerName, exact: true });
+  await trigger.click();
+  const popover = container.getByRole("dialog", { name: `${triggerName}を選択` });
+  await expect(popover).toBeVisible();
+
+  const [yearPart, monthPart] = isoDate.split("-");
+  const targetYear = Number(yearPart);
+  const targetMonth = Number(monthPart);
+  const monthLabel = popover.locator("span.text-sm.font-medium.text-slate-900");
+  for (let i = 0; i < 240; i++) {
+    const label = await monthLabel.textContent();
+    const match = label?.match(/^(\d+)年(\d+)月$/);
+    if (!match) throw new Error(`unexpected month label: ${label}`);
+    const [, yearStr, monthStr] = match;
+    const visibleYear = Number(yearStr);
+    const visibleMonth = Number(monthStr);
+    if (visibleYear === targetYear && visibleMonth === targetMonth) break;
+    const diff = (targetYear - visibleYear) * 12 + (targetMonth - visibleMonth);
+    await popover.getByRole("button", { name: diff > 0 ? "次の月" : "前の月", exact: true }).click();
+  }
+
+  await popover.getByRole("button", { name: isoDate, exact: true }).click();
+  await popover.getByRole("button", { name: "決定", exact: true }).click();
+  await expect(popover).toBeHidden();
+}
+
 async function createUnassignedTask(page: import("@playwright/test").Page, title: string) {
   await page.goto("/tasks");
   await page.getByPlaceholder("タスク名").fill(title);
@@ -38,8 +73,8 @@ test("案件を登録すると進捗が反映され、名称検索とステー�
   await expect(formModal).toBeVisible();
 
   await formModal.getByLabel("案件名").fill(caseName);
-  await formModal.getByLabel("開始日").fill("2034-06-01");
-  await formModal.getByLabel("終了日").fill("2034-06-30");
+  await setDateViaPicker(formModal, "開始日", "2034-06-01");
+  await setDateViaPicker(formModal, "終了日", "2034-06-30");
 
   const rowA = formModal.locator(".task-row", { hasText: taskATitle });
   const rowB = formModal.locator(".task-row", { hasText: taskBTitle });
@@ -113,7 +148,7 @@ test("終了日超過かつ必須タスク未完了の案件は期限超過表�
   // `getProgress` needs to set isOverdueWithIncomplete=true (design.md:
   // "isOverdueWithIncomplete = !isCompleted && endDate < now &&
   // requiredIncomplete > 0"). No startDate needed for this scenario.
-  await formModal.getByLabel("終了日").fill("2020-01-02");
+  await setDateViaPicker(formModal, "終了日", "2020-01-02");
 
   const overdueRow = formModal.locator(".task-row", { hasText: overdueTaskTitle });
   await expect(overdueRow).toBeVisible();
@@ -168,4 +203,91 @@ test("終了日超過かつ必須タスク未完了の案件は期限超過表�
 
   await page.getByRole("button", { name: /^完了/ }).click();
   await expect(caseRow).toBeVisible();
+});
+
+// Task 15.2 (design.md Testing Strategy "E2E", Requirements 2.4, 10.1, 10.3,
+// 10.4, 10.5, 10.6). Exercises task 14.1's DatePicker integration into
+// CaseFormModal end-to-end in a real browser for the first time.
+//
+// This scenario runs before the "no dates" registration scenario below on
+// purpose: it cancels out of the form without ever submitting, so it never
+// leaves a case with a null endDate behind. The registration scenario does
+// create such a case, which (see that test's comment) currently crashes
+// cases/index.vue's row rendering for the rest of the suite — keeping this
+// non-mutating scenario first means it isn't collateral damage of that bug.
+test("DatePickerのクイック選択・カレンダー選択・決定・キャンセル・クリアが入力欄に正しく反映される (Requirements 10.1, 10.3, 10.4, 10.5, 10.6)", async ({
+  page,
+}) => {
+  await page.goto("/cases");
+  await page.getByRole("button", { name: "案件を登録" }).click();
+
+  const formModal = page.locator(".case-form-modal");
+  await expect(formModal).toBeVisible();
+
+  const startDateTrigger = formModal.getByRole("button", { name: "開始日", exact: true });
+  const popover = formModal.getByRole("dialog", { name: "開始日を選択" });
+
+  await expect(startDateTrigger).toHaveText("未設定");
+
+  // Open the picker and pick a quick-select chip. The header above the
+  // chips reflects the draft immediately (Requirement 10.3), but the
+  // trigger button behind the popover must NOT change until 決定.
+  await startDateTrigger.click();
+  await expect(popover).toBeVisible();
+  await popover.getByRole("button", { name: "今日", exact: true }).click();
+  await expect(startDateTrigger).toHaveText("未設定");
+
+  await popover.getByRole("button", { name: "決定", exact: true }).click();
+  await expect(popover).toBeHidden();
+  const committedValue = await startDateTrigger.textContent();
+  expect(committedValue).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+  // Reopen, pick a different quick-select date ("1週間後" is always
+  // distinct from "今日"), then キャンセル — the trigger must retain the
+  // PREVIOUSLY committed value, not the discarded draft (Requirement 10.5).
+  await startDateTrigger.click();
+  await expect(popover).toBeVisible();
+  await popover.getByRole("button", { name: "1週間後", exact: true }).click();
+  await expect(startDateTrigger).toHaveText(committedValue!);
+  await popover.getByRole("button", { name: "キャンセル", exact: true }).click();
+  await expect(popover).toBeHidden();
+  await expect(startDateTrigger).toHaveText(committedValue!);
+
+  // Reopen, pick a date via the calendar grid (not quick-select) this time,
+  // then クリア without deciding — クリア is documented as an immediate,
+  // ungated action that bypasses any pending draft (Requirement 10.6).
+  await startDateTrigger.click();
+  await expect(popover).toBeVisible();
+  await popover.locator('table[role="grid"] button').first().click();
+  await popover.getByRole("button", { name: "クリア", exact: true }).click();
+  await expect(popover).toBeHidden();
+  await expect(startDateTrigger).toHaveText("未設定");
+
+  await formModal.getByRole("button", { name: "キャンセル", exact: true }).click();
+  await expect(formModal).toBeHidden();
+});
+
+test("開始日・終了日を未入力のまま案件を登録できる (Requirement 2.4)", async ({ page }) => {
+  const suffix = Date.now();
+  const caseName = `e2e-case-nodate-${suffix}`;
+
+  await page.goto("/cases");
+  await page.getByRole("button", { name: "案件を登録" }).click();
+
+  const formModal = page.locator(".case-form-modal");
+  await expect(formModal).toBeVisible();
+
+  await formModal.getByLabel("案件名").fill(caseName);
+  // 開始日・終了日 are both left untouched — Requirement 2.4 permits
+  // registering with neither date set.
+  await formModal.getByRole("button", { name: "登録", exact: true }).click();
+  await expect(formModal).toBeHidden();
+
+  const caseRow = page.locator("tbody tr", { hasText: caseName });
+  await expect(caseRow).toBeVisible();
+  // cases/index.vue renders "-" for an unset startDate (`item.startDate ?
+  // item.startDate.slice(0, 10) : "-"`); endDate is expected to follow the
+  // same "-" convention once unset dates render without error.
+  await expect(caseRow.locator("td").nth(1)).toHaveText("-");
+  await expect(caseRow.locator("td").nth(2)).toHaveText("-");
 });

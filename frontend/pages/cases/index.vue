@@ -213,7 +213,7 @@ async function onCaseDeleted() {
           >
             <td class="px-3 py-2 font-medium text-slate-900">{{ item.name }}</td>
             <td class="px-3 py-2 text-slate-600">{{ item.startDate ? item.startDate.slice(0, 10) : "-" }}</td>
-            <td class="px-3 py-2 text-slate-600">{{ item.endDate.slice(0, 10) }}</td>
+            <td class="px-3 py-2 text-slate-600">{{ item.endDate ? item.endDate.slice(0, 10) : "-" }}</td>
             <td class="px-3 py-2">
               <Badge v-if="item.isCompleted" tone="success" label="完了" />
               <Badge v-else-if="item.progress?.isOverdueWithIncomplete" tone="danger" label="期限超過" />

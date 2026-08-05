@@ -53,7 +53,7 @@ onMounted(load);
               class="block rounded-md bg-white px-3 py-2 text-sm shadow-sm ring-1 ring-red-100 hover:ring-red-300"
             >
               <span class="font-medium text-slate-900">{{ case_.name }}</span>
-              <span class="text-slate-500">(終了日: {{ case_.endDate.slice(0, 10) }})</span>
+              <span class="text-slate-500">(終了日: {{ case_.endDate ? case_.endDate.slice(0, 10) : "-" }})</span>
               <span class="ml-2 text-red-700"
                 >{{ case_.progress?.requiredCompleted }} / {{ case_.progress?.requiredTotal }}</span
               >
