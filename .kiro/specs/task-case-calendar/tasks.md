@@ -69,7 +69,7 @@
   - _Boundary: CalendarHelpers_
 
 - [ ] 4. カレンダー画面(CalendarPage)の実装
-- [ ] 4.1 月グリッドとタスク期限日の表示
+- [x] 4.1 月グリッドとタスク期限日の表示
   - `DatePicker.helpers.ts`の`generateMonthGrid`を用いて週区切りの月グリッドを描画し、本日を強調表示する
   - タスクの期限日を該当日セルに表示し、`StatusBadge`/`PriorityBadge`で状態・優先度を区別する
   - 同日の表示件数が閾値を超える場合に省略表示(+N件)を反映する
