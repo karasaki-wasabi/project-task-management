@@ -58,8 +58,7 @@ model User {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  tasks  Task[]
-  events Event[]
+  tasks Task[]
 
   @@index([deletedAt])
   @@map("users")
@@ -76,7 +75,6 @@ model Case {
   deletedAt   DateTime? @map("deleted_at")
 
   tasks           Task[]
-  events          Event[]
   boundTemplates  RecurringTaskTemplate[]
 
   @@index([deletedAt])
@@ -115,24 +113,6 @@ model Task {
   @@index([deletedAt])
   @@index([developmentStageId])
   @@map("tasks")
-}
-
-model Event {
-  id             String    @id @default(uuid())
-  title          String
-  occursAt       DateTime  @map("occurs_at")
-  caseId         String?   @map("case_id")
-  assigneeUserId String?   @map("assignee_user_id")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-  deletedAt      DateTime? @map("deleted_at")
-
-  case         Case?     @relation(fields: [caseId], references: [id])
-  assigneeUser User?     @relation(fields: [assigneeUserId], references: [id])
-
-  @@index([caseId])
-  @@index([deletedAt])
-  @@map("events")
 }
 
 model RecurringTaskTemplate {

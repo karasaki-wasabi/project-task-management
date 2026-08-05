@@ -54,22 +54,6 @@ CREATE TABLE `tasks` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `events` (
-    `id` VARCHAR(191) NOT NULL,
-    `title` VARCHAR(191) NOT NULL,
-    `occurs_at` DATETIME(3) NOT NULL,
-    `case_id` VARCHAR(191) NULL,
-    `assignee_user_id` VARCHAR(191) NULL,
-    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updated_at` DATETIME(3) NOT NULL,
-    `deleted_at` DATETIME(3) NULL,
-
-    INDEX `events_case_id_idx`(`case_id`),
-    INDEX `events_deleted_at_idx`(`deleted_at`),
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- CreateTable
 CREATE TABLE `recurring_task_templates` (
     `id` VARCHAR(191) NOT NULL,
     `title` VARCHAR(191) NOT NULL,
@@ -141,12 +125,6 @@ ALTER TABLE `tasks` ADD CONSTRAINT `tasks_source_template_id_fkey` FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE `tasks` ADD CONSTRAINT `tasks_development_stage_id_fkey` FOREIGN KEY (`development_stage_id`) REFERENCES `development_stages`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `events` ADD CONSTRAINT `events_case_id_fkey` FOREIGN KEY (`case_id`) REFERENCES `cases`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `events` ADD CONSTRAINT `events_assignee_user_id_fkey` FOREIGN KEY (`assignee_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `recurring_task_templates` ADD CONSTRAINT `recurring_task_templates_bound_case_id_fkey` FOREIGN KEY (`bound_case_id`) REFERENCES `cases`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
