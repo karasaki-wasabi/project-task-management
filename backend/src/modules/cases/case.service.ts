@@ -15,11 +15,13 @@ function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
 }
 
-// design.md CaseService Preconditions: when both startDate and endDate are
-// known (merged with the currently-persisted value on update), startDate
-// must not be later than endDate.
-function validateDateRange(startDate: Date | null | undefined, endDate: Date): void {
-  if (startDate != null && startDate.getTime() > endDate.getTime()) {
+// design.md CaseService Responsibilities & Constraints: startDate/endDate are
+// both optional; the ordering check only applies when both are known
+// (merged with the currently-persisted value on update) — if either is
+// missing, the check is skipped entirely (Requirements 2.4, 2.5, 5.3, 5.4).
+function validateDateRange(startDate: Date | null | undefined, endDate: Date | null | undefined): void {
+  if (startDate == null || endDate == null) return;
+  if (startDate.getTime() > endDate.getTime()) {
     throw badRequest("startDate must not be later than endDate");
   }
 }
@@ -30,7 +32,7 @@ export const caseService = {
     if (name.length === 0) {
       throw badRequest("name is required");
     }
-    validateDateRange(input.startDate ?? null, input.endDate);
+    validateDateRange(input.startDate ?? null, input.endDate ?? null);
 
     // isCompleted is intentionally not part of CreateCaseInput (Requirement
     // 2.5): caseRepository.create() always lets the Prisma column default
@@ -67,7 +69,7 @@ export const caseService = {
     const nextEndDate = input.endDate !== undefined ? input.endDate : current.endDate;
     validateDateRange(nextStartDate, nextEndDate);
 
-    const data: Partial<{ name: string; startDate: Date | null; endDate: Date; isCompleted: boolean }> = {};
+    const data: Partial<{ name: string; startDate: Date | null; endDate: Date | null; isCompleted: boolean }> = {};
     if (input.name !== undefined) data.name = input.name.trim();
     if (input.startDate !== undefined) data.startDate = input.startDate;
     if (input.endDate !== undefined) data.endDate = input.endDate;
@@ -85,8 +87,11 @@ export const caseService = {
 
     // Requirement 5.4: only recompute when endDate was actually part of
     // this update and actually changed — same synchronous-await, no
-    // try/catch pattern as create().
-    const endDateChanged = input.endDate !== undefined && input.endDate.getTime() !== current.endDate.getTime();
+    // try/catch pattern as create(). Both sides may now be null, so compare
+    // via a null-tolerant timestamp rather than assuming Date.
+    const endDateChanged =
+      input.endDate !== undefined &&
+      (input.endDate?.getTime() ?? null) !== (current.endDate?.getTime() ?? null);
     if (endDateChanged) {
       await recurrenceService.onCaseEndDateChanged(updated);
     }
@@ -110,10 +115,17 @@ export const caseService = {
       requiredTotal,
       requiredCompleted,
       requiredIncomplete,
-      // Requirement 6.1/6.2: the key behavior change from the old delivery
-      // logic — a manually-completed case is never overdue, regardless of
-      // endDate or outstanding required tasks.
-      isOverdueWithIncomplete: !caseEntity.isCompleted && caseEntity.endDate.getTime() < Date.now() && requiredIncomplete > 0,
+      // Requirement 6.1/6.2/6.3: a manually-completed case is never
+      // overdue, regardless of endDate or outstanding required tasks; a
+      // case with no endDate at all has no basis for an overdue judgement
+      // either (endDate is optional as of task 13.1) — this null check is a
+      // direct consequence of that type change, not a preemption of task
+      // 13.3's own equivalent test coverage.
+      isOverdueWithIncomplete:
+        !caseEntity.isCompleted &&
+        caseEntity.endDate !== null &&
+        caseEntity.endDate.getTime() < Date.now() &&
+        requiredIncomplete > 0,
     };
   },
 

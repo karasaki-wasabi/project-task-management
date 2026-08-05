@@ -86,6 +86,36 @@ describe("caseService.create (task 3.2)", () => {
     await hardDelete("cases", [created.id]);
   });
 
+  // Task 13.2 (Requirement 2.4, 2.5, 5.3, 5.4): endDate is now optional too,
+  // so the startDate > endDate ordering check must be skipped whenever
+  // either side is missing, not just when startDate is missing.
+  it("succeeds with only endDate provided (no startDate)", async () => {
+    const created = await caseService.create({ name: "only end", endDate: new Date("2036-11-02") });
+
+    expect(created.startDate).toBeNull();
+    expect(created.endDate?.getTime()).toBe(new Date("2036-11-02").getTime());
+
+    await hardDelete("cases", [created.id]);
+  });
+
+  it("succeeds with only startDate provided (no endDate)", async () => {
+    const created = await caseService.create({ name: "only start", startDate: new Date("2036-11-03") });
+
+    expect(created.startDate?.getTime()).toBe(new Date("2036-11-03").getTime());
+    expect(created.endDate).toBeNull();
+
+    await hardDelete("cases", [created.id]);
+  });
+
+  it("succeeds with neither startDate nor endDate provided", async () => {
+    const created = await caseService.create({ name: "no dates at all" });
+
+    expect(created.startDate).toBeNull();
+    expect(created.endDate).toBeNull();
+
+    await hardDelete("cases", [created.id]);
+  });
+
   it("defaults isCompleted to false and does not accept it as input (Requirement 2.5)", async () => {
     // CreateCaseInput has no isCompleted field at all — verified at the type
     // level by case.types.ts (task 3.1). Here we assert the runtime default.
@@ -168,6 +198,48 @@ describe("caseService.update (task 3.2)", () => {
 
   it("returns not_found (404) when updating a non-existent case", async () => {
     await expect(caseService.update(randomUUID(), { name: "ghost" })).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  // Task 13.2 (Requirement 5.3, 5.4): both startDate and endDate can now be
+  // null on the persisted case, so the merge-then-validate check must
+  // tolerate null on either side of the comparison, not just skip validation
+  // when only startDate was previously unset.
+  it("sets only endDate when the case currently has no startDate, without triggering the ordering check", async () => {
+    const created = await caseService.create({ name: "no start yet" });
+
+    const updated = await caseService.update(created.id, { endDate: new Date("2036-09-05") });
+
+    expect(updated.startDate).toBeNull();
+    expect(updated.endDate?.getTime()).toBe(new Date("2036-09-05").getTime());
+
+    await hardDelete("cases", [created.id]);
+  });
+
+  it("rejects updating endDate to before the persisted startDate even when the case was created without an endDate (merge-validation)", async () => {
+    const created = await caseService.create({ name: "merge from unset endDate", startDate: new Date("2026-01-01") });
+
+    // Post-merge: startDate=2026-01-01 (persisted), endDate=2025-12-01 (new)
+    // — both non-null and out of order, so this must be rejected.
+    await expect(caseService.update(created.id, { endDate: new Date("2025-12-01") })).rejects.toMatchObject({
+      statusCode: 400,
+    });
+
+    await hardDelete("cases", [created.id]);
+  });
+
+  it("clears endDate to null while startDate remains set, without triggering the ordering check", async () => {
+    const created = await caseService.create({
+      name: "clear end only",
+      startDate: new Date("2036-09-10"),
+      endDate: new Date("2036-09-20"),
+    });
+
+    const updated = await caseService.update(created.id, { endDate: null });
+
+    expect(updated.startDate?.getTime()).toBe(new Date("2036-09-10").getTime());
+    expect(updated.endDate).toBeNull();
+
+    await hardDelete("cases", [created.id]);
   });
 });
 

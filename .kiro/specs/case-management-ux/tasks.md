@@ -227,7 +227,7 @@
   - _Requirements: 2.4, 5.3_
   - _Boundary: case.types.ts, case.repository.ts, case.routes.ts, useApiClient.ts_
 
-- [ ] 13.2 開始日・終了日のバリデーション変更
+- [x] 13.2 開始日・終了日のバリデーション変更
   - `case.service.ts`の`create`/`update`のバリデーションを、開始日・終了日の両方が指定されている場合のみ`startDate > endDate`を検証するように変更する(片方のみ、または両方未指定の場合は検証をスキップする)
   - 観測可能な完了状態: 単体テストで、終了日のみ指定した登録・開始日のみ指定した登録・両方未指定の登録がいずれも成功し、両方指定かつ順序が逆の場合のみ400になることを確認できる
   - _Depends: 13.1_
