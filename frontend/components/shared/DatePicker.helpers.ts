@@ -17,19 +17,30 @@
 // what a Japanese-locale user expects, e.g. midnight JST must read as
 // "today", not "yesterday" in UTC).
 
-export interface QuickSelectDates {
-  today: string;
-  tomorrow: string;
-  oneWeekLater: string;
-  endOfMonth: string;
-  firstOfNextMonth: string;
-}
-
 export interface DateCell {
   date: string;
   inCurrentMonth: boolean;
   isToday: boolean;
   isSelected: boolean;
+  dayOfWeek: number; // 0 (Sun) .. 6 (Sat) — for weekend-color styling
+}
+
+// Kanji weekday labels/colors as specified in the claude design mockup's
+// `support.js` (Component.weekdays/cells: Sun "#c05a5a" / Sat "#5a7fc0").
+// Kept here (not re-derived per-call-site) so DatePicker.vue's header row
+// and calendar cells can't drift out of sync with each other.
+export const WEEKDAY_KANJI = ["日", "月", "火", "水", "木", "金", "土"] as const;
+
+export function weekdayKanji(dayOfWeek: number): string {
+  return WEEKDAY_KANJI[dayOfWeek] ?? "";
+}
+
+// Display-only `YYYY/MM/DD` formatting (claude design mockup format, e.g.
+// "2026/09/14") — the wire/v-model format stays `YYYY-MM-DD` (see module
+// header), this is purely a presentation transform for the trigger label
+// and popover header.
+export function formatSlashDate(dateOnly: string): string {
+  return dateOnly.replaceAll("-", "/");
 }
 
 // Formats a Date's local calendar day as `YYYY-MM-DD`. Local getters
@@ -54,31 +65,15 @@ function parseLocalDateOnly(dateOnly: string): Date {
   return new Date(year, month - 1, day);
 }
 
-// Requirement 10.2: quick-select date calculations (今日/明日/1週間後/月末/来月1日).
+// Requirement 10.2: quick-select date calculation. Originally computed
+// 今日/明日/1週間後/月末/来月1日, but the user reported (after using the
+// implemented picker) that the extra four chips went unused and asked to
+// keep only 今日 — trimmed here rather than left as unreferenced dead code.
 // `now` is injected (not `new Date()`) so callers/tests get deterministic
 // results; only the calendar-day portion of `now` is used, so callers may
 // pass e.g. the current instant unchanged.
-export function computeQuickSelectDates(now: Date): QuickSelectDates {
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const day = now.getDate();
-
-  const today = new Date(year, month, day);
-  const tomorrow = new Date(year, month, day + 1);
-  const oneWeekLater = new Date(year, month, day + 7);
-  // Day 0 of the following month is the last day of the current month —
-  // this naturally handles every month length (28-31 days) including leap
-  // Februarys without a lookup table.
-  const endOfMonth = new Date(year, month + 1, 0);
-  const firstOfNextMonth = new Date(year, month + 1, 1);
-
-  return {
-    today: formatLocalDateOnly(today),
-    tomorrow: formatLocalDateOnly(tomorrow),
-    oneWeekLater: formatLocalDateOnly(oneWeekLater),
-    endOfMonth: formatLocalDateOnly(endOfMonth),
-    firstOfNextMonth: formatLocalDateOnly(firstOfNextMonth),
-  };
+export function computeTodayIso(now: Date): string {
+  return formatLocalDateOnly(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
 }
 
 // Requirement 10.2: month calendar grid generation.
@@ -120,6 +115,7 @@ export function generateMonthGrid(
       inCurrentMonth: cellDate.getMonth() === month - 1 && cellDate.getFullYear() === year,
       isToday: dateIso === todayIso,
       isSelected: selectedIso !== "" && dateIso === selectedIso,
+      dayOfWeek: cellDate.getDay(),
     });
   }
 

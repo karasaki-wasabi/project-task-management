@@ -15,7 +15,7 @@
 
   No calendar-grid or wheel math is reimplemented here (design.md: "内部実装
   はDatePicker/TimePickerのロジックを流用し、二重実装を避ける") — the 日付 tab
-  imports generateMonthGrid/computeQuickSelectDates/parseLocalDateOnly/
+  imports generateMonthGrid/computeTodayIso/parseLocalDateOnly/
   formatLocalDateOnly straight from ./DatePicker.helpers, and the 時刻 tab
   imports to12Hour/to24Hour/wrapHour12/wrapMinute/togglePeriod/
   computeNowHHmm/formatDisplay12 straight from ./TimePicker.helpers. This
@@ -55,7 +55,13 @@
   for the rationale, which applies unchanged here.
 -->
 <script setup lang="ts">
-import { computeQuickSelectDates, formatLocalDateOnly, generateMonthGrid, parseLocalDateOnly, type QuickSelectDates } from "./DatePicker.helpers";
+import {
+  computeTodayIso,
+  formatLocalDateOnly,
+  generateMonthGrid,
+  parseLocalDateOnly,
+  type DateCell,
+} from "./DatePicker.helpers";
 import { combineDateTime, splitDateTime } from "./DateTimePicker.helpers";
 import {
   computeNowHHmm,
@@ -81,7 +87,6 @@ const activeTab = ref<Tab>("date");
 const draftDate = ref("");
 const visibleYear = ref(0);
 const visibleMonth = ref(1); // 1-indexed (matches DatePicker.helpers.generateMonthGrid)
-const quickSelects = ref<QuickSelectDates | null>(null);
 
 // Time-tab draft state (mirrors TimePicker.vue).
 const draftHour12 = ref(12);
@@ -114,6 +119,22 @@ const draftTimeLabel = computed(() => {
 });
 const draftHeaderLabel = computed(() => `${draftDateLabel.value} ${draftTimeLabel.value}`);
 
+const weekdayColumns = ["日", "月", "火", "水", "木", "金", "土"].map((label, dayOfWeek) => ({
+  label,
+  dayOfWeek,
+  class: dayOfWeek === 0 ? "text-[#c05a5a]" : dayOfWeek === 6 ? "text-[#5a7fc0]" : "text-slate-400",
+}));
+
+function weekendCellClass(dayOfWeek: number) {
+  return dayOfWeek === 0 ? "text-[#c05a5a]" : dayOfWeek === 6 ? "text-[#5a7fc0]" : "";
+}
+
+function cellTextClass(cell: DateCell): string {
+  if (!cell.inCurrentMonth) return "text-slate-300";
+  if (cell.isToday) return "font-semibold text-primary-600";
+  return weekendCellClass(cell.dayOfWeek) || "text-slate-700";
+}
+
 const monthLabel = computed(() => `${visibleYear.value}年${visibleMonth.value}月`);
 
 const monthGrid = computed(() => generateMonthGrid(visibleYear.value, visibleMonth.value, todayIso.value, draftDate.value));
@@ -126,14 +147,6 @@ const weekRows = computed(() => {
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
   return rows;
 });
-
-const quickSelectChips: { key: keyof QuickSelectDates; label: string }[] = [
-  { key: "today", label: "今日" },
-  { key: "tomorrow", label: "明日" },
-  { key: "oneWeekLater", label: "1週間後" },
-  { key: "endOfMonth", label: "月末" },
-  { key: "firstOfNextMonth", label: "来月1日" },
-];
 
 function navigateToMonthOf(iso: string) {
   const parsed = parseLocalDateOnly(iso);
@@ -165,7 +178,6 @@ function openPicker() {
   const { dateOnly, hhmm } = splitDateTime(props.modelValue);
   seedDateDraftFrom(dateOnly);
   seedTimeDraftFrom(hhmm);
-  quickSelects.value = computeQuickSelectDates(new Date());
   activeTab.value = "date";
   open.value = true;
 }
@@ -184,7 +196,9 @@ function selectTab(tab: Tab) {
 
 // -- 日付タブ operations (mirror DatePicker.vue) --
 
-function selectQuick(iso: string) {
+// Quick-select trimmed to 今日 only — see DatePicker.vue's selectToday.
+function selectToday() {
+  const iso = computeTodayIso(new Date());
   draftDate.value = iso;
   navigateToMonthOf(iso);
 }
@@ -274,22 +288,38 @@ function cancel() {
       {{ triggerLabel }}
     </button>
 
-    <template v-if="open">
-      <!-- Transparent full-viewport backdrop for background-click-to-cancel,
-           same pattern as DatePicker.vue/TimePicker.vue. -->
-      <div class="fixed inset-0 z-40" @click="cancel" />
+    <!-- Transparent full-viewport backdrop for background-click-to-cancel,
+         same pattern as DatePicker.vue/TimePicker.vue. v-if is directly on
+         this element (not a wrapping <template>) — see the comment above
+         the panel's <Transition> below for why. -->
+    <div v-if="open" class="fixed inset-0 z-40" @click="cancel" />
 
+    <!-- v-if must sit on the element Transition directly wraps, not on an
+         ancestor <template> that also toggles Transition's own existence —
+         otherwise Vue skips the leave animation entirely (see
+         DatePicker.vue's identical comment for the full explanation). -->
+    <Transition
+      enter-active-class="transition duration-150 ease-out"
+      enter-from-class="opacity-0 scale-95 -translate-y-1"
+      enter-to-class="opacity-100 scale-100 translate-y-0"
+      leave-active-class="transition duration-100 ease-in"
+      leave-from-class="opacity-100 scale-100 translate-y-0"
+      leave-to-class="opacity-0 scale-95 -translate-y-1"
+    >
       <div
+        v-if="open"
         ref="panelRef"
         role="dialog"
         :aria-label="`${ariaLabel}を選択`"
-        class="absolute left-0 top-full z-50 mt-1 w-80 rounded-lg border border-slate-200 bg-white p-3 shadow-xl"
+        class="absolute left-0 top-full z-50 mt-1 w-80 origin-top rounded-lg border border-slate-200 bg-white p-3 shadow-xl"
         @keydown.esc="cancel"
       >
         <!-- Header: always shows BOTH the draft date and draft time
              together, independent of activeTab (design.md's key
-             requirement for this component). -->
-        <div class="mb-2 rounded-md bg-slate-50 px-2.5 py-2 text-center text-sm font-semibold text-slate-900">
+             requirement for this component). Borderless border-bottom
+             style, matching DatePicker.vue's/TimePicker.vue's post-review
+             design-mockup fidelity fix. -->
+        <div class="mb-2 border-b border-slate-100 px-0.5 pb-2.5 text-base font-bold tabular-nums text-slate-900">
           {{ draftHeaderLabel }}
         </div>
 
@@ -322,13 +352,11 @@ function cancel() {
         <div v-if="activeTab === 'date'">
           <div class="mb-2 flex flex-wrap gap-1.5">
             <button
-              v-for="chip in quickSelectChips"
-              :key="chip.key"
               type="button"
               class="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-              @click="quickSelects && selectQuick(quickSelects[chip.key])"
+              @click="selectToday"
             >
-              {{ chip.label }}
+              今日
             </button>
           </div>
 
@@ -336,27 +364,31 @@ function cancel() {
             <button
               type="button"
               aria-label="前の月"
-              class="rounded-md p-1 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              class="flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
               @click="prevMonth"
             >
-              ‹
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 6l-6 6 6 6" />
+              </svg>
             </button>
-            <span class="text-sm font-medium text-slate-900">{{ monthLabel }}</span>
+            <span class="text-sm font-medium tabular-nums text-slate-900">{{ monthLabel }}</span>
             <button
               type="button"
               aria-label="次の月"
-              class="rounded-md p-1 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              class="flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
               @click="nextMonth"
             >
-              ›
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 6l6 6-6 6" />
+              </svg>
             </button>
           </div>
 
           <table class="w-full table-fixed text-center text-xs" role="grid">
             <thead>
-              <tr class="text-slate-400">
-                <th v-for="label in ['日', '月', '火', '水', '木', '金', '土']" :key="label" scope="col" class="pb-1 font-normal">
-                  {{ label }}
+              <tr>
+                <th v-for="col in weekdayColumns" :key="col.label" scope="col" class="pb-1 font-normal" :class="col.class">
+                  {{ col.label }}
                 </th>
               </tr>
             </thead>
@@ -368,12 +400,7 @@ function cancel() {
                     :aria-label="cell.date"
                     :aria-selected="cell.isSelected"
                     class="flex h-7 w-full items-center justify-center rounded-md text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                    :class="[
-                      cell.isSelected ? 'bg-primary-600 font-semibold text-white' : 'hover:bg-slate-100',
-                      !cell.isSelected && !cell.inCurrentMonth ? 'text-slate-300' : '',
-                      !cell.isSelected && cell.inCurrentMonth ? 'text-slate-700' : '',
-                      !cell.isSelected && cell.isToday ? 'font-semibold text-primary-600' : '',
-                    ]"
+                    :class="cell.isSelected ? 'bg-primary-600 font-semibold text-white' : ['hover:bg-slate-100', cellTextClass(cell)]"
                     @click="selectDay(cell.date)"
                   >
                     {{ Number(cell.date.slice(8, 10)) }}
@@ -474,6 +501,6 @@ function cancel() {
           </div>
         </div>
       </div>
-    </template>
+    </Transition>
   </div>
 </template>

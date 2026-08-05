@@ -240,26 +240,31 @@ test("DatePickerのクイック選択・カレンダー選択・決定・キャ�
   await popover.getByRole("button", { name: "決定", exact: true }).click();
   await expect(popover).toBeHidden();
   const committedValue = await startDateTrigger.textContent();
-  expect(committedValue).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  expect(committedValue).toMatch(/^\d{4}\/\d{2}\/\d{2}$/);
 
-  // Reopen, pick a different quick-select date ("1週間後" is always
-  // distinct from "今日"), then キャンセル — the trigger must retain the
-  // PREVIOUSLY committed value, not the discarded draft (Requirement 10.5).
+  // Reopen, pick a different date via the calendar grid (the grid's first
+  // cell is always outside the current month, so it's guaranteed distinct
+  // from 今日), then キャンセル — the trigger must retain the PREVIOUSLY
+  // committed value, not the discarded draft (Requirement 10.5).
   await startDateTrigger.click();
   await expect(popover).toBeVisible();
-  await popover.getByRole("button", { name: "1週間後", exact: true }).click();
+  await popover.locator('table[role="grid"] button').first().click();
   await expect(startDateTrigger).toHaveText(committedValue!);
   await popover.getByRole("button", { name: "キャンセル", exact: true }).click();
   await expect(popover).toBeHidden();
   await expect(startDateTrigger).toHaveText(committedValue!);
 
-  // Reopen, pick a date via the calendar grid (not quick-select) this time,
-  // then クリア without deciding — クリア is documented as an immediate,
-  // ungated action that bypasses any pending draft (Requirement 10.6).
+  // Reopen, pick a date via the calendar grid again, then クリア — クリア
+  // only resets the draft (the popover stays open and the trigger keeps
+  // showing the previously committed value until 決定 is actually clicked;
+  // Requirement 10.6).
   await startDateTrigger.click();
   await expect(popover).toBeVisible();
-  await popover.locator('table[role="grid"] button').first().click();
+  await popover.locator('table[role="grid"] button').last().click();
   await popover.getByRole("button", { name: "クリア", exact: true }).click();
+  await expect(popover).toBeVisible();
+  await expect(startDateTrigger).toHaveText(committedValue!);
+  await popover.getByRole("button", { name: "決定", exact: true }).click();
   await expect(popover).toBeHidden();
   await expect(startDateTrigger).toHaveText("未設定");
 

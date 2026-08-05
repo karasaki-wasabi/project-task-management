@@ -164,21 +164,37 @@ function cancel() {
       {{ triggerLabel }}
     </button>
 
-    <template v-if="open">
-      <!-- Transparent full-viewport backdrop for background-click-to-cancel,
-           same pattern as DatePicker.vue. -->
-      <div class="fixed inset-0 z-40" @click="cancel" />
+    <!-- Transparent full-viewport backdrop for background-click-to-cancel,
+         same pattern as DatePicker.vue. v-if is directly on this element
+         (not a wrapping <template>) — see the comment above the panel's
+         <Transition> below for why. -->
+    <div v-if="open" class="fixed inset-0 z-40" @click="cancel" />
 
+    <!-- v-if must sit on the element Transition directly wraps, not on an
+         ancestor <template> that also toggles Transition's own existence —
+         otherwise Vue skips the leave animation entirely (see
+         DatePicker.vue's identical comment for the full explanation). -->
+    <Transition
+      enter-active-class="transition duration-150 ease-out"
+      enter-from-class="opacity-0 scale-95 -translate-y-1"
+      enter-to-class="opacity-100 scale-100 translate-y-0"
+      leave-active-class="transition duration-100 ease-in"
+      leave-from-class="opacity-100 scale-100 translate-y-0"
+      leave-to-class="opacity-0 scale-95 -translate-y-1"
+    >
       <div
+        v-if="open"
         ref="panelRef"
         role="dialog"
         :aria-label="`${ariaLabel}を選択`"
-        class="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-3 shadow-xl"
+        class="absolute left-0 top-full z-50 mt-1 w-64 origin-top rounded-lg border border-slate-200 bg-white p-3 shadow-xl"
         @keydown.esc="cancel"
       >
         <!-- Header: currently-selected draft time (reflects the draft, never
-             modelValue directly). -->
-        <div class="mb-2 rounded-md bg-slate-50 px-2.5 py-2 text-center text-base font-semibold text-slate-900">
+             modelValue directly). Borderless border-bottom style, matching
+             DatePicker.vue's post-review fix for design-mockup fidelity
+             (claude design 4c uses the same header treatment as 4a). -->
+        <div class="mb-2 border-b border-slate-100 px-0.5 pb-2.5 text-base font-bold tabular-nums text-slate-900">
           {{ draftHeaderLabel }}
         </div>
 
@@ -269,6 +285,6 @@ function cancel() {
           </div>
         </div>
       </div>
-    </template>
+    </Transition>
   </div>
 </template>
