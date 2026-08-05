@@ -175,7 +175,7 @@
   - _Requirements: 1.1, 1.2_
 
 - [ ] 10. Foundation: 開始日・終了日のnullable化
-- [ ] 10.1 schema.prismaの更新(Case.endDateをnullableに変更)
+- [x] 10.1 schema.prismaの更新(Case.endDateをnullableに変更)
   - `Case.endDate`を必須から任意(nullable)に変更する
   - 観測可能な完了状態: `npx prisma validate`が通り、生成されたPrisma Clientの`Case`型で`endDate`が`Date | null`になる
   - _Requirements: 2.4, 5.3_

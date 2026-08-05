@@ -69,7 +69,7 @@ model Case {
   id          String    @id @default(uuid())
   name        String
   startDate   DateTime? @map("start_date") @db.Date
-  endDate     DateTime  @map("end_date")
+  endDate     DateTime? @map("end_date")
   isCompleted Boolean   @default(false) @map("is_completed")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
