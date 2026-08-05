@@ -8,13 +8,13 @@ export type { Case } from "@prisma/client";
 export interface CreateCaseInput {
   name: string;
   startDate?: Date;
-  endDate: Date;
+  endDate?: Date;
 }
 
 export interface UpdateCaseInput {
   name?: string;
   startDate?: Date | null;
-  endDate?: Date;
+  endDate?: Date | null;
   isCompleted?: boolean;
 }
 

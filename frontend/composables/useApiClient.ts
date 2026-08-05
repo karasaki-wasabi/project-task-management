@@ -53,7 +53,7 @@ export interface Case {
   id: string;
   name: string;
   startDate?: string | null;
-  endDate: string;
+  endDate: string | null;
   isCompleted: boolean;
   createdAt: string;
   updatedAt: string;
@@ -186,10 +186,12 @@ export function useApiClient() {
 
     // Cases (design.md "Backend/cases" API Contract)
     listCases: () => request<Case[]>("/api/cases"),
-    createCase: (input: { name: string; startDate?: string; endDate: string }) =>
+    createCase: (input: { name: string; startDate?: string; endDate?: string }) =>
       request<Case>("/api/cases", { method: "POST", body: input }),
-    updateCase: (id: string, input: { name?: string; startDate?: string | null; endDate?: string; isCompleted?: boolean }) =>
-      request<Case>(`/api/cases/${id}`, { method: "PATCH", body: input }),
+    updateCase: (
+      id: string,
+      input: { name?: string; startDate?: string | null; endDate?: string | null; isCompleted?: boolean },
+    ) => request<Case>(`/api/cases/${id}`, { method: "PATCH", body: input }),
     getCaseProgress: (id: string) => request<CaseProgress>(`/api/cases/${id}/progress`),
     deleteCase: (id: string) => request<void>(`/api/cases/${id}`, { method: "DELETE" }),
 

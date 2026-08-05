@@ -218,7 +218,7 @@
   - _Boundary: DateTimePicker.vue_
 
 - [ ] 13. Core: CaseServiceの開始日・終了日任意化対応
-- [ ] 13.1 endDateを必須から任意へ変更するデータ契約の更新
+- [x] 13.1 endDateを必須から任意へ変更するデータ契約の更新
   - `backend/src/modules/cases/case.types.ts`: `CreateCaseInput.endDate`を`Date`(必須)から`Date | undefined`(任意)に、`UpdateCaseInput.endDate`を`Date | undefined`から`Date | null | undefined`(明示的な`null`で未設定化)に変更する
   - `backend/src/modules/cases/case.repository.ts`: `update()`の引数型を`endDate: Date | null`を受け付けられるように変更する
   - `backend/src/modules/cases/case.routes.ts`: `createCaseBodySchema.endDate`に`.optional()`を追加し、`updateCaseBodySchema.endDate`に`.nullable()`を追加する

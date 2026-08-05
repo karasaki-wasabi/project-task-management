@@ -10,7 +10,7 @@ import { caseService } from "./case.service.js";
 const createCaseBodySchema = z.object({
   name: z.string(),
   startDate: z.coerce.date().optional(),
-  endDate: z.coerce.date(),
+  endDate: z.coerce.date().optional(),
 });
 // design.md "Backend/cases" Implementation Notes: PATCH replaces the old
 // due-date-only update with a generic field update — every field is
@@ -19,7 +19,7 @@ const createCaseBodySchema = z.object({
 const updateCaseBodySchema = z.object({
   name: z.string().optional(),
   startDate: z.coerce.date().nullable().optional(),
-  endDate: z.coerce.date().optional(),
+  endDate: z.coerce.date().nullable().optional(),
   isCompleted: z.boolean().optional(),
 });
 const caseIdParamsSchema = z.object({ id: z.string() });

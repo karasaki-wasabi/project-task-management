@@ -19,7 +19,7 @@ export const caseRepository = {
 
   update(
     id: string,
-    data: Partial<{ name: string; startDate: Date | null; endDate: Date; isCompleted: boolean }>,
+    data: Partial<{ name: string; startDate: Date | null; endDate: Date | null; isCompleted: boolean }>,
   ): Promise<Case> {
     return db.case.update({ where: { id }, data });
   },
