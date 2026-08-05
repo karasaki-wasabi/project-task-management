@@ -158,9 +158,14 @@ describe("validateCaseForm (Requirement 2.3/2.4)", () => {
     expect(result).toEqual({ valid: false, error: "案件名を入力してください" });
   });
 
-  it("rejects a missing endDate", () => {
+  it("accepts a missing (optional) endDate when startDate is present", () => {
+    const result = validateCaseForm({ name: "案件A", startDate: "2026-08-01", endDate: "" });
+    expect(result).toEqual({ valid: true });
+  });
+
+  it("accepts both startDate and endDate missing", () => {
     const result = validateCaseForm({ name: "案件A", startDate: "", endDate: "" });
-    expect(result).toEqual({ valid: false, error: "終了日を入力してください" });
+    expect(result).toEqual({ valid: true });
   });
 
   it("rejects startDate after endDate", () => {

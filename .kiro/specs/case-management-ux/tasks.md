@@ -249,7 +249,7 @@
   - _Boundary: CaseService, RecurrenceService(引数型のみ)_
 
 - [ ] 14. Integration: フォームへのDatePicker組み込みと必須制約の撤廃
-- [ ] 14.1 (P) CaseFormModalの開始日・終了日をDatePickerに置き換え
+- [x] 14.1 (P) CaseFormModalの開始日・終了日をDatePickerに置き換え
   - `CaseFormModal.vue`の開始日・終了日の入力を`shared/DatePicker.vue`に置き換え、両方未入力での登録を許可し、両方入力時のみ`startDate > endDate`のクライアント側検証を行う
   - `CaseFormModal.helpers.ts`の`validateCaseForm`から「`endDate`が空文字ならエラー」という現行の必須チェックを削除する(現状はendDate必須の前提で実装されている)
   - 登録ボタンの`:disabled`条件から`!endDate`を削除する(現状は終了日未入力だと登録ボタンが常に無効化される)

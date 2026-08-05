@@ -146,7 +146,7 @@ async function submit() {
     const created = await api.createCase({
       name: name.value.trim(),
       startDate: startDate.value || undefined,
-      endDate: endDate.value,
+      endDate: endDate.value || undefined,
     });
     createdCase.value = created;
     emit("created", created);
@@ -208,26 +208,19 @@ async function retryFailedAssociations() {
 
       <div class="flex flex-wrap items-end gap-2">
         <div class="flex flex-col gap-1">
-          <label class="text-xs font-medium text-slate-500" for="case-form-start-date">開始日</label>
-          <input
-            id="case-form-start-date"
-            v-model="startDate"
-            type="date"
-            :disabled="!!createdCase"
-            class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:cursor-not-allowed disabled:bg-slate-100"
-          />
+          <span class="text-xs font-medium text-slate-500">開始日</span>
+          <DatePicker v-if="!createdCase" v-model="startDate" aria-label="開始日" />
+          <span v-else class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1.5 text-sm text-slate-500">
+            {{ startDate || "未設定" }}
+          </span>
         </div>
 
         <div class="flex flex-col gap-1">
-          <label class="text-xs font-medium text-slate-500" for="case-form-end-date">終了日</label>
-          <input
-            id="case-form-end-date"
-            v-model="endDate"
-            type="date"
-            required
-            :disabled="!!createdCase"
-            class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:cursor-not-allowed disabled:bg-slate-100"
-          />
+          <span class="text-xs font-medium text-slate-500">終了日</span>
+          <DatePicker v-if="!createdCase" v-model="endDate" aria-label="終了日" />
+          <span v-else class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1.5 text-sm text-slate-500">
+            {{ endDate || "未設定" }}
+          </span>
         </div>
       </div>
 
@@ -318,7 +311,7 @@ async function retryFailedAssociations() {
           v-if="!createdCase"
           type="submit"
           form="case-form"
-          :disabled="saving || !name.trim() || !endDate"
+          :disabled="saving || !name.trim()"
           class="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           登録

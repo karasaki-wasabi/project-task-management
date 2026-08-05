@@ -107,18 +107,15 @@ export interface CaseFormValidationResult {
 }
 
 // Requirement 2.3/2.4: client-side mirror of the backend's create-case
-// validation (name required, endDate required, startDate <= endDate when
-// both are present). The backend re-validates independently (design.md
-// Error Handling) — this is purely to avoid a round-trip for the common
-// mistakes.
+// validation (name required, startDate/endDate both optional, startDate <=
+// endDate only enforced when both are present). The backend re-validates
+// independently (design.md Error Handling) — this is purely to avoid a
+// round-trip for the common mistakes.
 export function validateCaseForm(input: { name: string; startDate: string; endDate: string }): CaseFormValidationResult {
   if (input.name.trim() === "") {
     return { valid: false, error: "案件名を入力してください" };
   }
-  if (input.endDate.trim() === "") {
-    return { valid: false, error: "終了日を入力してください" };
-  }
-  if (input.startDate.trim() !== "" && input.startDate > input.endDate) {
+  if (input.startDate.trim() !== "" && input.endDate.trim() !== "" && input.startDate > input.endDate) {
     return { valid: false, error: "開始日は終了日より前の日付を指定してください" };
   }
   return { valid: true };
