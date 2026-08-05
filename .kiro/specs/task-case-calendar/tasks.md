@@ -93,7 +93,7 @@
   - _Depends: 4.1_
   - _Boundary: CalendarPage_
 
-- [ ] 4.4 タスク・案件詳細モーダルの統合
+- [x] 4.4 タスク・案件詳細モーダルの統合
   - `TaskDetailModal`が要求する`users`/`stages`の一覧を`listUsers`/`listDevelopmentStages`で取得する(`kanban/index.vue`と同じ取得パターン)
   - タスクを選択すると`TaskDetailModal`を`taskId`/`users`/`stages`/`cases`のpropsで起動する
   - 案件を選択すると`CaseDetailModal`を`caseId`のpropsで起動する

@@ -1,9 +1,17 @@
 <!--
-  Calendar page (tasks 4.1-4.3, design.md "Components and Interfaces >
+  Calendar page (tasks 4.1-4.4, design.md "Components and Interfaces >
   Frontend/calendar > CalendarPage", Requirements 1.1, 1.2, 1.3, 2.1, 2.2,
-  2.3, 2.4, 2.5, 4.1, 4.2, 4.3, 5.1, 5.2, 5.3). Task 4.3 adds month
-  navigation (prev/next/today) and assignee filtering — no task/case
-  detail modals yet (task 4.4).
+  2.3, 2.4, 2.5, 4.1, 4.2, 4.3, 5.1, 5.2, 5.3, 6.1, 6.2). Task 4.4 wires up
+  TaskDetailModal/CaseDetailModal (`selectedTaskId`/`selectedCaseId`,
+  design.md State Management), reusing both components exactly as built by
+  the kanban/cases specs — this page never edits their source, only
+  supplies the props/emits contract they already define. `users`/`stages`
+  are fetched once in `load()` (design.md Implementation Notes: "kanban/
+  index.vueと同様にこれらの一覧も併せて取得する") solely because
+  TaskDetailModal requires them as props; this page itself never creates,
+  edits, or deletes tasks/cases directly (both modals do that internally
+  and this page only reacts to their `saved`/`deleted` emits by re-running
+  `load()`, same as kanban/index.vue and cases/index.vue).
 
   Month grid generation and per-day task marker truncation are pure
   functions reused from shared/DatePicker.helpers.ts and this page's own
@@ -51,12 +59,21 @@ const month = ref(todayMonth);
 
 const tasks = ref<Task[]>([]);
 const cases = ref<Case[]>([]);
+const users = ref<User[]>([]);
+const stages = ref<DevelopmentStage[]>([]);
 const loaded = ref(false);
 const error = ref<string | null>(null);
 
 // Requirement 5.1, 5.2: single-select assignee filter, "" (AssigneeFilter's
 // empty-string convention) means "すべて" / no filter.
 const assigneeUserId = ref("");
+
+// Requirement 6.1, 6.2, design.md State Management: which task/case detail
+// modal is currently open, following the same nullable-id-as-open-state
+// convention as kanban/index.vue's `detailTaskId` / cases/index.vue's
+// `activeCaseId`.
+const selectedTaskId = ref<string | null>(null);
+const selectedCaseId = ref<string | null>(null);
 
 const weekdayColumns = [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
   dayOfWeek,
@@ -139,18 +156,59 @@ async function loadTasks() {
   }
 }
 
+// Requirement 6.1: TaskDetailModal requires `users`/`stages` as props (design.md
+// Implementation Notes — "kanban/index.vueと同様にこれらの一覧も併せて取得する"),
+// fetched once alongside tasks/cases; unlike `assigneeUserId`, they have no
+// month/filter dependency so they are not part of `loadTasks`'s re-fetch.
 async function load() {
   error.value = null;
   try {
-    [tasks.value, cases.value] = await Promise.all([
+    [tasks.value, cases.value, users.value, stages.value] = await Promise.all([
       api.listTasks({ assigneeUserId: assigneeUserId.value || undefined }),
       api.listCases(),
+      api.listUsers(),
+      api.listDevelopmentStages(),
     ]);
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
     loaded.value = true;
   }
+}
+
+// Requirement 6.1: opens TaskDetailModal for the clicked task marker.
+function openTaskDetail(taskId: string) {
+  selectedTaskId.value = taskId;
+}
+function closeTaskDetail() {
+  selectedTaskId.value = null;
+}
+// TaskDetailModal returns to view mode internally after a save (same pattern
+// as kanban/index.vue's onTaskDetailSaved) -- keep it open and just refresh
+// the calendar's own data so the updated title/status/assignee/date is
+// reflected in place.
+async function onTaskDetailSaved() {
+  await load();
+}
+async function onTaskDetailDeleted() {
+  selectedTaskId.value = null;
+  await load();
+}
+
+// Requirement 6.2: opens CaseDetailModal for the clicked case segment.
+function openCaseDetail(caseId: string) {
+  selectedCaseId.value = caseId;
+}
+function closeCaseDetail() {
+  selectedCaseId.value = null;
+}
+// Same pattern as cases/index.vue's onCaseSaved/onCaseDeleted.
+async function onCaseSaved() {
+  await load();
+}
+async function onCaseDeleted() {
+  selectedCaseId.value = null;
+  await load();
 }
 
 // Requirement 4.1, 4.2: next/prev month via shiftMonth (task 3.1).
@@ -236,17 +294,30 @@ onMounted(load);
 
             <div v-if="caseSegmentsFor(cell).length > 0" class="space-y-0.5">
               <template v-for="segment in caseSegmentsFor(cell)" :key="`${segment.caseId}-${segment.position}`">
-                <div v-if="segment.position === 'point'" class="flex items-center gap-1 px-1 py-0.5 text-[11px] leading-tight">
+                <div
+                  v-if="segment.position === 'point'"
+                  role="button"
+                  tabindex="0"
+                  class="flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 text-[11px] leading-tight hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+                  :aria-label="`${segment.name} の詳細を開く`"
+                  @click="openCaseDetail(segment.caseId)"
+                  @keydown.enter="openCaseDetail(segment.caseId)"
+                >
                   <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="segment.isCompleted ? 'bg-slate-400' : 'bg-primary-500'" />
                   <span class="min-w-0 flex-1 truncate" :class="segment.isCompleted ? 'text-slate-500 line-through' : 'text-slate-800'">{{ segment.name }}</span>
                 </div>
                 <div
                   v-else
-                  class="truncate px-1 py-0.5 text-[11px] leading-tight ring-1"
+                  role="button"
+                  tabindex="0"
+                  class="cursor-pointer truncate px-1 py-0.5 text-[11px] leading-tight ring-1 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+                  :aria-label="`${segment.name} の詳細を開く`"
                   :class="[
                     caseSegmentRoundingClass(segment.position),
-                    segment.isCompleted ? 'bg-slate-100 text-slate-500 line-through ring-slate-200' : 'bg-primary-100 text-primary-800 ring-primary-200',
+                    segment.isCompleted ? 'bg-slate-100 text-slate-500 line-through ring-slate-200 hover:bg-slate-200' : 'bg-primary-100 text-primary-800 ring-primary-200 hover:bg-primary-200',
                   ]"
+                  @click="openCaseDetail(segment.caseId)"
+                  @keydown.enter="openCaseDetail(segment.caseId)"
                 >
                   <span v-if="segment.position === 'start' || segment.position === 'single'">{{ segment.name }}</span>
                   <span v-else>{{ " " }}</span>
@@ -258,7 +329,12 @@ onMounted(load);
               <div
                 v-for="marker in visibleMarkersFor(cell).visible"
                 :key="marker.taskId"
-                class="flex items-center gap-1 rounded bg-slate-50 px-1 py-0.5 text-[11px] leading-tight ring-1 ring-slate-100"
+                role="button"
+                tabindex="0"
+                class="flex cursor-pointer items-center gap-1 rounded bg-slate-50 px-1 py-0.5 text-[11px] leading-tight ring-1 ring-slate-100 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+                :aria-label="`${marker.title} の詳細を開く`"
+                @click="openTaskDetail(marker.taskId)"
+                @keydown.enter="openTaskDetail(marker.taskId)"
               >
                 <span class="min-w-0 flex-1 truncate text-slate-800">{{ marker.title }}</span>
                 <PriorityBadge :priority="marker.priority" />
@@ -273,5 +349,17 @@ onMounted(load);
         </div>
       </div>
     </div>
+
+    <TaskDetailModal
+      :task-id="selectedTaskId"
+      :users="users"
+      :stages="stages"
+      :cases="cases"
+      @close="closeTaskDetail"
+      @saved="onTaskDetailSaved"
+      @deleted="onTaskDetailDeleted"
+    />
+
+    <CaseDetailModal :case-id="selectedCaseId" @close="closeCaseDetail" @saved="onCaseSaved" @deleted="onCaseDeleted" />
   </div>
 </template>
