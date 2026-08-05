@@ -103,7 +103,7 @@
   - _Boundary: CalendarPage_
 
 - [ ] 5. 統合: ナビゲーションとsteeringの更新
-- [ ] 5.1 グローバルナビゲーションの更新
+- [x] 5.1 グローバルナビゲーションの更新
   - `frontend/app.vue`の`{ to: "/events", label: "タイムライン" }`を`{ to: "/calendar", label: "カレンダー" }`に置き換える
   - 観測可能な完了状態: グローバルナビゲーションから「タイムライン」の項目が消え、「カレンダー」から`/calendar`へ遷移できる
   - _Requirements: 7.2_
