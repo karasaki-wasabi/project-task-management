@@ -90,12 +90,9 @@ describe("caseRepository (task 3.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("deletes a case and detaches (does not cascade-delete) linked Task/Event records (Requirement 8.1, 8.2)", async () => {
+  it("deletes a case and detaches (does not cascade-delete) linked Task records (Requirement 8.1, 8.2)", async () => {
     const created = await caseRepository.create({ name: `delete-${randomUUID()}`, endDate: new Date("2035-03-01") });
     const linkedTask = await db.task.create({ data: { title: "keep me", priority: "low", caseId: created.id } });
-    const linkedEvent = await db.event.create({
-      data: { title: "keep me too", occursAt: new Date("2035-03-02T01:00:00"), caseId: created.id },
-    });
 
     await caseRepository.delete(created.id);
 
@@ -103,15 +100,10 @@ describe("caseRepository (task 3.1)", () => {
     expect(survivingTask).not.toBeNull();
     expect(survivingTask?.caseId).toBeNull();
 
-    const survivingEvent = await db.event.findUnique({ where: { id: linkedEvent.id } });
-    expect(survivingEvent).not.toBeNull();
-    expect(survivingEvent?.caseId).toBeNull();
-
     const deletedCase = await db.case.findFirst({ where: { id: created.id, deletedAt: { not: null } } });
     expect(deletedCase).not.toBeNull();
 
     await hardDelete("tasks", [linkedTask.id]);
-    await hardDelete("events", [linkedEvent.id]);
     await hardDelete("cases", [created.id]);
   });
 

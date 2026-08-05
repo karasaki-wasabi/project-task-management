@@ -29,12 +29,11 @@ export const caseRepository = {
   },
 
   // design.md Data Models "Consistency & Integrity": deleting a case
-  // detaches (does not cascade-delete) linked Task/Event records by nulling
+  // detaches (does not cascade-delete) linked Task records by nulling
   // their caseId, so a case deletion never destroys task history.
   delete(id: string): Promise<Case> {
     return db.$transaction(async (tx) => {
       await tx.task.updateMany({ where: { caseId: id }, data: { caseId: null } });
-      await tx.event.updateMany({ where: { caseId: id }, data: { caseId: null } });
       return tx.case.delete({ where: { id } });
     });
   },

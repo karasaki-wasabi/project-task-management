@@ -14,7 +14,7 @@
   - 観測可能な完了状態: `GET /api/events`が404を返し、`app.routes.test.ts`が非タスクイベント関連のエントリなしでgreenになる
   - _Requirements: 7.1, 7.2_
 
-- [ ] 1.3 案件削除処理からのEvent参照除去
+- [x] 1.3 案件削除処理からのEvent参照除去
   - `case.repository.ts`の`delete()`内にある`tx.event.updateMany(...)`呼び出しを削除し、コメントを「Task records」のみに修正する
   - `case.repository.test.ts`/`case.routes.test.ts`のEvent連動セットアップ・アサーション・`hardDelete("events", ...)`を削除し、タスクの`caseId`解除のみを検証するテストに整理する
   - 観測可能な完了状態: 案件削除時にタスクの`caseId`のみが解除されることを検証するテストがgreenで、Event関連のコードが残っていない
