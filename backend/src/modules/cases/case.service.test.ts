@@ -277,6 +277,27 @@ describe("caseService.getProgress (task 3.2)", () => {
     await hardDelete("cases", [created.id]);
   });
 
+  // Task 13.3 (Requirement 6.3): endDate is now optional (task 13.1), so a
+  // case with no endDate at all has no basis for an overdue judgement,
+  // regardless of isCompleted/required-task state. This case is otherwise
+  // "as overdue as possible" (not completed, has an incomplete required
+  // task) except for the missing endDate, to prove that specific guard —
+  // not isCompleted or requiredIncomplete — is what suppresses the flag.
+  it("returns isOverdueWithIncomplete=false when endDate is unset even though not completed and required tasks are incomplete (Requirement 6.3)", async () => {
+    const created = await caseService.create({ name: "no end date" });
+    const openTask = await db.task.create({
+      data: { title: "still open", priority: "low", caseId: created.id, isRequiredForCase: true },
+    });
+
+    const progress = await caseService.getProgress(created.id);
+
+    expect(progress.requiredIncomplete).toBe(1);
+    expect(progress.isOverdueWithIncomplete).toBe(false);
+
+    await hardDelete("tasks", [openTask.id]);
+    await hardDelete("cases", [created.id]);
+  });
+
   it("returns not_found (404) for progress of a non-existent case", async () => {
     await expect(caseService.getProgress(randomUUID())).rejects.toMatchObject({ statusCode: 404 });
   });

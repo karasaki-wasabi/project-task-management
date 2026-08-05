@@ -234,7 +234,7 @@
   - _Requirements: 2.4, 2.5, 5.3, 5.4_
   - _Boundary: CaseService_
 
-- [ ] 13.3 期限超過判定の終了日null対応
+- [x] 13.3 期限超過判定の終了日null対応
   - `getProgress`の`isOverdueWithIncomplete`算出式に`endDate !== null`の条件を追加し、終了日未設定の案件を常に非該当とする
   - 観測可能な完了状態: 単体テストで、終了日未設定の案件が(必須タスク未完了・未完了状態であっても)`isOverdueWithIncomplete=false`になることを確認できる
   - _Depends: 13.1_
