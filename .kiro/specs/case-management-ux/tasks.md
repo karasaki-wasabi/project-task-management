@@ -203,7 +203,7 @@
   - _Boundary: DatePicker.vue_
 
 - [ ] 12. Core: TimePicker/DateTimePickerコンポーネントの実装(適用先画面なし)
-- [ ] 12.1 (P) TimePicker.vueの実装
+- [x] 12.1 (P) TimePicker.vueの実装
   - `frontend/components/shared/TimePicker.vue`を新規実装し、claude design 4c確定版(時・分の2ホイール+AM/PM列、現在時刻ショートカット、キャンセル/決定)を実装する
   - `v-model`(`string`、`HH:mm`形式、空文字は未設定)を持ち、DatePickerと同じ決定/キャンセル規約に従う
   - 観測可能な完了状態: ブラウザでピッカーを開き、時・分のホイール操作と「現在時刻」ショートカットが選択中表示に反映され、「決定」まで入力欄が変わらないことを確認できる
