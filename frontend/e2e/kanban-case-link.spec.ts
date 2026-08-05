@@ -30,8 +30,10 @@ async function createCase(page: import("@playwright/test").Page, name: string) {
   await formModal.getByLabel("案件名").fill(name);
   // No tasks selected here (Requirement 3.7 allows 0-task registration) —
   // this spec associates the task from the kanban side instead, which is
-  // exactly what's under test.
-  await formModal.getByLabel("終了日").fill("2034-06-30");
+  // exactly what's under test. No dates set either (Requirement 2.4 allows
+  // registering with neither date) — this spec has no dependency on the
+  // case having dates at all, so there is nothing to gain by driving the
+  // DatePicker UI here just to fill in a value nothing asserts on.
   await formModal.getByRole("button", { name: "登録", exact: true }).click();
   await expect(formModal).toBeHidden();
 }

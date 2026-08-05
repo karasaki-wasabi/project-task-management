@@ -30,6 +30,43 @@
 //     rather than clicking a same-row dashboard link.
 import { expect, test } from "@playwright/test";
 
+// Drives shared/DatePicker.vue (task 11.2/14.1) to an exact date via its
+// real UI (month nav + day-cell click + 決定) — same helper as
+// cases.spec.ts's setDateViaPicker; duplicated here rather than shared
+// across files per this project's existing e2e convention of each spec
+// file owning its own setup helpers (see kanban-case-link.spec.ts's header
+// comment).
+async function setDateViaPicker(
+  container: import("@playwright/test").Locator,
+  triggerName: string,
+  isoDate: string,
+) {
+  const trigger = container.getByRole("button", { name: triggerName, exact: true });
+  await trigger.click();
+  const popover = container.getByRole("dialog", { name: `${triggerName}を選択` });
+  await expect(popover).toBeVisible();
+
+  const [yearPart, monthPart] = isoDate.split("-");
+  const targetYear = Number(yearPart);
+  const targetMonth = Number(monthPart);
+  const monthLabel = popover.locator("span.text-sm.font-medium.tabular-nums.text-slate-900");
+  for (let i = 0; i < 240; i++) {
+    const label = await monthLabel.textContent();
+    const match = label?.match(/^(\d+)年(\d+)月$/);
+    if (!match) throw new Error(`unexpected month label: ${label}`);
+    const [, yearStr, monthStr] = match;
+    const visibleYear = Number(yearStr);
+    const visibleMonth = Number(monthStr);
+    if (visibleYear === targetYear && visibleMonth === targetMonth) break;
+    const diff = (targetYear - visibleYear) * 12 + (targetMonth - visibleMonth);
+    await popover.getByRole("button", { name: diff > 0 ? "次の月" : "前の月", exact: true }).click();
+  }
+
+  await popover.getByRole("button", { name: isoDate, exact: true }).click();
+  await popover.getByRole("button", { name: "決定", exact: true }).click();
+  await expect(popover).toBeHidden();
+}
+
 test("dashboard shows an overdue case and an upcoming event, and drills down to the task list (Requirements 11.2-11.4)", async ({
   page,
 }) => {
@@ -53,7 +90,7 @@ test("dashboard shows an overdue case and an upcoming event, and drills down to 
   // Past end date + an incomplete required task is what makes CaseService's
   // getProgress report isOverdueWithIncomplete=true, which is what the
   // dashboard's overdue panel filters on.
-  await formModal.getByLabel("終了日").fill("2020-01-01");
+  await setDateViaPicker(formModal, "終了日", "2020-01-01");
 
   const taskRow = formModal.locator(".task-row", { hasText: requiredTaskTitle });
   await expect(taskRow).toBeVisible();
