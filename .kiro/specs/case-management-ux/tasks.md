@@ -258,7 +258,7 @@
   - _Requirements: 2.4, 2.5, 10.1_
   - _Boundary: CaseFormModal.vue_
 
-- [ ] 14.2 (P) CaseDetailModalの開始日・終了日をDatePickerに置き換え
+- [x] 14.2 (P) CaseDetailModalの開始日・終了日をDatePickerに置き換え
   - `CaseDetailModal.vue`の編集モードの開始日・終了日入力を`shared/DatePicker.vue`に置き換え、既存値をクリアして未設定に戻せるようにする
   - `CaseDetailModal.helpers.ts`の`validateCaseEditForm`から「`endDate`が空文字ならエラー」という現行の必須チェックを削除する
   - 保存ボタンの`:disabled`条件から`!endDate`を削除し、閲覧モードの終了日表示(`caseEntity.endDate.slice(0, 10)`、`endDate`が`null`だと例外になる)を開始日表示と同様に未設定時「未設定」を表示するよう修正する

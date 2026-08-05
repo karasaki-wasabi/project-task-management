@@ -210,7 +210,7 @@ async function confirmDelete() {
           </div>
           <div class="flex flex-col gap-0.5">
             <span class="text-xs font-medium text-slate-500">終了日</span>
-            <span class="text-slate-700">{{ caseEntity.endDate.slice(0, 10) }}</span>
+            <span class="text-slate-700">{{ caseEntity.endDate ? caseEntity.endDate.slice(0, 10) : "未設定" }}</span>
           </div>
         </div>
 
@@ -261,24 +261,13 @@ async function confirmDelete() {
 
         <div class="flex flex-wrap items-end gap-2">
           <div class="flex flex-col gap-1">
-            <label class="text-xs font-medium text-slate-500" for="case-detail-start-date">開始日</label>
-            <input
-              id="case-detail-start-date"
-              v-model="startDate"
-              type="date"
-              class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
+            <span class="text-xs font-medium text-slate-500">開始日</span>
+            <DatePicker v-model="startDate" aria-label="開始日" />
           </div>
 
           <div class="flex flex-col gap-1">
-            <label class="text-xs font-medium text-slate-500" for="case-detail-end-date">終了日</label>
-            <input
-              id="case-detail-end-date"
-              v-model="endDate"
-              type="date"
-              required
-              class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
+            <span class="text-xs font-medium text-slate-500">終了日</span>
+            <DatePicker v-model="endDate" aria-label="終了日" />
           </div>
         </div>
 
@@ -354,7 +343,7 @@ async function confirmDelete() {
         <button
           type="submit"
           form="case-detail-form"
-          :disabled="saving || !name.trim() || !endDate"
+          :disabled="saving || !name.trim()"
           class="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           保存

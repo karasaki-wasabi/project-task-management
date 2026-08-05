@@ -18,10 +18,13 @@ describe("validateCaseEditForm (Requirement 5.3)", () => {
     expect(result.error).toBeTruthy();
   });
 
-  it("rejects an empty endDate", () => {
-    const result = validateCaseEditForm({ name: "案件A", startDate: "", endDate: "" });
-    expect(result.valid).toBe(false);
-    expect(result.error).toBeTruthy();
+  it("accepts an empty endDate (nullable field)", () => {
+    expect(validateCaseEditForm({ name: "案件A", startDate: "", endDate: "" })).toEqual({ valid: true });
+    expect(validateCaseEditForm({ name: "案件A", startDate: "2026-01-01", endDate: "" })).toEqual({ valid: true });
+  });
+
+  it("accepts both startDate and endDate empty", () => {
+    expect(validateCaseEditForm({ name: "案件A", startDate: "", endDate: "" })).toEqual({ valid: true });
   });
 
   it("rejects startDate after endDate", () => {
@@ -54,6 +57,24 @@ describe("buildUpdateCaseInput (Requirement 5.2/5.4)", () => {
       name: "案件A",
       startDate: null,
       endDate: "2026-01-31",
+      isCompleted: false,
+    });
+  });
+
+  it("maps an empty endDate to null rather than omitting or empty string", () => {
+    expect(buildUpdateCaseInput({ name: "案件A", startDate: "2026-01-01", endDate: "", isCompleted: false })).toEqual({
+      name: "案件A",
+      startDate: "2026-01-01",
+      endDate: null,
+      isCompleted: false,
+    });
+  });
+
+  it("maps both empty startDate and endDate to null", () => {
+    expect(buildUpdateCaseInput({ name: "案件A", startDate: "", endDate: "", isCompleted: false })).toEqual({
+      name: "案件A",
+      startDate: null,
+      endDate: null,
       isCompleted: false,
     });
   });
