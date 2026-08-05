@@ -174,6 +174,112 @@
   - _Depends: 8.2, 7_
   - _Requirements: 1.1, 1.2_
 
+- [ ] 10. Foundation: 開始日・終了日のnullable化
+- [ ] 10.1 schema.prismaの更新(Case.endDateをnullableに変更)
+  - `Case.endDate`を必須から任意(nullable)に変更する
+  - 観測可能な完了状態: `npx prisma validate`が通り、生成されたPrisma Clientの`Case`型で`endDate`が`Date | null`になる
+  - _Requirements: 2.4, 5.3_
+
+- [ ] 10.2 既存マイグレーションの削除とスキーマの再生成・適用
+  - `backend/src/prisma/migrations/`配下の既存マイグレーション(改称作業で生成済みの`<timestamp>_init_domain_schema`)を削除し、開発DBのデータをリセットした上で、`endDate`のnullable化を反映した単一の初期マイグレーションを再生成・適用する
+  - `non_business_days.date_active_key`のSTORED GENERATED COLUMN+UNIQUE INDEXをmigration.sqlへ再度手動追記し、`prisma migrate deploy`で適用する(タスク1.2のImplementation Notes参照)
+  - 観測可能な完了状態: `prisma migrate status`が最新であることを示し、実DBの`cases.end_date`列がNULL許容になっており、`non_business_days`の生成列+UNIQUE INDEXが維持されている
+  - _Depends: 10.1_
+  - _Requirements: 2.4, 5.3_
+
+- [ ] 11. Core: DatePickerコンポーネントの実装
+- [ ] 11.1 DatePicker.helpers.tsの実装(月グリッド生成・クイック選択肢計算)
+  - 月カレンダーグリッド生成(指定年月の日付配列、前後月の埋め日を含むかは実装時に決定)と、クイック選択肢(今日・明日・1週間後・月末・来月1日)の日付計算を純関数として実装する
+  - 観測可能な完了状態: 各関数の単体テストで、基準日を固定した際の月グリッド・クイック選択肢の日付が期待通りになることを確認できる
+  - _Requirements: 10.2_
+  - _Boundary: DatePicker.helpers.ts_
+
+- [ ] 11.2 DatePicker.vueの実装
+  - `frontend/components/shared/DatePicker.vue`を新規実装し、claude design 4a確定版(選択中日付ヘッダー・クイック選択肢・月カレンダー・クリア/キャンセル/決定のフッター)をポップオーバー形式で実装する
+  - `v-model`(`string`、ISO `YYYY-MM-DD`、空文字は未設定)を持ち、「決定」まで入力欄の表示を変えず、「キャンセル」「背景クリック」では変更を破棄し、「クリア」は即座に空文字をemitする
+  - 観測可能な完了状態: ブラウザでピッカーを開き、クイック選択肢やカレンダー日付をクリックしても入力欄の表示が変わらないこと、「決定」を押すと入力欄に反映されること、「キャンセル」では変更が反映されないこと、「クリア」で入力欄が空になることを確認できる
+  - _Depends: 11.1_
+  - _Requirements: 10.1, 10.3, 10.4, 10.5, 10.6_
+  - _Boundary: DatePicker.vue_
+
+- [ ] 12. Core: TimePicker/DateTimePickerコンポーネントの実装(適用先画面なし)
+- [ ] 12.1 (P) TimePicker.vueの実装
+  - `frontend/components/shared/TimePicker.vue`を新規実装し、claude design 4c確定版(時・分の2ホイール+AM/PM列、現在時刻ショートカット、キャンセル/決定)を実装する
+  - `v-model`(`string`、`HH:mm`形式、空文字は未設定)を持ち、DatePickerと同じ決定/キャンセル規約に従う
+  - 観測可能な完了状態: ブラウザでピッカーを開き、時・分のホイール操作と「現在時刻」ショートカットが選択中表示に反映され、「決定」まで入力欄が変わらないことを確認できる
+  - _Depends: 11.2_
+  - _Boundary: TimePicker.vue_
+
+- [ ] 12.2 DateTimePicker.vueの実装
+  - `frontend/components/shared/DateTimePicker.vue`を新規実装し、claude design 4d/4e確定版(日付/時刻タブ切り替え)を、`DatePicker`のカレンダー表示と`TimePicker`のホイール表示を内部で流用して実装する
+  - `v-model`(`string`、ISO 8601日時、空文字は未設定)を持つ
+  - 観測可能な完了状態: ブラウザでピッカーを開き、日付タブ・時刻タブの切り替えができ、上部の表示で選択中の日付・時刻が常に確認できることを確認できる
+  - _Depends: 12.1_
+  - _Boundary: DateTimePicker.vue_
+
+- [ ] 13. Core: CaseServiceの開始日・終了日任意化対応
+- [ ] 13.1 endDateを必須から任意へ変更するデータ契約の更新
+  - `backend/src/modules/cases/case.types.ts`: `CreateCaseInput.endDate`を`Date`(必須)から`Date | undefined`(任意)に、`UpdateCaseInput.endDate`を`Date | undefined`から`Date | null | undefined`(明示的な`null`で未設定化)に変更する
+  - `backend/src/modules/cases/case.repository.ts`: `update()`の引数型を`endDate: Date | null`を受け付けられるように変更する
+  - `backend/src/modules/cases/case.routes.ts`: `createCaseBodySchema.endDate`に`.optional()`を追加し、`updateCaseBodySchema.endDate`に`.nullable()`を追加する
+  - `frontend/composables/useApiClient.ts`: `Case.endDate`を`string | null`に、`createCase`の入力型の`endDate`を任意に、`updateCase`の入力型の`endDate`を`string | null`に変更する
+  - 観測可能な完了状態: `npx tsc --noEmit`(バックエンド)・`npm run typecheck`(フロントエンド)がこれらの型変更に起因するエラーなく通り、`POST /api/cases`を`endDate`省略で呼ぶと201が返る
+  - _Requirements: 2.4, 5.3_
+  - _Boundary: case.types.ts, case.repository.ts, case.routes.ts, useApiClient.ts_
+
+- [ ] 13.2 開始日・終了日のバリデーション変更
+  - `case.service.ts`の`create`/`update`のバリデーションを、開始日・終了日の両方が指定されている場合のみ`startDate > endDate`を検証するように変更する(片方のみ、または両方未指定の場合は検証をスキップする)
+  - 観測可能な完了状態: 単体テストで、終了日のみ指定した登録・開始日のみ指定した登録・両方未指定の登録がいずれも成功し、両方指定かつ順序が逆の場合のみ400になることを確認できる
+  - _Depends: 13.1_
+  - _Requirements: 2.4, 2.5, 5.3, 5.4_
+  - _Boundary: CaseService_
+
+- [ ] 13.3 期限超過判定の終了日null対応
+  - `getProgress`の`isOverdueWithIncomplete`算出式に`endDate !== null`の条件を追加し、終了日未設定の案件を常に非該当とする
+  - 観測可能な完了状態: 単体テストで、終了日未設定の案件が(必須タスク未完了・未完了状態であっても)`isOverdueWithIncomplete=false`になることを確認できる
+  - _Depends: 13.1_
+  - _Requirements: 6.3_
+  - _Boundary: CaseService_
+
+- [ ] 13.4 recurrence呼び出しの終了日状態遷移分岐
+  - `case.service.ts`の`create`/`update`で、終了日の状態遷移に応じて`recurrenceService`の呼び出しを分岐する: 作成時に終了日未設定なら呼ばない、更新で「未設定→値あり」なら`onCaseCreated`相当の新規生成を呼ぶ、「値あり→別の値」なら`onCaseEndDateChanged`を呼ぶ、「値あり→未設定」または終了日を更新しない場合は呼ばない
+  - 観測可能な完了状態: 単体テストで、終了日未設定での作成時にrecurrenceが呼ばれないこと、後から終了日を設定すると案件連動テンプレートのタスクが新規生成されることを確認できる
+  - _Depends: 13.1_
+  - _Requirements: 2.4, 5.3_
+  - _Boundary: CaseService_
+
+- [ ] 14. Integration: フォームへのDatePicker組み込みと必須制約の撤廃
+- [ ] 14.1 (P) CaseFormModalの開始日・終了日をDatePickerに置き換え
+  - `CaseFormModal.vue`の開始日・終了日の入力を`shared/DatePicker.vue`に置き換え、両方未入力での登録を許可し、両方入力時のみ`startDate > endDate`のクライアント側検証を行う
+  - `CaseFormModal.helpers.ts`の`validateCaseForm`から「`endDate`が空文字ならエラー」という現行の必須チェックを削除する(現状はendDate必須の前提で実装されている)
+  - 登録ボタンの`:disabled`条件から`!endDate`を削除する(現状は終了日未入力だと登録ボタンが常に無効化される)
+  - 観測可能な完了状態: ブラウザで案件登録ポップアップを開き、開始日・終了日をいずれも入力せずに登録できること、DatePickerでの日付選択・クリアが正しく反映されることを確認できる
+  - _Depends: 11.2, 13.2, 13.4_
+  - _Requirements: 2.4, 2.5, 10.1_
+  - _Boundary: CaseFormModal.vue_
+
+- [ ] 14.2 (P) CaseDetailModalの開始日・終了日をDatePickerに置き換え
+  - `CaseDetailModal.vue`の編集モードの開始日・終了日入力を`shared/DatePicker.vue`に置き換え、既存値をクリアして未設定に戻せるようにする
+  - `CaseDetailModal.helpers.ts`の`validateCaseEditForm`から「`endDate`が空文字ならエラー」という現行の必須チェックを削除する
+  - 保存ボタンの`:disabled`条件から`!endDate`を削除し、閲覧モードの終了日表示(`caseEntity.endDate.slice(0, 10)`、`endDate`が`null`だと例外になる)を開始日表示と同様に未設定時「未設定」を表示するよう修正する
+  - 観測可能な完了状態: ブラウザで既存案件の編集モードを開き、開始日または終了日をクリアして保存すると、閲覧モードで「未設定」表示になることを確認できる
+  - _Depends: 11.2, 13.2, 13.4_
+  - _Requirements: 5.3, 5.4, 10.1_
+  - _Boundary: CaseDetailModal.vue_
+
+- [ ] 15. Validation: バックエンド統合テスト・単体テスト・E2Eの追加
+- [ ] 15.1 バックエンド統合テストの追加
+  - `POST /api/cases`で開始日・終了日を省略しても201になること、`PATCH /api/cases/:id`で`startDate`/`endDate`を`null`指定で未設定に戻せること、終了日未設定での作成時に案件連動タスクが生成されないこと、後から終了日を設定すると生成されることを実HTTP経路で検証する
+  - 観測可能な完了状態: 上記シナリオを検証する統合テストが全てgreenになる
+  - _Depends: 13.3, 13.4_
+  - _Requirements: 2.4, 2.5, 5.3, 6.3_
+
+- [ ] 15.2 E2E: 開始日・終了日未入力での登録とDatePicker操作
+  - `frontend/e2e/cases.spec.ts`に、開始日・終了日をいずれも入力せずに案件を登録できるシナリオと、DatePickerでのクイック選択肢・カレンダー選択・決定・キャンセル・クリアの一連の操作が入力欄に正しく反映される/されないことを検証するシナリオを追加する
+  - 観測可能な完了状態: 上記シナリオがPlaywrightで成功する
+  - _Depends: 14.1_
+  - _Requirements: 2.4, 10.1, 10.3, 10.4, 10.5, 10.6_
+
 ## Implementation Notes
 - タスク1.2: `non_business_days.date_active_key`はPrismaが`Unsupported("date")?`としてしか表現できないSTORED GENERATED COLUMN(+UNIQUE INDEX)であるため、`prisma migrate dev`をこのテーブルに対して再実行すると、生成列/UNIQUE INDEXをdriftとして検知し、それらをDROPする追従マイグレーションを自動生成してしまう(実際に1回発生し、生成された不要マイグレーションを削除して再対応した)。このハンドエディット済みマイグレーション(`20260804102439_init_domain_schema`)を今後再適用する際は`prisma migrate dev`ではなく`prisma migrate deploy`(diffなしでファイルをそのまま適用)を使うこと。マイグレーションSQL自体にも同内容の警告コメントを追加済み。
 - タスク9.4: 開発DBがE2E実行間でリセットされないため、繰り返しテスト実行により`cases`/`users`等にテストデータが蓄積し続けている。これが2つの実害を生んでいる: (1) `frontend/pages/index.vue`の期限超過パネルは`overdueCases.value.slice(0, DISPLAY_LIMIT)`(DISPLAY_LIMIT=5)で**ソートなしに**先頭5件のみ表示するため、蓄積した古い期限超過案件に埋もれて新規作成した案件がパネルの表示範囲に入らないことがある(件数自体を示す「すべての案件を見る(N件)」リンクの`overdueCases.length`は非キャップなので、件数ベースの検証や`/cases`の検索ボックス経由での確認であれば影響を受けない)。(2) `kanban-tray-reassign.spec.ts`・`kanban-backlog.spec.ts`のように、蓄積したユーザー数/タスク数を前提にした検証が他のE2E実行と合わせて実行すると不安定になるテストが既に存在する(いずれも本スペックの変更前から存在する既知の課題で、今回は対応していない)。将来的にE2Eスイート全体の安定性を上げる場合は、(a) 期限超過パネルに`upcomingEvents`同様のソートを入れる、(b) E2E実行前に開発DBをリセットする仕組みを導入する、のいずれかが有効な対策になる。
