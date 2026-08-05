@@ -33,7 +33,7 @@
   - _Requirements: 7.1_
 
 - [ ] 2. フロントエンド: 非タスクイベント機能の廃止
-- [ ] 2.1 (P) useApiClientからのイベント関連メソッド削除とイベント画面の削除
+- [x] 2.1 (P) useApiClientからのイベント関連メソッド削除とイベント画面の削除
   - `AppEvent`インターフェース、`listEvents`/`createEvent`/`deleteEvent`メソッドを`useApiClient.ts`から削除する
   - `frontend/pages/events/index.vue`を削除する
   - `frontend/e2e/timeline.spec.ts`(`/events`画面を直接検証するE2E)を削除する

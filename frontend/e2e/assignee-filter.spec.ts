@@ -1,4 +1,4 @@
-// E2E: assignee filter narrows tasks/events lists (task 12.3, Requirement
+// E2E: assignee filter narrows the tasks list (task 12.3, Requirement
 // 7.2).
 import { expect, test } from "@playwright/test";
 
