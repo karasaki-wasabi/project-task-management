@@ -168,7 +168,7 @@ frontend/components/
 └── shared/
     ├── Modal.vue                   # 変更なし(再利用のみ)
     ├── DatePicker.vue              # 新規: 単一日付ポップアップピッカー(claude design 4a確定版)。CaseFormModal/CaseDetailModalの開始日・終了日に適用
-    ├── DatePicker.helpers.ts       # 新規: 月グリッド生成・クイック選択肢(今日/明日/1週間後/月末/来月1日)の日付計算等の純関数
+    ├── DatePicker.helpers.ts       # 新規: 月グリッド生成・クイック選択肢(今日)の日付計算等の純関数
     ├── TimePicker.vue              # 新規: 時刻ホイールピッカー(claude design 4c確定版)。本スペックでは適用先画面なし、単体コンポーネントとして実装
     └── DateTimePicker.vue          # 新規: 日時ピッカー(claude design 4d/4e確定版、日付/時刻タブ切り替え)。DatePicker/TimePickerの表示を内部で流用。本スペックでは適用先画面なし
 
@@ -522,11 +522,12 @@ interface RecurrenceService {
 
 **Responsibilities & Constraints**
 - `v-model`の型は`string`(ISO `YYYY-MM-DD`、空文字は未設定を表す。既存フォームの「空文字=未設定」という慣習を踏襲し、`CaseFormModal`/`CaseDetailModal`の他フィールドと型を揃える)
-- ポップアップ内部は「選択中の日付を表示するヘッダー」「クイック選択肢(今日/明日/1週間後/月末/来月1日)」「月カレンダーグリッド(前月/次月ナビゲーション)」「フッター(クリア/キャンセル/決定)」から構成する(claude design 4a)
+- ポップアップ内部は「選択中の日付を表示するヘッダー」「クイック選択肢(今日)」「月カレンダーグリッド(前月/次月ナビゲーション)」「フッター(クリア/キャンセル/決定)」から構成する(claude design 4a。当初案の明日/1週間後/月末/来月1日は実装後のユーザーフィードバックにより削減し「今日」のみとした)
 - クイック選択肢・カレンダー上の日付クリックは内部の「選択中」状態のみを更新し、`modelValue`(=入力欄の表示)は変更しない。「決定」クリックで初めて`update:modelValue`をemitしてポップアップを閉じる(10.3, 10.4)
 - 「キャンセル」クリックまたは背景クリックは、内部の「選択中」状態を破棄してポップアップを閉じる。`modelValue`は変更しない(10.5)
-- 「クリア」クリックは即座に`update:modelValue`を空文字でemitし、ポップアップを閉じる(10.6)。決定操作を介さない即時反映とする(mockup 4aはクリア操作の確定要否を明示していないため、削除確認のような取り消し不能操作と異なり、入力欄クリアは即時反映かつ何度でもやり直せる操作という判断による設計上の解釈)
+- 「クリア」クリックは内部の「選択中」状態を空にするのみで、`update:modelValue`のemitやポップアップを閉じることはしない(10.6)。当初はクリアを即時反映・即座に閉じる操作として設計したが、ユーザーから「クリアがポップアップを閉じてしまうのは入力クリア以上のことをしているように感じる」とのフィードバックを受け、「決定」を経て初めて確定する他の操作と同じ扱いに改めた
 - モーダル(`shared/Modal.vue`)ではなくポップオーバーとして実装する(フォームの他フィールドを隠さない)。背景クリック検知とEscキー(キャンセル相当)のハンドラを自前で持つ
+- 開閉時にフェード+スケールのトランジションを適用する(claude designのmockupには表れないユーザー要望)。`v-if`は`<Transition>`が直接ラップする要素自身に付ける必要があり、祖先の`<template v-if>`に付けると閉じるたびに`<Transition>`自体が破棄されてleaveアニメーションが実行されない(実装時に発見した既知のVueの落とし穴)
 
 **Dependencies**
 - Inbound: CaseFormModal, CaseDetailModal (P0)
@@ -539,7 +540,7 @@ interface RecurrenceService {
 - Concurrency strategy: 単一ユーザー操作のみを想定、同時実行制御は不要
 
 **Implementation Notes**
-- Integration: 月グリッド生成・クイック選択肢の日付計算(今日/明日/1週間後/月末/来月1日)は`DatePicker.helpers.ts`の純関数に切り出し、単体テストで検証する
+- Integration: 月グリッド生成・クイック選択肢(今日)の日付計算は`DatePicker.helpers.ts`の純関数に切り出し、単体テストで検証する
 - Validation: なし(値の妥当性検証は呼び出し元のフォーム側で行う。DatePicker自体は任意の日付選択を許可する)
 - Risks: なし
 
@@ -627,7 +628,7 @@ MySQL、Prisma管理。
   - `case.service.ts`: 開始日・終了日の両方が入力され`startDate > endDate`のときのみ400(片方のみ・両方未入力ではエラーにならない)、`create`は`isCompleted=false`固定、`getProgress`は`isCompleted=true`のとき`isOverdueWithIncomplete=false`(終了日超過でも)、`endDate`が`null`のとき`isOverdueWithIncomplete=false`(完了状態・超過日数に関わらず)
   - `case.service.ts`: `create`で`endDate`未指定の場合`recurrenceService.onCaseCreated`が呼ばれない、`update`で`endDate`が`null→値あり`に変わった場合は`onCaseCreated`相当の新規生成が呼ばれる、`値あり→別の値`では`onCaseEndDateChanged`が呼ばれる、`値あり→null`または`endDate`を更新しない場合はどちらも呼ばれない
   - `task.repository.ts`: `unassignedCase: true`で`caseId IS NULL`のタスクのみ返る
-  - `DatePicker.helpers.ts`: クイック選択肢(今日/明日/1週間後/月末/来月1日)の日付計算、月カレンダーグリッド生成が正しい日付を返す
+  - `DatePicker.helpers.ts`: クイック選択肢(今日)の日付計算、月カレンダーグリッド生成が正しい日付を返す
 - **Integration Tests (backend, 実HTTP経路)**
   - `POST /api/cases` → タスク未選択でも201、開始日・終了日を省略しても201、`PATCH /api/cases/:id`でname/startDate/endDate/isCompletedを独立に更新でき、`startDate`/`endDate`を`null`で未設定に戻せる
   - `DELETE /api/cases/:id`後、紐づく`Task`/`Event`の`caseId`が`null`になっている(既存挙動のリネーム後回帰確認)
