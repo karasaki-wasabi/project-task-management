@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. Foundation: データベーススキーマの改称・拡張
+- [x] 1. Foundation: データベーススキーマの改称・拡張
 - [x] 1.1 schema.prismaの更新(Delivery→Case改称・フィールド追加)
   - `Delivery`モデルを`Case`に改称し、`startDate`(nullable)・`isCompleted`(既定false)を追加する
   - `Task.deliveryId`→`caseId`、`Task.isRequiredForDelivery`→`isRequiredForCase`にリネームする
@@ -17,7 +17,7 @@
   - 観測可能な完了状態: マイグレーションディレクトリが1つだけ存在し、実DBに`cases`テーブルと`tasks.case_id`/`tasks.is_required_for_case`列が反映されている
   - _Requirements: 1.1, 2.2, 2.5, 5.1, 5.4_
 
-- [ ] 2. Foundation: 依存モジュール(tasks/events/recurrence)の呼称・フィールド名追従
+- [x] 2. Foundation: 依存モジュール(tasks/events/recurrence)の呼称・フィールド名追従
 - [x] 2.1 (P) tasksモジュールのフィールド名リネーム
   - `task.types.ts`/`task.repository.ts`/`task.routes.ts`/`task.service.ts`の`deliveryId`→`caseId`、`isRequiredForDelivery`→`isRequiredForCase`を一括変更する(強制false化・単独指定エラー等の既存ロジックは変更しない)
   - 既存のtask関連ユニット/統合テストのフィールド名を更新する
@@ -42,7 +42,7 @@
   - _Depends: 2.1_
   - _Boundary: RecurrenceService_
 
-- [ ] 3. Core: バックエンド `cases` モジュールの実装
+- [x] 3. Core: バックエンド `cases` モジュールの実装
 - [x] 3.1 cases: 型・リポジトリ層の実装(旧deliveryの改称・拡張)
   - `backend/src/modules/deliveries/`を`cases/`へ改称し、`case.types.ts`(`Case`, `CreateCaseInput`, `UpdateCaseInput`, `CaseProgress`)と`case.repository.ts`を実装する
   - `name`/`startDate`(nullable)/`endDate`/`isCompleted`のCRUDを実装し、削除時は既存同様`Task`/`Event`の`caseId`をnullにdetachしてから削除する
@@ -83,7 +83,7 @@
   - _Depends: 3.3, 4_
   - _Requirements: 1.1, 1.2_
 
-- [ ] 6. Core: 案件一覧・登録・編集ポップアップの実装
+- [x] 6. Core: 案件一覧・登録・編集ポップアップの実装
 - [x] 6.1 (P) 案件一覧ページの実装
   - `frontend/pages/deliveries/index.vue`を`frontend/pages/cases/index.vue`へ改称し、名称検索・ステータス絞り込みチップ(すべて/進行中/完了/期限超過、件数付き)・案件0件/検索ヒットなしの空状態を実装する
   - `listCases`+`getCaseProgress`の一括取得結果からチップの件数を算出する
@@ -121,7 +121,7 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 9.2_
   - _Boundary: TaskDetailModal.vue_
 
-- [ ] 8. Integration: 一覧への組み込みと周辺画面の表示文言追従
+- [x] 8. Integration: 一覧への組み込みと周辺画面の表示文言追従
 - [x] 8.1 案件一覧ページとポップアップの結合
   - `cases/index.vue`に登録ボタン→`CaseFormModal`、行クリック→`CaseDetailModal`の開閉を実装し、登録・保存・削除後に一覧とステータスチップの件数を再読込する
   - 観測可能な完了状態: 一覧から登録・編集・削除の一連の操作をポップアップ経由で完結でき、操作後に一覧の表示が最新の状態に更新される
@@ -149,7 +149,7 @@
   - _Requirements: 1.1, 1.2_
   - _Boundary: recurrence page_
 
-- [ ] 9. Validation: バックエンド統合テスト・E2E・回帰確認
+- [x] 9. Validation: バックエンド統合テスト・E2E・回帰確認
 - [x] 9.1 バックエンド統合テストの追加・更新
   - `POST /api/cases`(タスク未選択でも201)、`PATCH /api/cases/:id`(name/startDate/endDate/isCompletedの独立更新)、`DELETE /api/cases/:id`後の`Task`/`Event`のdetach、recurrenceの`endDate`基準生成/再計算を実HTTP経路で検証する
   - 観測可能な完了状態: 上記シナリオを検証する統合テストが全てgreenになる
@@ -174,7 +174,7 @@
   - _Depends: 8.2, 7_
   - _Requirements: 1.1, 1.2_
 
-- [ ] 10. Foundation: 開始日・終了日のnullable化
+- [x] 10. Foundation: 開始日・終了日のnullable化
 - [x] 10.1 schema.prismaの更新(Case.endDateをnullableに変更)
   - `Case.endDate`を必須から任意(nullable)に変更する
   - 観測可能な完了状態: `npx prisma validate`が通り、生成されたPrisma Clientの`Case`型で`endDate`が`Date | null`になる
@@ -187,7 +187,7 @@
   - _Depends: 10.1_
   - _Requirements: 2.4, 5.3_
 
-- [ ] 11. Core: DatePickerコンポーネントの実装
+- [x] 11. Core: DatePickerコンポーネントの実装
 - [x] 11.1 DatePicker.helpers.tsの実装(月グリッド生成・クイック選択肢計算)
   - 月カレンダーグリッド生成(指定年月の日付配列、前後月の埋め日を含むかは実装時に決定)と、クイック選択肢(今日・明日・1週間後・月末・来月1日)の日付計算を純関数として実装する
   - 観測可能な完了状態: 各関数の単体テストで、基準日を固定した際の月グリッド・クイック選択肢の日付が期待通りになることを確認できる
@@ -202,7 +202,7 @@
   - _Requirements: 10.1, 10.3, 10.4, 10.5, 10.6_
   - _Boundary: DatePicker.vue_
 
-- [ ] 12. Core: TimePicker/DateTimePickerコンポーネントの実装(適用先画面なし)
+- [x] 12. Core: TimePicker/DateTimePickerコンポーネントの実装(適用先画面なし)
 - [x] 12.1 (P) TimePicker.vueの実装
   - `frontend/components/shared/TimePicker.vue`を新規実装し、claude design 4c確定版(時・分の2ホイール+AM/PM列、現在時刻ショートカット、キャンセル/決定)を実装する
   - `v-model`(`string`、`HH:mm`形式、空文字は未設定)を持ち、DatePickerと同じ決定/キャンセル規約に従う
@@ -217,7 +217,7 @@
   - _Depends: 12.1_
   - _Boundary: DateTimePicker.vue_
 
-- [ ] 13. Core: CaseServiceの開始日・終了日任意化対応
+- [x] 13. Core: CaseServiceの開始日・終了日任意化対応
 - [x] 13.1 endDateを必須から任意へ変更するデータ契約の更新
   - `backend/src/modules/cases/case.types.ts`: `CreateCaseInput.endDate`を`Date`(必須)から`Date | undefined`(任意)に、`UpdateCaseInput.endDate`を`Date | undefined`から`Date | null | undefined`(明示的な`null`で未設定化)に変更する
   - `backend/src/modules/cases/case.repository.ts`: `update()`の引数型を`endDate: Date | null`を受け付けられるように変更する
@@ -248,7 +248,7 @@
   - _Requirements: 2.4, 5.3_
   - _Boundary: CaseService, RecurrenceService(引数型のみ)_
 
-- [ ] 14. Integration: フォームへのDatePicker組み込みと必須制約の撤廃
+- [x] 14. Integration: フォームへのDatePicker組み込みと必須制約の撤廃
 - [x] 14.1 (P) CaseFormModalの開始日・終了日をDatePickerに置き換え
   - `CaseFormModal.vue`の開始日・終了日の入力を`shared/DatePicker.vue`に置き換え、両方未入力での登録を許可し、両方入力時のみ`startDate > endDate`のクライアント側検証を行う
   - `CaseFormModal.helpers.ts`の`validateCaseForm`から「`endDate`が空文字ならエラー」という現行の必須チェックを削除する(現状はendDate必須の前提で実装されている)
