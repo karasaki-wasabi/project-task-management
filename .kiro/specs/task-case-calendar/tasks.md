@@ -20,10 +20,16 @@
   - 観測可能な完了状態: 案件削除時にタスクの`caseId`のみが解除されることを検証するテストがgreenで、Event関連のコードが残っていない
   - _Requirements: 7.1_
 
-- [ ] 1.4 ビジネスイベントログテスト・スキーマ統合テストの整理
+- [x] 1.4 ビジネスイベントログテスト・スキーマ統合テストの整理
   - `business-event-logging.integration.test.ts`から`eventsService`のimportと`"logs event.deleted with the deleted event's id"`テストケースを削除する
   - `backend/src/prisma/schema.integration.test.ts`(task 1.1レビューで発見: 全ドメインテーブルをラウンドトリップする単一テストが`prisma.event.create`/`prisma.event.delete`を呼んでいる)から、Event関連の作成・アサーション・削除呼び出しのみを削除する(他ドメインの検証はそのまま維持)
   - 観測可能な完了状態: 残りのログ種別(`case.created`等)のテストがgreenのまま`event.deleted`のテストが存在せず、`schema.integration.test.ts`がEvent削除後のスキーマに対してgreenになる
+  - _Requirements: 7.1_
+
+- [ ] 1.5 機能横断統合テストからのEvent参照除去
+  - `backend/src/validation.integration.test.ts`(task 1.4実装中に発見: フルバックエンドスイート実行で唯一残る失敗ファイル)の`"DELETE /api/cases/:id detaches linked Task/Event caseId to null end-to-end"`テストから、`POST /api/events`でのイベント作成・`GET /api/events`でのアサーション・`hardDelete("events", eventIds)`を削除し、タスクの`caseId`解除のみを検証するテストに整理する(タイトルも「Task caseId」のみに修正)
+  - 同ファイルの`"a server-side exception logs the stack trace..."`テスト(Requirement 10.3, 10.5、ログ相関の検証が目的で`/api/events`固有の挙動を検証するものではない)が呼び出す`DELETE /api/events/${randomUUID()}`を、同じく`HttpError`をthrowして404を返す既存エンドポイント`DELETE /api/cases/${randomUUID()}`に置き換える。`accessLine`のパスプレフィックス判定(`/api/events/`)も`/api/cases/`に合わせて修正する
+  - 観測可能な完了状態: `validation.integration.test.ts`がgreenになり、バックエンドの全テストスイート(`npx vitest run --no-file-parallelism`)がEvent関連の失敗なしで完走する
   - _Requirements: 7.1_
 
 - [ ] 2. フロントエンド: 非タスクイベント機能の廃止

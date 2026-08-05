@@ -28,9 +28,6 @@ describe("physical schema (task 1.3)", () => {
     const childTask = await prisma.task.create({
       data: { title: "child", priority: "medium", parentTaskId: parentTask.id },
     });
-    const event = await prisma.event.create({
-      data: { title: "kickoff", occursAt: new Date("2026-08-01T09:00:00Z"), caseId: caseEntity.id },
-    });
     const template = await prisma.recurringTaskTemplate.create({
       data: {
         title: "weekly report",
@@ -47,11 +44,9 @@ describe("physical schema (task 1.3)", () => {
 
     expect(user.id).toBeTruthy();
     expect(childTask.parentTaskId).toBe(parentTask.id);
-    expect(event.caseId).toBe(caseEntity.id);
     expect(template.kind).toBe("fixed_interval");
     expect(holiday.source).toBe("manual");
 
-    await prisma.event.delete({ where: { id: event.id } });
     await prisma.task.delete({ where: { id: childTask.id } });
     await prisma.task.delete({ where: { id: parentTask.id } });
     await prisma.recurringTaskTemplate.delete({ where: { id: template.id } });
