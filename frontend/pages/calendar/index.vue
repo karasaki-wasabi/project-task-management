@@ -1,11 +1,9 @@
 <!--
-  Calendar page (task 4.1, design.md "Components and Interfaces >
+  Calendar page (tasks 4.1-4.3, design.md "Components and Interfaces >
   Frontend/calendar > CalendarPage", Requirements 1.1, 1.2, 1.3, 2.1, 2.2,
-  2.3, 2.4, 2.5). This task is scoped strictly to the month grid and task
-  deadline display — no case period bars (task 4.2), no month
-  prev/next navigation UI or assignee filter (task 4.3), no task/case
-  detail modals (task 4.4). `year`/`month` are plain refs a later task
-  wires buttons to; there is no UI to change them yet.
+  2.3, 2.4, 2.5, 4.1, 4.2, 4.3, 5.1, 5.2, 5.3). Task 4.3 adds month
+  navigation (prev/next/today) and assignee filtering — no task/case
+  detail modals yet (task 4.4).
 
   Month grid generation and per-day task marker truncation are pure
   functions reused from shared/DatePicker.helpers.ts and this page's own
@@ -18,6 +16,18 @@
   DatePicker.vue, this page has no concept of a single "selected date" to
   highlight (design.md: this isn't a date picker), only "today".
 
+  Requirement 4.1-4.3 / design.md State Management: month navigation and
+  assignee filtering both re-trigger `listTasks({ assigneeUserId })`
+  (`watch([year, month, assigneeUserId], loadTasks)`), following the same
+  `watch(...) -> load()` pattern as tasks/index.vue's AssigneeFilter
+  integration. Cases are fetched once at mount and NOT re-fetched on month
+  navigation or assignee change: `listCases()` has no filter param
+  (confirmed unfiltered, task 4.2) and Requirement 5.3 requires case bars
+  to always show all cases regardless of assignee selection;
+  `caseSegmentsByDate` (task 4.2) already re-clips the already-fetched
+  case list against `monthGrid` on every month change, so no network
+  refetch is needed for cases to react to month navigation.
+
   Visual language follows kanban/cases: slate/primary palette, ring-1 card
   chrome, StatusBadge/PriorityBadge pills reused as-is (design.md Boundary
   Commitments — their internal implementation is out of this spec's
@@ -25,23 +35,28 @@
 -->
 <script setup lang="ts">
 import { computeTodayIso, generateMonthGrid, weekdayKanji, type DateCell } from "~/components/shared/DatePicker.helpers";
-import { buildCaseSegments, buildTaskMarkersByDate, truncateDayMarkers, type CaseSegmentPosition, type CaseSegmentView } from "./index.helpers";
+import { buildCaseSegments, buildTaskMarkersByDate, shiftMonth, truncateDayMarkers, type CaseSegmentPosition, type CaseSegmentView } from "./index.helpers";
 
 const api = useApiClient();
 
 const now = new Date();
 const todayIso = computeTodayIso(now);
+const todayYear = now.getFullYear();
+const todayMonth = now.getMonth() + 1; // 1-indexed, matches generateMonthGrid
 
-// Requirement 4.1-4.3 (month navigation) is task 4.3's scope — these are
-// plain refs, defaulted to the current year/month, with no UI to change
-// them yet.
-const year = ref(now.getFullYear());
-const month = ref(now.getMonth() + 1); // 1-indexed, matches generateMonthGrid
+// Requirement 4.1-4.3: displayed year/month, moved by shiftMonth via the
+// prev/next/today controls below.
+const year = ref(todayYear);
+const month = ref(todayMonth);
 
 const tasks = ref<Task[]>([]);
 const cases = ref<Case[]>([]);
 const loaded = ref(false);
 const error = ref<string | null>(null);
+
+// Requirement 5.1, 5.2: single-select assignee filter, "" (AssigneeFilter's
+// empty-string convention) means "すべて" / no filter.
+const assigneeUserId = ref("");
 
 const weekdayColumns = [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
   dayOfWeek,
@@ -111,16 +126,52 @@ function cellDayClass(cell: DateCell): string {
   return "text-slate-700";
 }
 
+// Requirement 5.1, 5.2: server-side assignee filter, following the same
+// `assigneeUserId.value || undefined` convention as tasks/index.vue and
+// kanban/index.vue. Does not touch `cases` (Requirement 5.3 — case bars are
+// always unfiltered, and listCases has no filter param, task 4.2).
+async function loadTasks() {
+  error.value = null;
+  try {
+    tasks.value = await api.listTasks({ assigneeUserId: assigneeUserId.value || undefined });
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  }
+}
+
 async function load() {
   error.value = null;
   try {
-    [tasks.value, cases.value] = await Promise.all([api.listTasks(), api.listCases()]);
+    [tasks.value, cases.value] = await Promise.all([
+      api.listTasks({ assigneeUserId: assigneeUserId.value || undefined }),
+      api.listCases(),
+    ]);
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
     loaded.value = true;
   }
 }
+
+// Requirement 4.1, 4.2: next/prev month via shiftMonth (task 3.1).
+function goToNextMonth() {
+  ({ year: year.value, month: month.value } = shiftMonth(year.value, month.value, 1));
+}
+function goToPreviousMonth() {
+  ({ year: year.value, month: month.value } = shiftMonth(year.value, month.value, -1));
+}
+// Requirement 4.3: back to the current real-world month.
+function goToToday() {
+  year.value = todayYear;
+  month.value = todayMonth;
+}
+
+// Requirement 4.1-4.3, 5.1, 5.2, design.md State Management: month
+// navigation and assignee-filter changes both re-fetch tasks via
+// `loadTasks` (server-side `assigneeUserId` filter); cases are fetched only
+// once at mount (see file header comment for why month navigation doesn't
+// need a cases re-fetch).
+watch([year, month, assigneeUserId], loadTasks);
 
 onMounted(load);
 </script>
@@ -129,7 +180,37 @@ onMounted(load);
   <div class="space-y-5">
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
       <h1 class="text-xl font-semibold tracking-tight text-slate-900">カレンダー</h1>
-      <span class="text-sm font-medium tabular-nums text-slate-700">{{ monthLabel }}</span>
+
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1.5">
+          <button
+            type="button"
+            class="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            aria-label="前月"
+            @click="goToPreviousMonth"
+          >
+            &lt;
+          </button>
+          <span class="min-w-20 text-center text-sm font-medium tabular-nums text-slate-700">{{ monthLabel }}</span>
+          <button
+            type="button"
+            class="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            aria-label="次月"
+            @click="goToNextMonth"
+          >
+            &gt;
+          </button>
+          <button
+            type="button"
+            class="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            @click="goToToday"
+          >
+            今月
+          </button>
+        </div>
+
+        <AssigneeFilter v-model="assigneeUserId" />
+      </div>
     </div>
 
     <ErrorAlert v-if="error" :message="error" />
