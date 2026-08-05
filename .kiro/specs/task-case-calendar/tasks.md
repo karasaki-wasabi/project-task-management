@@ -42,7 +42,7 @@
   - _Requirements: 7.1, 7.2_
   - _Boundary: useApiClient, events page, e2e_
 
-- [ ] 2.2 (P) ダッシュボードの「直近のイベント」セクション削除
+- [x] 2.2 (P) ダッシュボードの「直近のイベント」セクション削除
   - `frontend/pages/index.vue`から`upcomingEvents`関連の状態・テンプレートを削除する
   - `frontend/e2e/dashboard.spec.ts`から`/events`へのイベント登録手順と「直近のイベント」見出し・空状態文言のアサーションを削除し、案件パネルの検証のみ残す
   - 観測可能な完了状態: ダッシュボード画面に非タスクイベントに関する表示セクションが存在せず、`dashboard.spec.ts`が`/events`に依存せずgreenになる
