@@ -109,7 +109,7 @@
   - _Requirements: 7.2_
   - _Depends: 2.1, 4.4_
 
-- [ ] 5.2 product.mdのCore Capabilities更新
+- [x] 5.2 product.mdのCore Capabilities更新
   - `.kiro/steering/product.md`から非タスクイベントの記述を除去し、カレンダー機能(タスク期限日・案件期間の月表示)の記述に更新する
   - 観測可能な完了状態: `product.md`に非タスクイベントの記載がなく、カレンダー機能の記載がある
   - _Requirements: 7.1_
