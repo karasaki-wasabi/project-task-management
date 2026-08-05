@@ -24,6 +24,14 @@ import type {
   Task,
 } from "./recurrence.types.js";
 
+// design.md RecurrenceService Implementation Notes: onCaseCreated/
+// onCaseEndDateChanged both dereference `endDate` internally, and
+// design.md's Boundary Commitments guarantee case.service.ts only invokes
+// them after narrowing a case's endDate to non-null — this local type
+// captures that guarantee at the type level so the (unchanged) function
+// bodies below type-check as always operating on a present endDate.
+type CaseWithEndDate = Omit<Case, "endDate"> & { endDate: Date };
+
 function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
 }
@@ -112,7 +120,7 @@ export const recurrenceService = {
 
   // Requirement 5.2, 5.8: one instance per active case_relative
   // template, offset from the case's endDate.
-  async onCaseCreated(caseEntity: Case, requestId: string = randomUUID()): Promise<Task[]> {
+  async onCaseCreated(caseEntity: CaseWithEndDate, requestId: string = randomUUID()): Promise<Task[]> {
     const templates = await recurrenceRepository.listActiveByKind("case_relative");
     const created: Task[] = [];
 
@@ -133,7 +141,7 @@ export const recurrenceService = {
   // auto-generated instance for each active case_relative template
   // linked to this case; completed instances and templates with no
   // existing instance yet are left untouched (design.md Postconditions).
-  async onCaseEndDateChanged(caseEntity: Case): Promise<Task[]> {
+  async onCaseEndDateChanged(caseEntity: CaseWithEndDate): Promise<Task[]> {
     const templates = await recurrenceRepository.listActiveByKind("case_relative");
     const updated: Task[] = [];
 

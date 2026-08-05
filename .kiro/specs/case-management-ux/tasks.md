@@ -241,12 +241,12 @@
   - _Requirements: 6.3_
   - _Boundary: CaseService_
 
-- [ ] 13.4 recurrence呼び出しの終了日状態遷移分岐
-  - `case.service.ts`の`create`/`update`で、終了日の状態遷移に応じて`recurrenceService`の呼び出しを分岐する: 作成時に終了日未設定なら呼ばない、更新で「未設定→値あり」なら`onCaseCreated`相当の新規生成を呼ぶ、「値あり→別の値」なら`onCaseEndDateChanged`を呼ぶ、「値あり→未設定」または終了日を更新しない場合は呼ばない
-  - 観測可能な完了状態: 単体テストで、終了日未設定での作成時にrecurrenceが呼ばれないこと、後から終了日を設定すると案件連動テンプレートのタスクが新規生成されることを確認できる
+- [x] 13.4 recurrence呼び出しの終了日状態遷移分岐
+  - `case.service.ts`の`create`/`update`で、終了日の状態遷移に応じて`recurrenceService`の呼び出しを分岐する: 作成時に終了日未設定なら呼ばない、更新で「未設定→値あり」なら`onCaseCreated`相当の新規生成を呼ぶ、「値あり→別の値」なら`onCaseEndDateChanged`を呼ぶ、「値あり→未設定」または終了日を更新しない場合は呼ばない。呼び出し元での`endDate !== null`の絞り込みは呼び出し先の型検査には伝播しないため、`recurrence.service.ts`の`onCaseCreated`/`onCaseEndDateChanged`の引数型を`Case`から`endDate`が`Date`であることを保証する型(例: `Omit<Case, "endDate"> & { endDate: Date }`)に変更する(生成ロジック自体は変更しない、型シグネチャのみの訂正。design.md RecurrenceService Implementation Notes参照)
+  - 観測可能な完了状態: 単体テストで、終了日未設定での作成時にrecurrenceが呼ばれないこと、後から終了日を設定すると案件連動テンプレートのタスクが新規生成されることを確認できる。`npx tsc --noEmit`がバックエンド全体でエラーなく通る
   - _Depends: 13.1_
   - _Requirements: 2.4, 5.3_
-  - _Boundary: CaseService_
+  - _Boundary: CaseService, RecurrenceService(引数型のみ)_
 
 - [ ] 14. Integration: フォームへのDatePicker組み込みと必須制約の撤廃
 - [ ] 14.1 (P) CaseFormModalの開始日・終了日をDatePickerに置き換え

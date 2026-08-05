@@ -43,8 +43,17 @@ export const caseService = {
     // design.md CaseService Dependencies: synchronous call, no try/catch —
     // if RecurrenceService throws, the Case row remains created and create()
     // as a whole ends in that exception, preserving delivery.service.ts's
-    // existing implicit behavior (not "improved" here).
-    await recurrenceService.onCaseCreated(caseEntity, requestId);
+    // existing implicit behavior (not "improved" here). Task 13.4: endDate
+    // is now optional (task 13.1) — per the Boundary Context, a
+    // case_relative template must not generate anything until the case has
+    // an endDate at all, so skip the call entirely when it's still unset.
+    // The `!== null` check also lets TS narrow caseEntity.endDate to Date
+    // for this call, without touching RecurrenceService's own Date (not
+    // Date | null) parameter typing.
+    if (caseEntity.endDate !== null) {
+      const endDate = caseEntity.endDate;
+      await recurrenceService.onCaseCreated({ ...caseEntity, endDate }, requestId);
+    }
     return caseEntity;
   },
 
@@ -85,15 +94,30 @@ export const caseService = {
       throw error;
     }
 
-    // Requirement 5.4: only recompute when endDate was actually part of
-    // this update and actually changed — same synchronous-await, no
-    // try/catch pattern as create(). Both sides may now be null, so compare
-    // via a null-tolerant timestamp rather than assuming Date.
-    const endDateChanged =
-      input.endDate !== undefined &&
-      (input.endDate?.getTime() ?? null) !== (current.endDate?.getTime() ?? null);
-    if (endDateChanged) {
-      await recurrenceService.onCaseEndDateChanged(updated);
+    // Task 13.4 (Requirement 5.4, design.md CaseService Dependencies): with
+    // endDate now optional, the "recompute on endDate change" call from
+    // before task 13.1 is really a 4-way state transition. Only look at
+    // this at all when endDate was actually part of this update's input —
+    // same synchronous-await, no try/catch pattern as create().
+    if (input.endDate !== undefined) {
+      if (updated.endDate === null) {
+        // 「値あり→未設定」(or 未設定→未設定, which can't reach here since
+        // that would mean current.endDate was already null and stayed
+        // null — not a "change" needing any call either way): no
+        // generation, no recalculation.
+      } else if (current.endDate === null) {
+        // 「未設定→値あり」: first-time generation, via the very same
+        // function create() uses (RecurrenceService Implementation Notes:
+        // onCaseCreated is intentionally reused for this case). TS narrows
+        // updated.endDate to Date in this branch from the outer check.
+        const endDate = updated.endDate;
+        await recurrenceService.onCaseCreated({ ...updated, endDate }, undefined);
+      } else if (current.endDate.getTime() !== updated.endDate.getTime()) {
+        // 「値あり→別の値」: existing recalculation behavior.
+        const endDate = updated.endDate;
+        await recurrenceService.onCaseEndDateChanged({ ...updated, endDate });
+      }
+      // else: unchanged value — no call.
     }
 
     return updated;

@@ -372,6 +372,79 @@ describe("caseService <-> RecurrenceService wiring (task 3.2)", () => {
     await hardDelete("recurring_task_templates", [template.id]);
   });
 
+  // Task 13.4 (Requirement 2.4, 5.3; design.md CaseService Dependencies):
+  // endDate unset at create time means the case_relative template must not
+  // generate anything at all yet — no call to onCaseCreated.
+  it("create() with no endDate does not trigger onCaseCreated: no task instance is generated", async () => {
+    const template = await recurrenceService.registerTemplate({
+      title: "wired no-end-date doc",
+      priority: "low",
+      kind: "case_relative",
+      caseOffsetDays: 3,
+      nonBusinessDayPolicy: "as_is",
+    });
+
+    const created = await caseService.create({ name: "wired case without end date" });
+
+    const instances = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: created.id } });
+    expect(instances).toHaveLength(0);
+
+    await hardDelete("cases", [created.id]);
+    await hardDelete("recurring_task_templates", [template.id]);
+  });
+
+  // Task 13.4: 「未設定→値あり」transition on update() must run first-time
+  // generation via the same onCaseCreated function create() uses, even
+  // though the case was originally created without an endDate at all.
+  it("update() setting endDate for the first time (null->value) triggers first-time generation via onCaseCreated", async () => {
+    const template = await recurrenceService.registerTemplate({
+      title: "wired first-time-set doc",
+      priority: "medium",
+      kind: "case_relative",
+      caseOffsetDays: 4,
+      nonBusinessDayPolicy: "as_is",
+    });
+    const created = await caseService.create({ name: "wired first-time-set" });
+    const beforeUpdate = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: created.id } });
+    expect(beforeUpdate).toHaveLength(0);
+
+    await caseService.update(created.id, { endDate: new Date("2036-10-20") });
+
+    const instances = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: created.id } });
+    expect(instances).toHaveLength(1);
+    expect(instances[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2036-10-16");
+
+    await hardDelete("tasks", [instances[0].id]);
+    await hardDelete("cases", [created.id]);
+    await hardDelete("recurring_task_templates", [template.id]);
+  });
+
+  // Task 13.4: 「値あり→未設定」transition must call neither recurrence
+  // function — no crash, and any already-generated instance is left
+  // exactly as it was (no recalculation, no deletion).
+  it("update() clearing endDate to null calls neither recurrence function: existing instance is left untouched", async () => {
+    const template = await recurrenceService.registerTemplate({
+      title: "wired clear-to-null doc",
+      priority: "low",
+      kind: "case_relative",
+      caseOffsetDays: 2,
+      nonBusinessDayPolicy: "as_is",
+    });
+    const created = await caseService.create({ name: "wired clear-to-null", endDate: new Date("2036-11-10") });
+    const [instance] = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: created.id } });
+    expect(instance.scheduledDate?.toISOString().slice(0, 10)).toBe("2036-11-08");
+
+    const updated = await caseService.update(created.id, { endDate: null });
+    expect(updated.endDate).toBeNull();
+
+    const unchanged = await db.task.findUnique({ where: { id: instance.id } });
+    expect(unchanged?.scheduledDate?.toISOString().slice(0, 10)).toBe("2036-11-08");
+
+    await hardDelete("tasks", [instance.id]);
+    await hardDelete("cases", [created.id]);
+    await hardDelete("recurring_task_templates", [template.id]);
+  });
+
   it("update() without an endDate change does not call onCaseEndDateChanged (instance untouched)", async () => {
     const template = await recurrenceService.registerTemplate({
       title: "wired untouched doc",

@@ -400,14 +400,18 @@ interface CaseService {
 
 ##### Service Interface
 ```typescript
+type CaseWithEndDate = Omit<Case, "endDate"> & { endDate: Date };
+
 interface RecurrenceService {
-  onCaseCreated(caseEntity: Case, requestId?: string): Promise<Task[]>;
-  onCaseEndDateChanged(caseEntity: Case): Promise<Task[]>;
+  onCaseCreated(caseEntity: CaseWithEndDate, requestId?: string): Promise<Task[]>;
+  onCaseEndDateChanged(caseEntity: CaseWithEndDate): Promise<Task[]>;
 }
 ```
 
 **Implementation Notes**
-- Integration: `CaseService.create`/`CaseService.update`から、終了日の状態遷移に応じて`onCaseCreated`または`onCaseEndDateChanged`を呼び出す(分岐ロジックはCaseService側が持ち、`recurrence.service.ts`自体は変更しない — CaseServiceの項参照)。`onCaseCreated`は「案件作成時」だけでなく「編集で終了日を初めて設定したとき」にも同じ関数がそのまま呼ばれる想定(関数名・シグネチャの変更は不要、呼び出し契約は既存と同一)
+- Integration: `CaseService.create`/`CaseService.update`から、終了日の状態遷移に応じて`onCaseCreated`または`onCaseEndDateChanged`を呼び出す(分岐ロジックはCaseService側が持つ — CaseServiceの項参照)。`onCaseCreated`は「案件作成時」だけでなく「編集で終了日を初めて設定したとき」にも同じ関数がそのまま呼ばれる想定(関数名・呼び出し契約は既存と同一)
+- Integration(型シグネチャの訂正、endDate任意化対応時に判明): `Case.endDate`が`Date | null`になったことで、`onCaseCreated`/`onCaseEndDateChanged`の引数型`Case`のままでは、呼び出し元(CaseService)がランタイムで`endDate !== null`を検証していても、TypeScriptは関数本体を「宣言されたパラメータ型」に対して型検査するため`formatDateOnly(caseEntity.endDate)`がコンパイルエラーになる(呼び出し元での絞り込みは呼び出し先の型検査には伝播しない)。この問題は生成ロジック自体には無関係な型シグネチャの整合の話であり、Out of Boundaryが指す「間隔計算・非営業日ポリシー判定などの生成ロジック」には抵触しない。対応として、`onCaseCreated`/`onCaseEndDateChanged`の引数型を`Case`から「`endDate`が`Date`(non-null)であることを保証する型」(例: `Omit<Case, "endDate"> & { endDate: Date }`)に変更する
+- 訂正(上記の型変更を実装した際に判明): `caseEntity.endDate !== null`によるプロパティレベルの絞り込みは、その後の`caseEntity.endDate`単体の読み取りしか`Date`に絞り込まない。絞り込み後も`caseEntity`(オブジェクト全体)を関数の引数としてそのまま渡す場合、`caseEntity`自体の型は`Case`(`endDate: Date | null`)のままであり、上記の新しい引数型を満たせずコンパイルエラーになる。したがって、CaseService側の呼び出し箇所でも、絞り込んだ`endDate`をローカル変数に束縛し、それを使って新しいオブジェクト(スプレッドで`{ ...caseEntity, endDate }`のように再構築)を渡す必要がある。これもキャスト(`as`)や非nullアサーション(`!`)を使わない、コンパイル時の整合性を取るだけの変更であり、生成ロジック・呼び出し契約は変えない
 - Risks: `RecurrenceKind`列挙値のリネームはMySQLの`ENUM`カラム定義変更を伴う(Migration Strategy参照)。既存データに`delivery_relative`の行がある場合、リネームと同時に値も更新する必要がある
 
 ### Frontend / cases
