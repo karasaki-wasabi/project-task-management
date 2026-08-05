@@ -180,7 +180,7 @@
   - 観測可能な完了状態: `npx prisma validate`が通り、生成されたPrisma Clientの`Case`型で`endDate`が`Date | null`になる
   - _Requirements: 2.4, 5.3_
 
-- [ ] 10.2 既存マイグレーションの削除とスキーマの再生成・適用
+- [x] 10.2 既存マイグレーションの削除とスキーマの再生成・適用
   - `backend/src/prisma/migrations/`配下の既存マイグレーション(改称作業で生成済みの`<timestamp>_init_domain_schema`)を削除し、開発DBのデータをリセットした上で、`endDate`のnullable化を反映した単一の初期マイグレーションを再生成・適用する
   - `non_business_days.date_active_key`のSTORED GENERATED COLUMN+UNIQUE INDEXをmigration.sqlへ再度手動追記し、`prisma migrate deploy`で適用する(タスク1.2のImplementation Notes参照)
   - 観測可能な完了状態: `prisma migrate status`が最新であることを示し、実DBの`cases.end_date`列がNULL許容になっており、`non_business_days`の生成列+UNIQUE INDEXが維持されている

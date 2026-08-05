@@ -15,7 +15,7 @@ CREATE TABLE `cases` (
     `id` VARCHAR(191) NOT NULL,
     `name` VARCHAR(191) NOT NULL,
     `start_date` DATE NULL,
-    `end_date` DATETIME(3) NOT NULL,
+    `end_date` DATETIME(3) NULL,
     `is_completed` BOOLEAN NOT NULL DEFAULT false,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
