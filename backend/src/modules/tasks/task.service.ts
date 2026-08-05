@@ -28,7 +28,7 @@ export const tasksService = {
       return ok(task);
     } catch (error) {
       if (isForeignKeyViolation(error)) {
-        return err({ type: "validation_error", message: "deliveryId, assigneeUserId, or parentTaskId does not exist" });
+        return err({ type: "validation_error", message: "caseId, assigneeUserId, or parentTaskId does not exist" });
       }
       throw error;
     }
@@ -96,7 +96,7 @@ export const tasksService = {
     }
   },
 
-  // General field edit (title/priority/memo/deliveryId/isRequiredForDelivery/
+  // General field edit (title/priority/memo/caseId/isRequiredForCase/
   // assigneeUserId), distinct from the kanban-move-specific
   // updateDevelopmentStage above: an explicit edit always overwrites
   // assigneeUserId, it doesn't defer to "only if currently unassigned".
@@ -118,17 +118,17 @@ export const tasksService = {
     if (input.memo !== undefined) data.memo = input.memo;
     if (input.assigneeUserId !== undefined) data.assigneeUserId = input.assigneeUserId;
 
-    // design.md TasksService Implementation Notes: "deliveryId未指定時は
-    // isRequiredForDeliveryをfalse固定にする" — applied here on the merged
-    // (post-update) deliveryId, same rule as create.
-    if (input.deliveryId !== undefined) {
-      data.deliveryId = input.deliveryId;
-      data.isRequiredForDelivery = input.deliveryId === null ? false : (input.isRequiredForDelivery ?? current.isRequiredForDelivery);
-    } else if (input.isRequiredForDelivery !== undefined) {
-      if (current.deliveryId === null) {
-        return err({ type: "validation_error", message: "isRequiredForDelivery requires a deliveryId" });
+    // design.md TasksService Implementation Notes: "caseId未指定時は
+    // isRequiredForCaseをfalse固定にする" — applied here on the merged
+    // (post-update) caseId, same rule as create.
+    if (input.caseId !== undefined) {
+      data.caseId = input.caseId;
+      data.isRequiredForCase = input.caseId === null ? false : (input.isRequiredForCase ?? current.isRequiredForCase);
+    } else if (input.isRequiredForCase !== undefined) {
+      if (current.caseId === null) {
+        return err({ type: "validation_error", message: "isRequiredForCase requires a caseId" });
       }
-      data.isRequiredForDelivery = input.isRequiredForDelivery;
+      data.isRequiredForCase = input.isRequiredForCase;
     }
 
     try {
@@ -139,7 +139,7 @@ export const tasksService = {
         return err({ type: "not_found", taskId });
       }
       if (isForeignKeyViolation(error)) {
-        return err({ type: "validation_error", message: "deliveryId or assigneeUserId does not exist" });
+        return err({ type: "validation_error", message: "caseId or assigneeUserId does not exist" });
       }
       throw error;
     }
@@ -161,7 +161,7 @@ export const tasksService = {
       return ok(child);
     } catch (error) {
       if (isForeignKeyViolation(error)) {
-        return err({ type: "validation_error", message: "deliveryId or assigneeUserId does not exist" });
+        return err({ type: "validation_error", message: "caseId or assigneeUserId does not exist" });
       }
       throw error;
     }
@@ -183,11 +183,11 @@ export const tasksService = {
     }
 
     // design.md TasksService Postconditions: parts inherit the original
-    // task's delivery link and priority, become its children.
+    // task's case link and priority, become its children.
     const inheritedParts = parts.map((part) => ({
       ...part,
       title: part.title.trim(),
-      deliveryId: original.deliveryId ?? undefined,
+      caseId: original.caseId ?? undefined,
       priority: original.priority,
       parentTaskId: taskId,
     }));

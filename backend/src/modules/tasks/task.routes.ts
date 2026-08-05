@@ -15,8 +15,8 @@ const createTaskBodySchema = z.object({
   title: z.string(),
   priority,
   memo: z.string().optional(),
-  deliveryId: z.string().optional(),
-  isRequiredForDelivery: z.boolean().optional(),
+  caseId: z.string().optional(),
+  isRequiredForCase: z.boolean().optional(),
   assigneeUserId: z.string().optional(),
   parentTaskId: z.string().optional(),
 });
@@ -26,8 +26,8 @@ const updateTaskBodySchema = z
     title: z.string().optional(),
     priority: priority.optional(),
     memo: z.string().nullable().optional(),
-    deliveryId: z.string().nullable().optional(),
-    isRequiredForDelivery: z.boolean().optional(),
+    caseId: z.string().nullable().optional(),
+    isRequiredForCase: z.boolean().optional(),
     assigneeUserId: z.string().nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, { message: "at least one field must be provided" });
@@ -38,8 +38,12 @@ const updateDevelopmentStageBodySchema = z.object({
 const splitBodySchema = z.object({ parts: z.array(createTaskBodySchema) });
 const taskIdParamsSchema = z.object({ id: z.string() });
 const listQuerySchema = z.object({
-  deliveryId: z.string().optional(),
+  caseId: z.string().optional(),
   assigneeUserId: z.string().optional(),
+  // design.md "Backend/tasks > TasksService.list 未割当フィルタ拡張":
+  // z.literal("true") rather than z.coerce.boolean(), since z.coerce.boolean()
+  // treats the string "false" as truthy.
+  unassignedCase: z.literal("true").optional(),
 });
 
 function parseOrBadRequest<T>(schema: z.ZodType<T>, data: unknown): T {
@@ -160,6 +164,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/tasks", async (request) => {
     const query = parseOrBadRequest(listQuerySchema, request.query);
-    return tasksService.list(query);
+    return tasksService.list({
+      caseId: query.caseId,
+      assigneeUserId: query.assigneeUserId,
+      unassignedCase: query.unassignedCase === "true",
+    });
   });
 }

@@ -40,15 +40,15 @@ function buildTestApp() {
   return { app, lines };
 }
 
-const createdDeliveryIds: string[] = [];
+const createdCaseIds: string[] = [];
 
 afterEach(async () => {
-  if (createdDeliveryIds.length > 0) {
+  if (createdCaseIds.length > 0) {
     await db.$executeRawUnsafe(
-      `DELETE FROM deliveries WHERE id IN (${createdDeliveryIds.map(() => "?").join(",")})`,
-      ...createdDeliveryIds,
+      `DELETE FROM cases WHERE id IN (${createdCaseIds.map(() => "?").join(",")})`,
+      ...createdCaseIds,
     );
-    createdDeliveryIds.length = 0;
+    createdCaseIds.length = 0;
   }
   await db.$disconnect();
 });
@@ -57,7 +57,7 @@ describe("app.ts route registration (task 10.3)", () => {
   it.each([
     ["/api/users", "GET"],
     ["/api/tasks", "GET"],
-    ["/api/deliveries", "GET"],
+    ["/api/cases", "GET"],
     ["/api/events", "GET"],
     ["/api/holidays", "GET"],
     ["/api/throughput?periodType=week&rangeCount=1", "GET"],
@@ -121,15 +121,15 @@ describe("app.ts route registration (task 10.3)", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: "/api/deliveries",
-      payload: { name: `route-check-${randomUUID()}`, dueDate: "2038-01-01T00:00:00.000Z" },
+      url: "/api/cases",
+      payload: { name: `route-check-${randomUUID()}`, endDate: "2038-01-01T00:00:00.000Z" },
     });
 
     expect(response.statusCode).toBe(201);
-    createdDeliveryIds.push(response.json().id);
+    createdCaseIds.push(response.json().id);
 
-    const accessLine = lines.find((l) => l.path === "/api/deliveries" && l.statusCode === 201);
-    const businessLine = lines.find((l) => l.event === "delivery.created");
+    const accessLine = lines.find((l) => l.path === "/api/cases" && l.statusCode === 201);
+    const businessLine = lines.find((l) => l.event === "case.created");
     expect(accessLine).toBeTruthy();
     expect(businessLine).toBeTruthy();
     expect(businessLine?.requestId).toBe(accessLine?.requestId);

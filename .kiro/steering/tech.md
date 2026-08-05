@@ -27,6 +27,7 @@ Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロント
 ### Type Safety
 - `strict: true`。`any`を避け、Prismaが生成する型(`import type { Task as PrismaTask } from "@prisma/client"`)をドメイン型のベースにする
 - バックエンドの各モジュールは`<name>.types.ts`にドメイン型・入力型・エラー型を集約し、`service.ts`/`repository.ts`/`routes.ts`から共有する
+- プロパティレベルの絞り込み(例: `obj.prop !== null`)は、その後の`obj.prop`の読み取りだけを絞り込み、`obj`自体を関数の引数として渡した際にその関数のパラメータ型には伝播しない。呼び出し元で絞り込み済みであっても、呼び出し先のパラメータ型が絞り込み前の広い型(`prop: T | null`)のままだと、呼び出し先の関数本体で型エラーになる。`as`/`!`によるキャストで黙らせるのではなく、`Omit<T, "prop"> & { prop: NonNullable<T["prop"]> }`のように絞り込み後の型を明示的に定義し、呼び出し元では絞り込んだ値を保持する`const`を用意した上で`{ ...obj, prop }`(スプレッドの後に上書きの形で置く)として渡すこと
 
 ### Code Quality
 - Fastifyルートでのリクエストボディ/クエリ/パラメータ検証はZodスキーマ + `safeParse`で行い、失敗時は`badRequest(...)`(`shared/http-errors.ts`)に変換する([[error-handling]]参照)

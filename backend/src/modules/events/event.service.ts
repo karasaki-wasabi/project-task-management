@@ -32,7 +32,7 @@ export const eventsService = {
       return await eventRepository.create({ ...input, title });
     } catch (error) {
       if (isForeignKeyViolation(error)) {
-        throw badRequest("deliveryId or assigneeUserId does not exist");
+        throw badRequest("caseId or assigneeUserId does not exist");
       }
       throw error;
     }

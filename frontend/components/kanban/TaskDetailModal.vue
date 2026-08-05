@@ -28,12 +28,16 @@
   rather than only updating on save.
 
   Saving splits into two API calls: `PATCH /api/tasks/:id` (title/priority/
-  memo/assignee — task-delivery-management task 3.3) always runs, and
-  `PATCH /api/tasks/:id/development-stage` only runs when the stage field
-  actually changed (that endpoint is otherwise unrelated to this edit and
-  has its own assignee-preserving semantics we don't want to invoke
-  needlessly). `assigneeUserId` is never passed to the stage-update call —
-  the general update already applied it.
+  memo/assignee/caseId/isRequiredForCase — task-delivery-management task 3.3,
+  case-management-ux task 7) always runs, and `PATCH /api/tasks/:id/
+  development-stage` only runs when the stage field actually changed (that
+  endpoint is otherwise unrelated to this edit and has its own
+  assignee-preserving semantics we don't want to invoke needlessly).
+  `assigneeUserId` is never passed to the stage-update call — the general
+  update already applied it. `caseId`/`isRequiredForCase` follow the same
+  single-generic-update pattern as the rest of that call (case-management-ux
+  design.md TaskDetailModal — 案件セクション追加 explicitly avoids a
+  separate call here, unlike the stage field).
 
   Delete requires an inline confirm step (`confirmingDelete`) rather than
   `window.confirm`, consistent with this app avoiding native browser
@@ -41,7 +45,7 @@
   via ErrorAlert, per .kiro/steering/error-handling.md.
 -->
 <script setup lang="ts">
-const props = defineProps<{ taskId: string | null; users: User[]; stages: DevelopmentStage[] }>();
+const props = defineProps<{ taskId: string | null; users: User[]; stages: DevelopmentStage[]; cases: Case[] }>();
 const emit = defineEmits<{
   close: [];
   saved: [task: Task];
@@ -63,9 +67,12 @@ const priority = ref<Priority>("medium");
 const memo = ref("");
 const assigneeUserId = ref("");
 const developmentStageId = ref("");
+const caseId = ref("");
+const isRequiredForCase = ref(false);
 
 const assigneeName = computed(() => props.users.find((u) => u.id === task.value?.assigneeUserId)?.name);
 const stageName = computed(() => props.stages.find((s) => s.id === task.value?.developmentStageId)?.name ?? "未設定");
+const caseName = computed(() => props.cases.find((c) => c.id === task.value?.caseId)?.name ?? "—");
 
 function resetForm(loaded: Task) {
   title.value = loaded.title;
@@ -73,7 +80,16 @@ function resetForm(loaded: Task) {
   memo.value = loaded.memo ?? "";
   assigneeUserId.value = loaded.assigneeUserId ?? "";
   developmentStageId.value = loaded.developmentStageId ?? "";
+  caseId.value = loaded.caseId ?? "";
+  isRequiredForCase.value = loaded.isRequiredForCase;
 }
+
+// Requirement 4.6: clearing the case selection resets the required toggle's
+// local UI state immediately, ahead of save — the backend independently
+// enforces this same rule regardless of what's sent.
+watch(caseId, (value) => {
+  if (!value) isRequiredForCase.value = false;
+});
 
 watch(
   () => props.taskId,
@@ -117,6 +133,8 @@ async function save() {
       priority: priority.value,
       memo: memo.value.trim().length > 0 ? memo.value : null,
       assigneeUserId: assigneeUserId.value || null,
+      caseId: caseId.value || null,
+      isRequiredForCase: isRequiredForCase.value,
     });
     if (developmentStageId.value !== (task.value.developmentStageId ?? "")) {
       updated = await api.updateTaskDevelopmentStage(props.taskId, developmentStageId.value || null);
@@ -164,6 +182,7 @@ async function confirmDelete() {
           <PriorityBadge :priority="task.priority" />
           <Badge tone="neutral" :label="`開発段階: ${stageName}`" />
           <Badge tone="neutral" :label="`担当者: ${assigneeName ?? '未設定'}`" />
+          <Badge tone="neutral" :label="`案件: ${caseName}${task.caseId && task.isRequiredForCase ? '(必須)' : ''}`" />
         </div>
 
         <div class="flex flex-col gap-1">
@@ -223,6 +242,42 @@ async function confirmDelete() {
               <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
             </select>
           </div>
+        </div>
+
+        <!-- 案件セクション: 優先度/開発段階/担当者のグリッドとは視覚的に分離
+             した枠線付きブロック(design.md TaskDetailModal — 案件セクション
+             追加、mockup 1g準拠)。 -->
+        <div class="flex flex-col gap-2 rounded-md border border-slate-200 p-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium text-slate-500" for="task-detail-case">案件</label>
+            <select
+              id="task-detail-case"
+              v-model="caseId"
+              class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">案件に紐づけない(未設定)</option>
+              <option v-for="c in cases" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
+          </div>
+
+          <label class="flex items-center gap-2 text-sm text-slate-700">
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="isRequiredForCase"
+              aria-label="この案件の必須タスクにする"
+              :disabled="!caseId"
+              class="toggle-switch relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              :class="isRequiredForCase ? 'bg-primary-600' : 'bg-slate-300'"
+              @click="isRequiredForCase = !isRequiredForCase"
+            >
+              <span
+                class="toggle-knob inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+                :class="isRequiredForCase ? 'translate-x-4' : 'translate-x-0.5'"
+              />
+            </button>
+            必須タスクにする
+          </label>
         </div>
 
         <div class="flex flex-col gap-1">

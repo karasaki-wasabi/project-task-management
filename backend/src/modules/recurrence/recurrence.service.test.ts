@@ -5,7 +5,7 @@
 // block (not just at the end of the happy path). This test suite shares one
 // real MySQL database across runs (no per-test transaction rollback), and a
 // `recurring_task_templates` row left behind by a failed assertion stays
-// `isActive=true` forever — `generateDueInstances`/`onDeliveryCreated` treat
+// `isActive=true` forever — `generateDueInstances`/`onCaseCreated` treat
 // *every* active template as in scope, so a single skipped cleanup
 // self-perpetuates into unrelated tests (and later full-suite runs)
 // generating unbounded extra instances against that leftover template. See
@@ -21,13 +21,13 @@ async function hardDelete(table: string, ids: string[]): Promise<void> {
   await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
-// Deletes in FK-safe order (tasks reference templates/deliveries, so they
+// Deletes in FK-safe order (tasks reference templates/cases, so they
 // must go first) regardless of which of these a given test happened to
 // create. Safe to call with empty arrays for anything unused.
-async function cleanup(ids: { taskIds?: string[]; templateIds?: string[]; deliveryIds?: string[]; nonBusinessDayIds?: string[] }): Promise<void> {
+async function cleanup(ids: { taskIds?: string[]; templateIds?: string[]; caseIds?: string[]; nonBusinessDayIds?: string[] }): Promise<void> {
   await hardDelete("tasks", ids.taskIds ?? []);
   await hardDelete("recurring_task_templates", ids.templateIds ?? []);
-  await hardDelete("deliveries", ids.deliveryIds ?? []);
+  await hardDelete("cases", ids.caseIds ?? []);
   await hardDelete("non_business_days", ids.nonBusinessDayIds ?? []);
 }
 
@@ -59,21 +59,21 @@ describe("recurrenceService.registerTemplate (task 9.1)", () => {
     }
   });
 
-  it("registers a delivery_relative template with an offset", async () => {
+  it("registers a case_relative template with an offset", async () => {
     const templateIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate({
         title: "estimate document",
         priority: "high",
-        kind: "delivery_relative",
-        deliveryOffsetDays: 3,
+        kind: "case_relative",
+        caseOffsetDays: 3,
         nonBusinessDayPolicy: "as_is",
       });
       templateIds.push(template.id);
 
-      expect(template.kind).toBe("delivery_relative");
-      expect(template.deliveryOffsetDays).toBe(3);
-      expect(template.boundDeliveryId).toBeNull();
+      expect(template.kind).toBe("case_relative");
+      expect(template.caseOffsetDays).toBe(3);
+      expect(template.boundCaseId).toBeNull();
     } finally {
       await cleanup({ templateIds });
     }
@@ -90,47 +90,47 @@ describe("recurrenceService.registerTemplate (task 9.1)", () => {
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("rejects a delivery_relative template missing deliveryOffsetDays", async () => {
+  it("rejects a case_relative template missing caseOffsetDays", async () => {
     await expect(
       recurrenceService.registerTemplate({
         title: "bad template",
         priority: "low",
-        kind: "delivery_relative",
+        kind: "case_relative",
         nonBusinessDayPolicy: "as_is",
       }),
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("rejects a negative deliveryOffsetDays", async () => {
+  it("rejects a negative caseOffsetDays", async () => {
     await expect(
       recurrenceService.registerTemplate({
         title: "bad template",
         priority: "low",
-        kind: "delivery_relative",
-        deliveryOffsetDays: -1,
+        kind: "case_relative",
+        caseOffsetDays: -1,
         nonBusinessDayPolicy: "as_is",
       }),
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("rejects a delivery_relative template that also sets boundDeliveryId (design.md Logical Data Model: boundDeliveryId is fixed_interval-only)", async () => {
-    const deliveryIds: string[] = [];
+  it("rejects a case_relative template that also sets boundCaseId (design.md Logical Data Model: boundCaseId is fixed_interval-only)", async () => {
+    const caseIds: string[] = [];
     try {
-      const delivery = await db.delivery.create({ data: { name: `d-${randomUUID()}`, dueDate: new Date() } });
-      deliveryIds.push(delivery.id);
+      const caseEntity = await db.case.create({ data: { name: `d-${randomUUID()}`, endDate: new Date() } });
+      caseIds.push(caseEntity.id);
 
       await expect(
         recurrenceService.registerTemplate({
           title: "bad template",
           priority: "low",
-          kind: "delivery_relative",
-          deliveryOffsetDays: 1,
-          boundDeliveryId: delivery.id,
+          kind: "case_relative",
+          caseOffsetDays: 1,
+          boundCaseId: caseEntity.id,
           nonBusinessDayPolicy: "as_is",
         }),
       ).rejects.toMatchObject({ statusCode: 400 });
     } finally {
-      await cleanup({ deliveryIds });
+      await cleanup({ caseIds });
     }
   });
 
@@ -227,7 +227,7 @@ describe("recurrenceService.stopTemplate / deleteTemplate / list (task 9.1)", ()
   });
 });
 
-// RED: generateDueInstances/onDeliveryCreated/onDeliveryDueDateChanged do
+// RED: generateDueInstances/onCaseCreated/onCaseEndDateChanged do
 // not exist yet (task 9.2, Requirements 5.1, 5.2, 5.5, 5.8, 5.9, 8.4-8.7).
 async function forceCreatedAt(templateId: string, createdAt: Date): Promise<void> {
   await db.$executeRawUnsafe(
@@ -429,149 +429,149 @@ describe("recurrenceService.generateDueInstances — fixed_interval (task 9.2)",
   });
 });
 
-describe("recurrenceService.onDeliveryCreated (task 9.2, Requirement 5.2)", () => {
-  it("creates one instance offset from the delivery's dueDate, copying defaultMemo", async () => {
+describe("recurrenceService.onCaseCreated (task 9.2, Requirement 5.2)", () => {
+  it("creates one instance offset from the case's endDate, copying defaultMemo", async () => {
     const templateIds: string[] = [];
-    const deliveryIds: string[] = [];
+    const caseIds: string[] = [];
     let taskIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate({
         title: "estimate doc",
         priority: "high",
-        kind: "delivery_relative",
-        deliveryOffsetDays: 3,
+        kind: "case_relative",
+        caseOffsetDays: 3,
         defaultMemo: "use the standard template",
         nonBusinessDayPolicy: "as_is",
       });
       templateIds.push(template.id);
-      const delivery = await db.delivery.create({ data: { name: "release", dueDate: new Date("2034-06-15") } });
-      deliveryIds.push(delivery.id);
+      const caseEntity = await db.case.create({ data: { name: "release", endDate: new Date("2034-06-15") } });
+      caseIds.push(caseEntity.id);
 
-      const created = await recurrenceService.onDeliveryCreated(delivery);
+      const created = await recurrenceService.onCaseCreated(caseEntity);
       taskIds = created.map((t) => t.id);
 
       expect(created).toHaveLength(1);
-      expect(created[0].deliveryId).toBe(delivery.id);
+      expect(created[0].caseId).toBe(caseEntity.id);
       expect(created[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2034-06-12");
       expect(created[0].memo).toBe("use the standard template");
     } finally {
-      await cleanup({ taskIds, deliveryIds, templateIds });
+      await cleanup({ taskIds, caseIds, templateIds });
     }
   });
 
-  it("is idempotent for the same delivery", async () => {
+  it("is idempotent for the same case", async () => {
     const templateIds: string[] = [];
-    const deliveryIds: string[] = [];
+    const caseIds: string[] = [];
     let taskIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate({
         title: "idempotent doc",
         priority: "low",
-        kind: "delivery_relative",
-        deliveryOffsetDays: 1,
+        kind: "case_relative",
+        caseOffsetDays: 1,
         nonBusinessDayPolicy: "as_is",
       });
       templateIds.push(template.id);
-      const delivery = await db.delivery.create({ data: { name: "release", dueDate: new Date("2034-06-20") } });
-      deliveryIds.push(delivery.id);
+      const caseEntity = await db.case.create({ data: { name: "release", endDate: new Date("2034-06-20") } });
+      caseIds.push(caseEntity.id);
 
-      await recurrenceService.onDeliveryCreated(delivery);
-      const second = await recurrenceService.onDeliveryCreated(delivery);
+      await recurrenceService.onCaseCreated(caseEntity);
+      const second = await recurrenceService.onCaseCreated(caseEntity);
 
       expect(second).toHaveLength(0);
-      const all = await db.task.findMany({ where: { sourceTemplateId: template.id, deliveryId: delivery.id } });
+      const all = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: caseEntity.id } });
       taskIds = all.map((t) => t.id);
       expect(all).toHaveLength(1);
     } finally {
-      await cleanup({ taskIds, deliveryIds, templateIds });
+      await cleanup({ taskIds, caseIds, templateIds });
     }
   });
 
-  it("ignores stopped (isActive=false) delivery_relative templates", async () => {
+  it("ignores stopped (isActive=false) case_relative templates", async () => {
     const templateIds: string[] = [];
-    const deliveryIds: string[] = [];
+    const caseIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate({
-        title: "stopped delivery template",
+        title: "stopped case template",
         priority: "low",
-        kind: "delivery_relative",
-        deliveryOffsetDays: 1,
+        kind: "case_relative",
+        caseOffsetDays: 1,
         nonBusinessDayPolicy: "as_is",
       });
       templateIds.push(template.id);
       await recurrenceService.stopTemplate(template.id);
-      const delivery = await db.delivery.create({ data: { name: "release", dueDate: new Date("2034-06-25") } });
-      deliveryIds.push(delivery.id);
+      const caseEntity = await db.case.create({ data: { name: "release", endDate: new Date("2034-06-25") } });
+      caseIds.push(caseEntity.id);
 
-      const created = await recurrenceService.onDeliveryCreated(delivery);
+      const created = await recurrenceService.onCaseCreated(caseEntity);
 
       expect(created.filter((t) => t.sourceTemplateId === template.id)).toHaveLength(0);
     } finally {
-      await cleanup({ deliveryIds, templateIds });
+      await cleanup({ caseIds, templateIds });
     }
   });
 });
 
-describe("recurrenceService.onDeliveryDueDateChanged (task 9.2, Requirement 5.4 core logic)", () => {
+describe("recurrenceService.onCaseEndDateChanged (task 9.2, Requirement 5.4 core logic)", () => {
   it("recomputes the scheduledDate of an existing incomplete instance in place (no duplicate row)", async () => {
     const templateIds: string[] = [];
-    const deliveryIds: string[] = [];
+    const caseIds: string[] = [];
     let taskIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate({
         title: "recalculable doc",
         priority: "low",
-        kind: "delivery_relative",
-        deliveryOffsetDays: 3,
+        kind: "case_relative",
+        caseOffsetDays: 3,
         nonBusinessDayPolicy: "as_is",
       });
       templateIds.push(template.id);
-      const delivery = await db.delivery.create({ data: { name: "release", dueDate: new Date("2034-07-15") } });
-      deliveryIds.push(delivery.id);
-      const [original] = await recurrenceService.onDeliveryCreated(delivery);
-      const updatedDelivery = await db.delivery.update({ where: { id: delivery.id }, data: { dueDate: new Date("2034-07-20") } });
+      const caseEntity = await db.case.create({ data: { name: "release", endDate: new Date("2034-07-15") } });
+      caseIds.push(caseEntity.id);
+      const [original] = await recurrenceService.onCaseCreated(caseEntity);
+      const updatedCase = await db.case.update({ where: { id: caseEntity.id }, data: { endDate: new Date("2034-07-20") } });
 
-      const updated = await recurrenceService.onDeliveryDueDateChanged(updatedDelivery);
+      const updated = await recurrenceService.onCaseEndDateChanged(updatedCase);
 
       expect(updated).toHaveLength(1);
       expect(updated[0].id).toBe(original.id);
       expect(updated[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2034-07-17");
 
-      const all = await db.task.findMany({ where: { sourceTemplateId: template.id, deliveryId: delivery.id } });
+      const all = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: caseEntity.id } });
       taskIds = all.map((t) => t.id);
       expect(all).toHaveLength(1);
     } finally {
-      await cleanup({ taskIds, deliveryIds, templateIds });
+      await cleanup({ taskIds, caseIds, templateIds });
     }
   });
 
   it("does not change a completed instance's scheduledDate (Requirement 5.4)", async () => {
     const templateIds: string[] = [];
-    const deliveryIds: string[] = [];
+    const caseIds: string[] = [];
     let taskIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate({
         title: "completed doc",
         priority: "low",
-        kind: "delivery_relative",
-        deliveryOffsetDays: 2,
+        kind: "case_relative",
+        caseOffsetDays: 2,
         nonBusinessDayPolicy: "as_is",
       });
       templateIds.push(template.id);
-      const delivery = await db.delivery.create({ data: { name: "release", dueDate: new Date("2034-08-10") } });
-      deliveryIds.push(delivery.id);
-      const [instance] = await recurrenceService.onDeliveryCreated(delivery);
+      const caseEntity = await db.case.create({ data: { name: "release", endDate: new Date("2034-08-10") } });
+      caseIds.push(caseEntity.id);
+      const [instance] = await recurrenceService.onCaseCreated(caseEntity);
       taskIds = [instance.id];
       await db.task.update({ where: { id: instance.id }, data: { status: "done" } });
-      const updatedDelivery = await db.delivery.update({ where: { id: delivery.id }, data: { dueDate: new Date("2034-08-20") } });
+      const updatedCase = await db.case.update({ where: { id: caseEntity.id }, data: { endDate: new Date("2034-08-20") } });
 
-      const updated = await recurrenceService.onDeliveryDueDateChanged(updatedDelivery);
+      const updated = await recurrenceService.onCaseEndDateChanged(updatedCase);
 
       expect(updated).toHaveLength(0);
       const unchanged = await db.task.findUnique({ where: { id: instance.id } });
       expect(unchanged?.scheduledDate?.toISOString().slice(0, 10)).toBe("2034-08-08");
     } finally {
-      await cleanup({ taskIds, deliveryIds, templateIds });
+      await cleanup({ taskIds, caseIds, templateIds });
     }
   });
 });

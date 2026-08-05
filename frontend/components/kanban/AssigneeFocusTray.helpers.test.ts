@@ -12,7 +12,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     title: "task",
     status: "not_started",
     priority: "medium",
-    isRequiredForDelivery: false,
+    isRequiredForCase: false,
     createdAt: "",
     updatedAt: "",
     ...overrides,

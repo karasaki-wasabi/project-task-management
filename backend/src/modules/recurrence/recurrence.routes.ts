@@ -17,11 +17,11 @@ const nonBusinessDayPolicy = z.enum(["as_is", "skip", "next_business_day", "prev
 const registerTemplateBodySchema = z.object({
   title: z.string(),
   priority,
-  kind: z.enum(["fixed_interval", "delivery_relative"]),
+  kind: z.enum(["fixed_interval", "case_relative"]),
   intervalUnit: intervalUnit.optional(),
   intervalValue: z.number().optional(),
-  boundDeliveryId: z.string().optional(),
-  deliveryOffsetDays: z.number().optional(),
+  boundCaseId: z.string().optional(),
+  caseOffsetDays: z.number().optional(),
   defaultMemo: z.string().optional(),
   nonBusinessDayPolicy,
 });

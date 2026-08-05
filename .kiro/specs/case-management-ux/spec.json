@@ -1,0 +1,22 @@
+{
+  "feature_name": "case-management-ux",
+  "created_at": "2026-08-04T06:25:50Z",
+  "updated_at": "2026-08-05T16:30:00Z",
+  "language": "ja",
+  "phase": "implementation-complete",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}

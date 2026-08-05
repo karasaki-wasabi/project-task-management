@@ -15,9 +15,9 @@ async function hardDeleteUsers(ids: string[]): Promise<void> {
   await db.$executeRawUnsafe(`DELETE FROM users WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
-async function hardDeleteDeliveries(ids: string[]): Promise<void> {
+async function hardDeleteCases(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  await db.$executeRawUnsafe(`DELETE FROM deliveries WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
+  await db.$executeRawUnsafe(`DELETE FROM cases WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
 async function hardDeleteStages(ids: string[]): Promise<void> {
@@ -61,13 +61,13 @@ describe("tasksService (task 3.1)", () => {
     await hardDeleteTasks([result.value.id]);
   });
 
-  it("forces isRequiredForDelivery to false when no deliveryId is given (design.md TasksService Implementation Notes)", async () => {
-    const result = await tasksService.create({ title: "no delivery", priority: "low", isRequiredForDelivery: true });
+  it("forces isRequiredForCase to false when no caseId is given (design.md TasksService Implementation Notes)", async () => {
+    const result = await tasksService.create({ title: "no case", priority: "low", isRequiredForCase: true });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.deliveryId).toBeNull();
-    expect(result.value.isRequiredForDelivery).toBe(false);
+    expect(result.value.caseId).toBeNull();
+    expect(result.value.isRequiredForCase).toBe(false);
 
     await hardDeleteTasks([result.value.id]);
   });
@@ -185,25 +185,25 @@ describe("tasksService (task 3.1)", () => {
     await hardDeleteUsers([originalAssignee.id, newAssignee.id]);
   });
 
-  it("forces isRequiredForDelivery to false when deliveryId is cleared", async () => {
-    const delivery = await db.delivery.create({ data: { name: `d-${randomUUID()}`, dueDate: new Date() } });
+  it("forces isRequiredForCase to false when caseId is cleared", async () => {
+    const caseRecord = await db.case.create({ data: { name: `c-${randomUUID()}`, endDate: new Date() } });
     const created = await tasksService.create({
       title: "linked",
       priority: "low",
-      deliveryId: delivery.id,
-      isRequiredForDelivery: true,
+      caseId: caseRecord.id,
+      isRequiredForCase: true,
     });
     if (!created.ok) throw new Error("setup failed");
 
-    const result = await tasksService.update(created.value.id, { deliveryId: null });
+    const result = await tasksService.update(created.value.id, { caseId: null });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.deliveryId).toBeNull();
-    expect(result.value.isRequiredForDelivery).toBe(false);
+    expect(result.value.caseId).toBeNull();
+    expect(result.value.isRequiredForCase).toBe(false);
 
     await hardDeleteTasks([created.value.id]);
-    await hardDeleteDeliveries([delivery.id]);
+    await hardDeleteCases([caseRecord.id]);
   });
 
   it("returns not_found when updating a non-existent task", async () => {
@@ -214,28 +214,72 @@ describe("tasksService (task 3.1)", () => {
     expect(result.error.type).toBe("not_found");
   });
 
-  it("filters the list by deliveryId and assigneeUserId (Requirement 7.2)", async () => {
-    const delivery = await db.delivery.create({ data: { name: `d-${randomUUID()}`, dueDate: new Date() } });
+  it("filters the list by caseId and assigneeUserId (Requirement 7.2)", async () => {
+    const caseRecord = await db.case.create({ data: { name: `c-${randomUUID()}`, endDate: new Date() } });
     const user = await db.user.create({ data: { name: `u-${randomUUID()}` } });
 
     const matching = await tasksService.create({
       title: "matches filter",
       priority: "low",
-      deliveryId: delivery.id,
+      caseId: caseRecord.id,
       assigneeUserId: user.id,
     });
     const nonMatching = await tasksService.create({ title: "does not match", priority: "low" });
     if (!matching.ok || !nonMatching.ok) throw new Error("setup failed");
 
-    const byDelivery = await tasksService.list({ deliveryId: delivery.id });
-    expect(byDelivery.map((t) => t.id)).toEqual([matching.value.id]);
+    const byCase = await tasksService.list({ caseId: caseRecord.id });
+    expect(byCase.map((t) => t.id)).toEqual([matching.value.id]);
 
     const byAssignee = await tasksService.list({ assigneeUserId: user.id });
     expect(byAssignee.map((t) => t.id)).toEqual([matching.value.id]);
 
     await hardDeleteTasks([matching.value.id, nonMatching.value.id]);
-    await hardDeleteDeliveries([delivery.id]);
+    await hardDeleteCases([caseRecord.id]);
     await hardDeleteUsers([user.id]);
+  });
+
+  // RED: unassignedCase does not exist on TaskListFilter yet (task 4,
+  // design.md "Backend/tasks > TasksService.list 未割当フィルタ拡張",
+  // Requirement 3.1).
+  it("filters the list to only unassigned tasks when unassignedCase is true (Requirement 3.1)", async () => {
+    const caseRecord = await db.case.create({ data: { name: `c-${randomUUID()}`, endDate: new Date() } });
+
+    const unassigned = await tasksService.create({ title: "no case yet", priority: "low" });
+    const assigned = await tasksService.create({
+      title: "already has a case",
+      priority: "low",
+      caseId: caseRecord.id,
+    });
+    if (!unassigned.ok || !assigned.ok) throw new Error("setup failed");
+
+    const byUnassignedCase = await tasksService.list({ unassignedCase: true });
+    const ids = byUnassignedCase.map((t) => t.id);
+    expect(ids).toContain(unassigned.value.id);
+    expect(ids).not.toContain(assigned.value.id);
+
+    await hardDeleteTasks([unassigned.value.id, assigned.value.id]);
+    await hardDeleteCases([caseRecord.id]);
+  });
+
+  // Regression: unassignedCase absent (or any non-true value coming through
+  // the route layer as undefined) must not change existing caseId-filter
+  // behavior (task 4, design.md same section).
+  it("keeps existing caseId-filter behavior unchanged when unassignedCase is not set (regression)", async () => {
+    const caseRecord = await db.case.create({ data: { name: `c-${randomUUID()}`, endDate: new Date() } });
+
+    const matching = await tasksService.create({
+      title: "still matches caseId filter",
+      priority: "low",
+      caseId: caseRecord.id,
+    });
+    const nonMatching = await tasksService.create({ title: "still unassigned", priority: "low" });
+    if (!matching.ok || !nonMatching.ok) throw new Error("setup failed");
+
+    const byCase = await tasksService.list({ caseId: caseRecord.id });
+    expect(byCase.map((t) => t.id)).toEqual([matching.value.id]);
+
+    await hardDeleteTasks([matching.value.id, nonMatching.value.id]);
+    await hardDeleteCases([caseRecord.id]);
   });
 
   it("soft-deletes a task and excludes it from list (Requirement 9.3, 9.4)", async () => {
@@ -301,12 +345,12 @@ describe("tasksService hierarchy (task 3.2)", () => {
     expect(result.error.type).toBe("not_found");
   });
 
-  it("splits a task into parts that inherit its deliveryId and priority (Requirement 2.3)", async () => {
-    const delivery = await db.delivery.create({ data: { name: `d-${randomUUID()}`, dueDate: new Date() } });
+  it("splits a task into parts that inherit its caseId and priority (Requirement 2.3)", async () => {
+    const caseRecord = await db.case.create({ data: { name: `c-${randomUUID()}`, endDate: new Date() } });
     const original = await tasksService.create({
       title: "big task",
       priority: "high",
-      deliveryId: delivery.id,
+      caseId: caseRecord.id,
     });
     if (!original.ok) throw new Error("setup failed");
 
@@ -320,12 +364,12 @@ describe("tasksService hierarchy (task 3.2)", () => {
     expect(result.value).toHaveLength(2);
     for (const part of result.value) {
       expect(part.parentTaskId).toBe(original.value.id);
-      expect(part.deliveryId).toBe(delivery.id);
+      expect(part.caseId).toBe(caseRecord.id);
       expect(part.priority).toBe("high");
     }
 
     await hardDeleteTasks([...result.value.map((t) => t.id), original.value.id]);
-    await db.$executeRawUnsafe("DELETE FROM deliveries WHERE id = ?", delivery.id);
+    await db.$executeRawUnsafe("DELETE FROM cases WHERE id = ?", caseRecord.id);
   });
 
   it("rejects splitting into fewer than 2 parts", async () => {

@@ -57,10 +57,10 @@ afterAll(async () => {
 });
 
 describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.3, 5.5, 5.6)", () => {
-  it("POST /api/deliveries triggers delivery_relative generation end-to-end (Requirement 5.3)", async () => {
+  it("POST /api/cases triggers case_relative generation end-to-end (Requirement 5.3)", async () => {
     const { app } = buildTestApp();
     const taskIds: string[] = [];
-    const deliveryIds: string[] = [];
+    const caseIds: string[] = [];
     const templateIds: string[] = [];
     try {
       const template = await app
@@ -68,22 +68,22 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
           method: "POST",
           url: "/api/recurring-templates",
           payload: {
-            title: "e2e delivery-relative",
+            title: "e2e case-relative",
             priority: "low",
-            kind: "delivery_relative",
-            deliveryOffsetDays: 2,
+            kind: "case_relative",
+            caseOffsetDays: 2,
             nonBusinessDayPolicy: "as_is",
           },
         })
         .then((r) => r.json());
       templateIds.push(template.id);
 
-      const delivery = await app
-        .inject({ method: "POST", url: "/api/deliveries", payload: { name: "e2e delivery", dueDate: "2041-03-10" } })
+      const caseEntity = await app
+        .inject({ method: "POST", url: "/api/cases", payload: { name: "e2e case", endDate: "2041-03-10" } })
         .then((r) => r.json());
-      deliveryIds.push(delivery.id);
+      caseIds.push(caseEntity.id);
 
-      const tasksResponse = await app.inject({ method: "GET", url: `/api/tasks?deliveryId=${delivery.id}` });
+      const tasksResponse = await app.inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` });
       const tasks = tasksResponse.json();
       taskIds.push(...tasks.map((t: { id: string }) => t.id));
 
@@ -92,8 +92,192 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
       expect(tasks[0].scheduledDate.slice(0, 10)).toBe("2041-03-08");
     } finally {
       await hardDelete("tasks", taskIds);
-      await hardDelete("deliveries", deliveryIds);
+      await hardDelete("cases", caseIds);
       await hardDelete("recurring_task_templates", templateIds);
+      await app.close();
+    }
+  });
+
+  it("PATCH /api/cases/:id endDate change triggers onCaseEndDateChanged recalculation end-to-end (Requirements 2.5, 6.1, 6.2)", async () => {
+    const { app } = buildTestApp();
+    const taskIds: string[] = [];
+    const caseIds: string[] = [];
+    const templateIds: string[] = [];
+    try {
+      const template = await app
+        .inject({
+          method: "POST",
+          url: "/api/recurring-templates",
+          payload: {
+            title: "e2e case-relative recalc",
+            priority: "low",
+            kind: "case_relative",
+            caseOffsetDays: 3,
+            nonBusinessDayPolicy: "as_is",
+          },
+        })
+        .then((r) => r.json());
+      templateIds.push(template.id);
+
+      const caseEntity = await app
+        .inject({ method: "POST", url: "/api/cases", payload: { name: "e2e recalculable case", endDate: "2041-09-15" } })
+        .then((r) => r.json());
+      caseIds.push(caseEntity.id);
+
+      const initialTasks = await app
+        .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
+        .then((r) => r.json());
+      taskIds.push(...initialTasks.map((t: { id: string }) => t.id));
+      expect(initialTasks).toHaveLength(1);
+      expect(initialTasks[0].scheduledDate.slice(0, 10)).toBe("2041-09-12");
+
+      await app.inject({ method: "PATCH", url: `/api/cases/${caseEntity.id}`, payload: { endDate: "2041-09-20" } });
+
+      const recalculatedTasks = await app
+        .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
+        .then((r) => r.json());
+      expect(recalculatedTasks).toHaveLength(1);
+      expect(recalculatedTasks[0].id).toBe(initialTasks[0].id);
+      expect(recalculatedTasks[0].scheduledDate.slice(0, 10)).toBe("2041-09-17");
+    } finally {
+      await hardDelete("tasks", taskIds);
+      await hardDelete("cases", caseIds);
+      await hardDelete("recurring_task_templates", templateIds);
+      await app.close();
+    }
+  });
+
+  it("POST /api/cases without endDate does not trigger case_relative generation end-to-end (task 15.1, Requirements 2.4, 6.3)", async () => {
+    const { app } = buildTestApp();
+    const taskIds: string[] = [];
+    const caseIds: string[] = [];
+    const templateIds: string[] = [];
+    try {
+      const template = await app
+        .inject({
+          method: "POST",
+          url: "/api/recurring-templates",
+          payload: {
+            title: "e2e case-relative no enddate",
+            priority: "low",
+            kind: "case_relative",
+            caseOffsetDays: 2,
+            nonBusinessDayPolicy: "as_is",
+          },
+        })
+        .then((r) => r.json());
+      templateIds.push(template.id);
+
+      const caseEntity = await app
+        .inject({ method: "POST", url: "/api/cases", payload: { name: "e2e case without endDate" } })
+        .then((r) => r.json());
+      caseIds.push(caseEntity.id);
+      expect(caseEntity.endDate).toBeNull();
+
+      const tasksResponse = await app.inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` });
+      const tasks = tasksResponse.json();
+      taskIds.push(...tasks.map((t: { id: string }) => t.id));
+
+      expect(tasks).toHaveLength(0);
+    } finally {
+      await hardDelete("tasks", taskIds);
+      await hardDelete("cases", caseIds);
+      await hardDelete("recurring_task_templates", templateIds);
+      await app.close();
+    }
+  });
+
+  it("PATCH /api/cases/:id setting endDate for the first time triggers case_relative generation end-to-end (task 15.1, Requirements 2.4, 2.5, 5.3)", async () => {
+    const { app } = buildTestApp();
+    const taskIds: string[] = [];
+    const caseIds: string[] = [];
+    const templateIds: string[] = [];
+    try {
+      const template = await app
+        .inject({
+          method: "POST",
+          url: "/api/recurring-templates",
+          payload: {
+            title: "e2e case-relative later enddate",
+            priority: "low",
+            kind: "case_relative",
+            caseOffsetDays: 4,
+            nonBusinessDayPolicy: "as_is",
+          },
+        })
+        .then((r) => r.json());
+      templateIds.push(template.id);
+
+      const caseEntity = await app
+        .inject({ method: "POST", url: "/api/cases", payload: { name: "e2e case later endDate" } })
+        .then((r) => r.json());
+      caseIds.push(caseEntity.id);
+
+      const beforeTasks = await app
+        .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
+        .then((r) => r.json());
+      expect(beforeTasks).toHaveLength(0);
+
+      await app.inject({ method: "PATCH", url: `/api/cases/${caseEntity.id}`, payload: { endDate: "2041-11-20" } });
+
+      const afterTasks = await app
+        .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
+        .then((r) => r.json());
+      taskIds.push(...afterTasks.map((t: { id: string }) => t.id));
+
+      expect(afterTasks).toHaveLength(1);
+      expect(afterTasks[0].sourceTemplateId).toBe(template.id);
+      expect(afterTasks[0].scheduledDate.slice(0, 10)).toBe("2041-11-16");
+    } finally {
+      await hardDelete("tasks", taskIds);
+      await hardDelete("cases", caseIds);
+      await hardDelete("recurring_task_templates", templateIds);
+      await app.close();
+    }
+  });
+
+  it("DELETE /api/cases/:id detaches linked Task/Event caseId to null end-to-end (Requirements 8.1, 8.2)", async () => {
+    const { app } = buildTestApp();
+    const taskIds: string[] = [];
+    const eventIds: string[] = [];
+    const caseIds: string[] = [];
+    try {
+      const caseEntity = await app
+        .inject({ method: "POST", url: "/api/cases", payload: { name: "e2e detach case", endDate: "2041-10-10" } })
+        .then((r) => r.json());
+      caseIds.push(caseEntity.id);
+
+      const task = await app
+        .inject({
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "e2e detach task", priority: "low", caseId: caseEntity.id },
+        })
+        .then((r) => r.json());
+      taskIds.push(task.id);
+
+      const event = await app
+        .inject({
+          method: "POST",
+          url: "/api/events",
+          payload: { title: "e2e detach event", occursAt: "2041-10-11T09:00:00Z", caseId: caseEntity.id },
+        })
+        .then((r) => r.json());
+      eventIds.push(event.id);
+
+      const deleteResponse = await app.inject({ method: "DELETE", url: `/api/cases/${caseEntity.id}` });
+      expect(deleteResponse.statusCode).toBe(204);
+
+      const fetchedTask = await app.inject({ method: "GET", url: `/api/tasks/${task.id}` }).then((r) => r.json());
+      expect(fetchedTask.caseId).toBeNull();
+
+      const events = await app.inject({ method: "GET", url: "/api/events" }).then((r) => r.json());
+      const fetchedEvent = events.find((e: { id: string }) => e.id === event.id);
+      expect(fetchedEvent.caseId).toBeNull();
+    } finally {
+      await hardDelete("events", eventIds);
+      await hardDelete("tasks", taskIds);
+      await hardDelete("cases", caseIds);
       await app.close();
     }
   });

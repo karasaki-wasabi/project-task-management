@@ -52,7 +52,7 @@ const navLinks = [
   { to: "/", label: "ダッシュボード" },
   { to: "/tasks", label: "タスク" },
   { to: "/kanban", label: "カンバン" },
-  { to: "/deliveries", label: "納品" },
+  { to: "/cases", label: "案件" },
   { to: "/events", label: "タイムライン" },
   { to: "/recurrence", label: "繰り返し設定" },
   { to: "/throughput", label: "消化数" },

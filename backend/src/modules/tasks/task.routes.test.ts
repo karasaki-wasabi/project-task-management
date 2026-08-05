@@ -157,6 +157,48 @@ describe("taskRoutes (task 3.1)", () => {
     await app.close();
   });
 
+  // RED: unassignedCase query param does not exist yet (task 4, design.md
+  // "Backend/tasks > TasksService.list 未割当フィルタ拡張", Requirement 3.1).
+  it("GET /api/tasks?unassignedCase=true returns only tasks with no case assigned", async () => {
+    const app = await buildTestApp();
+    const caseRecord = await db.case.create({ data: { name: `route-case-${randomUUID()}`, endDate: new Date() } });
+
+    const unassigned = await app.inject({
+      method: "POST",
+      url: "/api/tasks",
+      payload: { title: "route unassigned", priority: "low" },
+    });
+    const assigned = await app.inject({
+      method: "POST",
+      url: "/api/tasks",
+      payload: { title: "route assigned", priority: "low", caseId: caseRecord.id },
+    });
+    const unassignedId = unassigned.json().id;
+    const assignedId = assigned.json().id;
+
+    const response = await app.inject({ method: "GET", url: "/api/tasks?unassignedCase=true" });
+
+    expect(response.statusCode).toBe(200);
+    const ids = response.json().map((t: { id: string }) => t.id);
+    expect(ids).toContain(unassignedId);
+    expect(ids).not.toContain(assignedId);
+
+    await hardDeleteTasks([unassignedId, assignedId]);
+    await db.$executeRawUnsafe(`DELETE FROM cases WHERE id = ?`, caseRecord.id);
+    await app.close();
+  });
+
+  // Regression: any other value (or absence) for unassignedCase must not
+  // change existing caseId-filter behavior at the route layer.
+  it("GET /api/tasks?unassignedCase=false is rejected (only the literal \"true\" is accepted)", async () => {
+    const app = await buildTestApp();
+
+    const response = await app.inject({ method: "GET", url: "/api/tasks?unassignedCase=false" });
+
+    expect(response.statusCode).toBe(400);
+    await app.close();
+  });
+
   it("DELETE /api/tasks/:id returns 404 for a non-existent task", async () => {
     const app = await buildTestApp();
 

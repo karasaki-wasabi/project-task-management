@@ -1,0 +1,171 @@
+// CaseService: creation/generic update/progress computation/deletion +
+// RecurrenceService wiring + business event logging (design.md
+// "Backend/cases" CaseService, renamed/extended from the former
+// deliveries/delivery.service.ts, task 4.1/10.1/10.2, Requirements 2.3, 2.4,
+// 2.5, 5.3, 5.4, 6.1, 6.2, 8.1, 8.2).
+import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
+import { businessEventLogger } from "../../shared/business-event-logger.js";
+import { badRequest, notFound } from "../../shared/http-errors.js";
+import { recurrenceService } from "../recurrence/recurrence.service.js";
+import { caseRepository } from "./case.repository.js";
+import type { Case, CaseProgress, CreateCaseInput, UpdateCaseInput } from "./case.types.js";
+
+function isRecordNotFoundError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
+}
+
+// design.md CaseService Responsibilities & Constraints: startDate/endDate are
+// both optional; the ordering check only applies when both are known
+// (merged with the currently-persisted value on update) — if either is
+// missing, the check is skipped entirely (Requirements 2.4, 2.5, 5.3, 5.4).
+function validateDateRange(startDate: Date | null | undefined, endDate: Date | null | undefined): void {
+  if (startDate == null || endDate == null) return;
+  if (startDate.getTime() > endDate.getTime()) {
+    throw badRequest("startDate must not be later than endDate");
+  }
+}
+
+export const caseService = {
+  async create(input: CreateCaseInput, requestId: string = randomUUID()): Promise<Case> {
+    const name = input.name.trim();
+    if (name.length === 0) {
+      throw badRequest("name is required");
+    }
+    validateDateRange(input.startDate ?? null, input.endDate ?? null);
+
+    // isCompleted is intentionally not part of CreateCaseInput (Requirement
+    // 2.5): caseRepository.create() always lets the Prisma column default
+    // (false) apply.
+    const caseEntity = await caseRepository.create({ name, startDate: input.startDate, endDate: input.endDate });
+    // Requirement 10.2: case creation is a broad-impact operation.
+    businessEventLogger.logBusinessEvent("case.created", { requestId, entityId: caseEntity.id });
+    // design.md CaseService Dependencies: synchronous call, no try/catch —
+    // if RecurrenceService throws, the Case row remains created and create()
+    // as a whole ends in that exception, preserving delivery.service.ts's
+    // existing implicit behavior (not "improved" here). Task 13.4: endDate
+    // is now optional (task 13.1) — per the Boundary Context, a
+    // case_relative template must not generate anything until the case has
+    // an endDate at all, so skip the call entirely when it's still unset.
+    // The `!== null` check also lets TS narrow caseEntity.endDate to Date
+    // for this call, without touching RecurrenceService's own Date (not
+    // Date | null) parameter typing.
+    if (caseEntity.endDate !== null) {
+      const endDate = caseEntity.endDate;
+      await recurrenceService.onCaseCreated({ ...caseEntity, endDate }, requestId);
+    }
+    return caseEntity;
+  },
+
+  async update(id: string, input: UpdateCaseInput): Promise<Case> {
+    const current = await caseRepository.findById(id);
+    if (!current) {
+      throw notFound(`Case not found: ${id}`);
+    }
+
+    if (input.name !== undefined) {
+      const name = input.name.trim();
+      if (name.length === 0) {
+        throw badRequest("name is required");
+      }
+    }
+
+    // Merge whichever of startDate/endDate are provided with the
+    // currently-persisted value to detect a resulting startDate > endDate
+    // (Requirement 5.3), independent of which fields this call touches
+    // (Requirement 5.1/5.4).
+    const nextStartDate = input.startDate !== undefined ? input.startDate : current.startDate;
+    const nextEndDate = input.endDate !== undefined ? input.endDate : current.endDate;
+    validateDateRange(nextStartDate, nextEndDate);
+
+    const data: Partial<{ name: string; startDate: Date | null; endDate: Date | null; isCompleted: boolean }> = {};
+    if (input.name !== undefined) data.name = input.name.trim();
+    if (input.startDate !== undefined) data.startDate = input.startDate;
+    if (input.endDate !== undefined) data.endDate = input.endDate;
+    if (input.isCompleted !== undefined) data.isCompleted = input.isCompleted;
+
+    let updated: Case;
+    try {
+      updated = await caseRepository.update(id, data);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) {
+        throw notFound(`Case not found: ${id}`);
+      }
+      throw error;
+    }
+
+    // Task 13.4 (Requirement 5.4, design.md CaseService Dependencies): with
+    // endDate now optional, the "recompute on endDate change" call from
+    // before task 13.1 is really a 4-way state transition. Only look at
+    // this at all when endDate was actually part of this update's input —
+    // same synchronous-await, no try/catch pattern as create().
+    if (input.endDate !== undefined) {
+      if (updated.endDate === null) {
+        // 「値あり→未設定」(or 未設定→未設定, which can't reach here since
+        // that would mean current.endDate was already null and stayed
+        // null — not a "change" needing any call either way): no
+        // generation, no recalculation.
+      } else if (current.endDate === null) {
+        // 「未設定→値あり」: first-time generation, via the very same
+        // function create() uses (RecurrenceService Implementation Notes:
+        // onCaseCreated is intentionally reused for this case). TS narrows
+        // updated.endDate to Date in this branch from the outer check.
+        const endDate = updated.endDate;
+        await recurrenceService.onCaseCreated({ ...updated, endDate }, undefined);
+      } else if (current.endDate.getTime() !== updated.endDate.getTime()) {
+        // 「値あり→別の値」: existing recalculation behavior.
+        const endDate = updated.endDate;
+        await recurrenceService.onCaseEndDateChanged({ ...updated, endDate });
+      }
+      // else: unchanged value — no call.
+    }
+
+    return updated;
+  },
+
+  async getProgress(id: string): Promise<CaseProgress> {
+    const caseEntity = await caseRepository.findById(id);
+    if (!caseEntity) {
+      throw notFound(`Case not found: ${id}`);
+    }
+
+    const [requiredTotal, requiredCompleted] = await Promise.all([
+      caseRepository.countRequiredTasks(id),
+      caseRepository.countRequiredCompletedTasks(id),
+    ]);
+    const requiredIncomplete = requiredTotal - requiredCompleted;
+
+    return {
+      requiredTotal,
+      requiredCompleted,
+      requiredIncomplete,
+      // Requirement 6.1/6.2/6.3: a manually-completed case is never
+      // overdue, regardless of endDate or outstanding required tasks; a
+      // case with no endDate at all has no basis for an overdue judgement
+      // either (endDate is optional as of task 13.1) — this null check is a
+      // direct consequence of that type change, not a preemption of task
+      // 13.3's own equivalent test coverage.
+      isOverdueWithIncomplete:
+        !caseEntity.isCompleted &&
+        caseEntity.endDate !== null &&
+        caseEntity.endDate.getTime() < Date.now() &&
+        requiredIncomplete > 0,
+    };
+  },
+
+  async delete(id: string, requestId: string = randomUUID()): Promise<void> {
+    try {
+      await caseRepository.delete(id);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) {
+        throw notFound(`Case not found: ${id}`);
+      }
+      throw error;
+    }
+    businessEventLogger.logBusinessEvent("case.deleted", { requestId, entityId: id });
+  },
+
+  list(): Promise<Case[]> {
+    return caseRepository.list();
+  },
+};

@@ -26,6 +26,14 @@ Sortableはこれらのオプション値をそのまま`element.classList.add(v
 
 同様の理由で、ドラッグ中に追従するフォールバック要素(`fallback-class`で指定)には`transition: transform`を含むクラスを付与しないこと。SortableはドラッグClone要素の位置を毎フレーム`transform: translate3d(...)`で直接更新するが、Tailwindの`transition`ユーティリティ(`transform`を含む)が付いていると、この更新がイージングされてカーソルに追従できなくなる(見た目には「ゆっくりずれてついてくる」程度の症状になり、不具合と気づきにくい)。
 
+### 5. Prismaマイグレーション再生成時、スキーマ言語で表現しきれないDB機能がdriftとしてDROPされる
+MySQLの`STORED GENERATED COLUMN`+`UNIQUE INDEX`のように、Prismaスキーマ言語では`Unsupported("...")`としてしか表現できないDB機能を含むテーブルがある場合、そのテーブルに対して`prisma migrate dev`を再実行すると、Prismaは生成列や関連インデックスを「スキーマに存在しないdrift」と誤検知し、それらをDROPする追従マイグレーションを自動生成してしまう。`prisma validate`・型チェックのどちらでも検出できず、マイグレーション適用後に実DBを見て初めて「意図せずインデックスが消えた」形で発覚する。
+→ スキーマ言語で完全に表現できないDB機能を含むマイグレーションを再生成・再適用する際は、`prisma migrate dev`(diffを取ってから適用)ではなく`prisma migrate deploy`(ハンドエディット済みのSQLファイルをdiffなしでそのまま適用)を使うこと。該当のマイグレーションSQLファイル自体にも、この経緯と`migrate dev`を使ってはいけない旨のコメントを残し、次にスキーマを変更する人が同じ罠を踏まないようにする。
+
+### 6. Vueの`<Transition>`は祖先の`v-if`では効かない
+`<Transition>`でラップした要素の表示/非表示を、`Transition`自身ではなくその**祖先**(`<template v-if="...">`など、`Transition`コンポーネントごと存在するかどうかを切り替える箇所)の条件分岐で制御すると、条件が`false`になった瞬間に`Transition`コンポーネント自体が丸ごと破棄され、`leave`のトランジションクラスが一切適用されないまま要素が即座に消える。ビルド・型チェック・(DOM環境のない)ユニットテストのいずれでも検出できず、実ブラウザで実際に閉じる操作をして初めて「アニメーションが効いていない」と気づく。
+→ `v-if`は`Transition`が直接ラップする要素**自身**に付けること(`<Transition><div v-if="open">...</div></Transition>`)。背景クリック用のオーバーレイなど、アニメーションが不要な兄弟要素は別に`v-if`を付けて構わない。
+
 ## Playwright(E2E)実行時の注意
 
 `docker compose run` はコマンドごとに使い捨てコンテナを作るため、あるコマンドで `npx playwright install --with-deps chromium` してブラウザバイナリを入れても、**次の `docker compose run` invocationには一切残らない**。実行のたびに毎回インストールするコストを避けたい場合は、ホストにNode.jsがあれば `frontend/node_modules`/`package-lock.json` を汚さないスクラッチディレクトリ(例: `/tmp/.../scratchpad/pw`)に `@playwright/test` を単独インストールし、公開済みポート(`http://localhost:<FRONTEND_PORT>`)に対してホスト側から実行するのが安定する。
