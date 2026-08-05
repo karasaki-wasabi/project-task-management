@@ -58,7 +58,6 @@ describe("app.ts route registration (task 10.3)", () => {
     ["/api/users", "GET"],
     ["/api/tasks", "GET"],
     ["/api/cases", "GET"],
-    ["/api/events", "GET"],
     ["/api/holidays", "GET"],
     ["/api/throughput?periodType=week&rangeCount=1", "GET"],
     ["/api/recurring-templates", "GET"],

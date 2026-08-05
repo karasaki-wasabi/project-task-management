@@ -7,7 +7,7 @@
   - 観測可能な完了状態: マイグレーション適用後のスキーマに`events`テーブルが存在せず、`tasks`/`cases`等の既存テーブルは無傷である
   - _Requirements: 7.1_
 
-- [ ] 1.2 backend eventsモジュールの削除とアプリ配線の除去
+- [x] 1.2 backend eventsモジュールの削除とアプリ配線の除去
   - `backend/src/modules/events/`配下の全ファイル(routes/service/repository/types/test)を削除する
   - `backend/src/app.ts`から`eventRoutes`のimportと`app.register(eventRoutes)`を除去する
   - `backend/src/app.routes.test.ts`から`["/api/events", "GET"]`のルート確認を除去する
