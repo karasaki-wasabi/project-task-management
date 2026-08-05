@@ -147,6 +147,95 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
     }
   });
 
+  it("POST /api/cases without endDate does not trigger case_relative generation end-to-end (task 15.1, Requirements 2.4, 6.3)", async () => {
+    const { app } = buildTestApp();
+    const taskIds: string[] = [];
+    const caseIds: string[] = [];
+    const templateIds: string[] = [];
+    try {
+      const template = await app
+        .inject({
+          method: "POST",
+          url: "/api/recurring-templates",
+          payload: {
+            title: "e2e case-relative no enddate",
+            priority: "low",
+            kind: "case_relative",
+            caseOffsetDays: 2,
+            nonBusinessDayPolicy: "as_is",
+          },
+        })
+        .then((r) => r.json());
+      templateIds.push(template.id);
+
+      const caseEntity = await app
+        .inject({ method: "POST", url: "/api/cases", payload: { name: "e2e case without endDate" } })
+        .then((r) => r.json());
+      caseIds.push(caseEntity.id);
+      expect(caseEntity.endDate).toBeNull();
+
+      const tasksResponse = await app.inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` });
+      const tasks = tasksResponse.json();
+      taskIds.push(...tasks.map((t: { id: string }) => t.id));
+
+      expect(tasks).toHaveLength(0);
+    } finally {
+      await hardDelete("tasks", taskIds);
+      await hardDelete("cases", caseIds);
+      await hardDelete("recurring_task_templates", templateIds);
+      await app.close();
+    }
+  });
+
+  it("PATCH /api/cases/:id setting endDate for the first time triggers case_relative generation end-to-end (task 15.1, Requirements 2.4, 2.5, 5.3)", async () => {
+    const { app } = buildTestApp();
+    const taskIds: string[] = [];
+    const caseIds: string[] = [];
+    const templateIds: string[] = [];
+    try {
+      const template = await app
+        .inject({
+          method: "POST",
+          url: "/api/recurring-templates",
+          payload: {
+            title: "e2e case-relative later enddate",
+            priority: "low",
+            kind: "case_relative",
+            caseOffsetDays: 4,
+            nonBusinessDayPolicy: "as_is",
+          },
+        })
+        .then((r) => r.json());
+      templateIds.push(template.id);
+
+      const caseEntity = await app
+        .inject({ method: "POST", url: "/api/cases", payload: { name: "e2e case later endDate" } })
+        .then((r) => r.json());
+      caseIds.push(caseEntity.id);
+
+      const beforeTasks = await app
+        .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
+        .then((r) => r.json());
+      expect(beforeTasks).toHaveLength(0);
+
+      await app.inject({ method: "PATCH", url: `/api/cases/${caseEntity.id}`, payload: { endDate: "2041-11-20" } });
+
+      const afterTasks = await app
+        .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
+        .then((r) => r.json());
+      taskIds.push(...afterTasks.map((t: { id: string }) => t.id));
+
+      expect(afterTasks).toHaveLength(1);
+      expect(afterTasks[0].sourceTemplateId).toBe(template.id);
+      expect(afterTasks[0].scheduledDate.slice(0, 10)).toBe("2041-11-16");
+    } finally {
+      await hardDelete("tasks", taskIds);
+      await hardDelete("cases", caseIds);
+      await hardDelete("recurring_task_templates", templateIds);
+      await app.close();
+    }
+  });
+
   it("DELETE /api/cases/:id detaches linked Task/Event caseId to null end-to-end (Requirements 8.1, 8.2)", async () => {
     const { app } = buildTestApp();
     const taskIds: string[] = [];

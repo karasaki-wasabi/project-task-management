@@ -220,4 +220,71 @@ describe("caseRoutes (task 3.3)", () => {
     expect(response.statusCode).toBe(404);
     await app.close();
   });
+
+  it("POST /api/cases with startDate and endDate both omitted returns 201 with endDate null (task 15.1)", async () => {
+    const app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/cases",
+      payload: { name: "no dates case" },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.name).toBe("no dates case");
+    expect(body.startDate).toBeNull();
+    expect(body.endDate).toBeNull();
+
+    await hardDelete("cases", [body.id]);
+    await app.close();
+  });
+
+  it("PATCH /api/cases/:id with endDate null unsets a previously set endDate (task 15.1)", async () => {
+    const app = await buildTestApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/cases",
+      payload: { name: "unset endDate case", endDate: "2026-09-01T00:00:00.000Z" },
+    });
+    const { id, endDate } = created.json();
+    expect(endDate).toBe("2026-09-01T00:00:00.000Z");
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/cases/${id}`,
+      payload: { endDate: null },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.endDate).toBeNull();
+
+    await hardDelete("cases", [id]);
+    await app.close();
+  });
+
+  it("PATCH /api/cases/:id with startDate null unsets a previously set startDate (task 15.1)", async () => {
+    const app = await buildTestApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/cases",
+      payload: { name: "unset startDate case", startDate: "2041-09-01T00:00:00.000Z" },
+    });
+    const { id, startDate } = created.json();
+    expect(startDate).toBe("2041-09-01T00:00:00.000Z");
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/cases/${id}`,
+      payload: { startDate: null },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.startDate).toBeNull();
+
+    await hardDelete("cases", [id]);
+    await app.close();
+  });
 });
