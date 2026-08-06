@@ -128,6 +128,67 @@
   - _Requirements: 7.1, 7.2, 8.1_
   - _Depends: 5.1, 5.2_
 
+- [ ] 7. ビジュアルデザインの反映(claude design確定版)
+- [x] 7.1 OverflowListPopupコンポーネントの新規実装
+  - `frontend/components/shared/OverflowListPopup.vue`を新規作成する(`open`/`title`/`items`のprops、`select`/`close`のemits、claude design `詳細ポップアップ.dc.html`のレイアウトを実装)
+  - 観測可能な完了状態: propsで渡した一覧が表示され、行クリックで`select(kind, id)`イベントが、背景クリック/閉じるボタンで`close`イベントが発火することを確認できる
+  - _Requirements: 2.6, 3.6_
+  - _Boundary: OverflowListPopup_
+
+- [ ] 7.2 CalendarHelpersの週次レーン割り当て・行予算・配色ロジックへの置き換え
+  - 既存の`buildCaseSegments`(日セル単位のposition算出)を削除し、`buildWeekCaseLanes(weekDays, cases, maxLanes)`(区間スケジューリングによるレーン割り当て、overflow算出)に置き換える
+  - `computeWeekRowBudget(laneCount, hasOverflow, totalRows, maxLanes)`と`colorIndexForCase(caseId)`を新規実装する
+  - `buildTaskMarkersByDate`が返す`TaskMarkerView`に`stage`(開発段階ラベル)と`isOverdue`(期限超過フラグ)を含めるよう変更する(`status`/`priority`は削除)
+  - `truncateDayMarkers`に`maxVisible`引数を追加する(固定定数から呼び出し側が渡す値に変更)
+  - 既存の`buildCaseSegments`関連の単体テストを削除し、新関数群の単体テストに置き換える(レーンの重なり回避、overflow、片側日付のみの案件のopenStart/openEnd、週範囲外のクリップ、行予算の合計が常にtotalRowsになること、配色インデックスの安定性)
+  - 観測可能な完了状態: 新しいテストスイートがgreenになり、`buildCaseSegments`という名前の関数がコードベースに存在しない
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 4.1, 4.2, 4.3_
+  - _Depends: 7.1_
+  - _Boundary: CalendarHelpers_
+
+- [ ] 7.3 カレンダー画面のグリッド・タスク表示のビジュアル刷新
+  - 週グリッドの列幅を日曜・土曜のみ狭める(claude design比率)。日曜・祝日セルは薄い赤背景+赤文字、土曜セルは薄い青背景+青文字、本日セルは黒丸の日付数字+薄い黄色背景にする
+  - タスク行の表示を、状態・優先度バッジから「タイトル+開発段階バッジ」に変更し、期限超過タスクは赤背景+赤枠+太字タイトルで強調する
+  - `computeWeekRowBudget`を使って週ごとの案件レーン行数・タスク表示行数を動的に算出し、どの週も合計7行になるようにする
+  - 観測可能な完了状態: 期限超過タスクが赤背景で強調表示され、週ごとにセルの高さが揃って見えることをブラウザで確認できる
+  - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 2.5_
+  - _Depends: 7.2_
+  - _Boundary: CalendarPage_
+
+- [ ] 7.4 案件バーの週次レーン描画への刷新
+  - `buildWeekCaseLanes`の結果を使い、週行に絶対配置のオーバーレイを重ねてレーンごとに案件バーを描画する(`grid-column`のスパンで日付範囲を表現、開始日は左端を丸め、終了日は右端を丸める)
+  - 案件ごとに`colorIndexForCase`から得た色を適用し、完了案件はパレット色を使わずスレート+打ち消し線にする
+  - 開始日・終了日が未定の案件(`openStart`/`openEnd`)はグラデーションフェード+矢印(‹/›)で表現する
+  - 観測可能な完了状態: 複数の案件が同じ週で重なる場合に別レーンに分かれて表示され、完了案件が打ち消し線付きのグレー表示になることをブラウザで確認できる
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+  - _Depends: 7.3_
+  - _Boundary: CalendarPage_
+
+- [ ] 7.5 案件バー表示切替スイッチの実装
+  - ヘッダーに「案件バーを表示」のトグルスイッチを追加し、操作で案件バー(レーン領域)の表示・非表示を切り替える(タスク表示行数は非表示時に7行まで広がる)
+  - claude designのモックアップはボタン形式だったが、`CaseFormModal.vue`(`selection[task.id]?.selected`用・`isRequiredForCase`用)/`CaseDetailModal.vue`(`isCompleted`用)ですでに3箇所使われている既存のトグルスイッチの見た目(`role="switch"`、`toggle-switch`/`toggle-knob`クラス、`bg-primary-600`/`bg-slate-300`、`translate-x-4`/`translate-x-0.5`)をそのまま踏襲する。ラベルテキスト+スイッチの並びは`CaseDetailModal.vue`の「この案件を完了にする」と同じ構成にする
+  - 観測可能な完了状態: トグル操作で案件バーが非表示になり、再度の操作で表示に戻ることをブラウザで確認できる。スイッチの見た目が案件登録・案件詳細画面の既存トグルと一致する
+  - _Requirements: 9.1, 9.2_
+  - _Depends: 7.4_
+  - _Boundary: CalendarPage_
+
+- [ ] 7.6 「他N件」からOverflowListPopupを開く統合
+  - タスクの日次省略表示・案件の週次省略表示(overflow)のクリックで、`OverflowListPopup`にその日/週の全項目を渡して開く
+  - `OverflowListPopup`の`select`イベントを受けてポップアップを閉じ、対応する`TaskDetailModal`/`CaseDetailModal`を開く
+  - 観測可能な完了状態: 「他N件」をクリックすると一覧ポップアップが開き、行を選択すると一覧が閉じて該当タスク/案件の詳細モーダルが開くことをブラウザで確認できる
+  - _Requirements: 2.6, 3.6_
+  - _Depends: 7.5_
+  - _Boundary: CalendarPage_
+
+- [ ] 7.7 E2Eテストのビジュアル刷新への追従
+  - 既存の`frontend/e2e/calendar.spec.ts`を、新しいタスク行表示(開発段階バッジ+期限超過強調、状態/優先度バッジのアサーションを削除)に合わせて更新する
+  - 案件が3件を超える週で「他N件」チップが表示され、選択して一覧ポップアップから案件詳細モーダルに遷移するシナリオを追加する
+  - 「案件バー」表示切替ボタンで案件バーの表示・非表示が切り替わるシナリオを追加する
+  - 観測可能な完了状態: 更新後の`calendar.spec.ts`が新デザインに対してgreenになる
+  - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 9.1, 9.2_
+  - _Depends: 7.6_
+
 ## Implementation Notes
 - (task 1.1) `prisma migrate dev`はコンテナ内MySQLユーザーがシャドウDB作成権限を持たないため`P3014`で失敗する。代わりに`prisma migrate diff --from-empty --to-schema-datamodel`でSQLを生成し`prisma migrate reset --force`で適用する方式を使うこと。`non_business_days.date_active_key`のSTORED GENERATED COLUMN(Prismaスキーマ言語で表現不可、[[local-dev-pitfalls]]の落とし穴5)は自動生成されないため、再生成後のmigration.sqlに手動で追記が必要。
 - (task 1.1 レビューで発見) `backend/src/prisma/schema.integration.test.ts`が`prisma.event.create`/`delete`を直接呼んでおり、tasks.mdの当初版はこの依存箇所を見落としていた。修正をtask 1.4のスコープに追加済み。
+- (task 7.1) `docker compose run --rm --no-deps -T frontend`(実行ユーザー`node`)と、常駐している`frontend`サービス本体(`root`ユーザーで起動)が同じbind-mountの`frontend/.nuxt/`を共有しているため、どちらか一方が`nuxt dev`/`nuxt typecheck`等で`.nuxt`配下を再生成すると、もう一方の実行ユーザーから書き込めなくなり`tsconfig.json`の欠落等でテストが全滅することがある。復旧は`docker compose exec frontend npx nuxt prepare`(常駐サービス側=`root`所有者で再生成)で行うこと。
