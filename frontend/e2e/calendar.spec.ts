@@ -1,6 +1,16 @@
-// E2E: calendar screen's main flows (task 6.1, design.md Testing Strategy
-// "E2E Tests", Requirements 1.1-1.3, 2.1-2.5, 3.1-3.5, 4.1-4.3, 5.1-5.3,
-// 6.1-6.2).
+// E2E: calendar screen's main flows (tasks 6.1 / 7.7, design.md Testing
+// Strategy "E2E Tests", Requirements 1.1-1.3, 2.1-2.6, 3.1-3.6, 4.1-4.3,
+// 5.1-5.3, 6.1-6.2, 9.1-9.2).
+//
+// Task 7.7 refreshes assertions for the claude-design visual rewrite:
+// task rows show title + development-stage badge (no status/priority
+// badges), case periods render as week-lane overlay bars (not per-day
+// segments), and new scenarios cover weekly "他N件" → OverflowListPopup
+// → CaseDetailModal plus the "案件バーを表示" toggle.
+//
+// Case-bar scenarios call `purgePollutingCalendarCases` first: open-ended
+// cases and prior `e2e-cal-*` rows on the shared dev DB otherwise saturate
+// every week-lane budget (see that helper's comment).
 //
 // Test-data setup notes (see this task's boundary in tasks.md 6.1 and
 // .kiro/steering/testing.md):
@@ -20,18 +30,14 @@
 //   would, not a private API call or DB write.
 // - Because generated instances land with today's date, and the dev DB
 //   accumulates data across runs (testing.md), today's day-cell could in
-//   principle already hold >= 3 unrelated tasks and push new ones into the
-//   "+N件" overflow (index.helpers.ts's MAX_VISIBLE_TASK_MARKERS_PER_DAY).
-//   To keep marker-visibility assertions robust against that, tasks used
-//   for direct marker/badge/modal assertions are always checked through
-//   the assignee filter narrowed to a *brand-new* user created earlier in
-//   the same test — a user that has never been assigned any pre-existing
-//   task, so its filtered result set is guaranteed to contain only the
-//   task(s) this test just created and assigned (confirmed necessary
-//   during this task's own verification run: today's cell already held
-//   several tasks left over from earlier manual/E2E verification of this
-//   same feature, which pushed a directly-checked marker into the "+N件"
-//   overflow). Requirement 5.1 ("すべて" aggregates all assignees) is
+//   principle already hold enough unrelated tasks to push new ones into
+//   the 「他N件」 overflow. To keep marker-visibility assertions robust
+//   against that, tasks used for direct marker/badge/modal assertions are
+//   always checked through the assignee filter narrowed to a *brand-new*
+//   user created earlier in the same test — a user that has never been
+//   assigned any pre-existing task, so its filtered result set is
+//   guaranteed to contain only the task(s) this test just created and
+//   assigned. Requirement 5.1 ("すべて" aggregates all assignees) is
 //   proven via a day-cell footprint count (visible markers + overflow
 //   number) compared against the known-exact single-assignee baseline,
 //   not via direct visibility of specific task titles in the unfiltered
@@ -41,7 +47,36 @@
 //   page itself uses), since the generated task has no developmentStageId
 //   and therefore starts in the backlog panel — this sidesteps needing the
 //   calendar's own (possibly-overflowed) day cell to reach the edit form.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
+
+// Backend URL for setup/teardown helpers. Mirrors events-removed.spec.ts;
+// this project's compose publishes the API on BACKEND_PORT (see .env).
+const API_BASE_URL = process.env.E2E_API_BASE_URL ?? "http://localhost:3400";
+
+type ApiCase = {
+  id: string;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+};
+
+// Soft-delete cases that would make week-lane assertions flaky on the
+// shared dev DB (testing.md: not reset between runs):
+// - open-ended (only startDate or only endDate): clip to every week from
+//   their anchor to ±infinity in `buildWeekCaseLanes`
+// - prior `e2e-cal-*` fixtures: accumulate on the same next-month weeks
+async function purgePollutingCalendarCases(request: APIRequestContext) {
+  const response = await request.get(`${API_BASE_URL}/api/cases`);
+  expect(response.ok()).toBeTruthy();
+  const cases = (await response.json()) as ApiCase[];
+  for (const item of cases) {
+    const openEnded = item.startDate === null || item.endDate === null;
+    const e2eCalendarFixture = item.name.startsWith("e2e-cal-");
+    if (!openEnded && !e2eCalendarFixture) continue;
+    const del = await request.delete(`${API_BASE_URL}/api/cases/${item.id}`);
+    expect([204, 404]).toContain(del.status());
+  }
+}
 
 async function createUser(page: Page, name: string) {
   await page.goto("/users");
@@ -96,14 +131,78 @@ function nextMonth(year: number, month: number): { year: number; month: number }
   return month === 12 ? { year: year + 1, month: 1 } : { year, month: month + 1 };
 }
 
+function monthHeading(page: Page): Locator {
+  return page.locator("span.min-w-20.text-center.text-sm.font-medium.tabular-nums");
+}
+
+async function goToMonth(page: Page, year: number, month: number) {
+  const target = monthLabel(year, month);
+  for (let i = 0; i < 36; i++) {
+    const label = await monthHeading(page).textContent();
+    if (label === target) return;
+    const match = label?.match(/^(\d+)年(\d+)月$/);
+    if (!match) throw new Error(`unexpected calendar month label: ${label}`);
+    const visibleYear = Number(match[1]);
+    const visibleMonth = Number(match[2]);
+    const diff = (year - visibleYear) * 12 + (month - visibleMonth);
+    const prev = label ?? "";
+    await page.getByRole("button", { name: diff > 0 ? "次月" : "前月" }).click();
+    await expect(monthHeading(page)).not.toHaveText(prev);
+  }
+  throw new Error(`failed to reach ${target}`);
+}
+
+async function dayFootprint(cell: Locator): Promise<number> {
+  const visibleMarkers = await cell.locator('[role="button"][aria-label$="の詳細を開く"]').count();
+  const cellText = await cell.innerText();
+  const overflowMatch = cellText.match(/他(\d+)(\+)?件/);
+  if (!overflowMatch) return visibleMarkers;
+  const shown = Number(overflowMatch[1]);
+  return visibleMarkers + (overflowMatch[2] ? shown + 1 : shown);
+}
+
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function isoDate(year: number, month: number, day: number): string {
+  return `${year}-${pad(month)}-${pad(day)}`;
+}
+
+// First Monday that falls inside `year`/`month` (1-indexed). Used so case
+// overflow fixtures can occupy a single Sun–Sat week entirely within the
+// displayed month without spilling into adjacent weeks/months.
+function firstMondayInMonth(year: number, month: number): { year: number; month: number; day: number } {
+  for (let day = 1; day <= 7; day++) {
+    const date = new Date(year, month - 1, day);
+    if (date.getDay() === 1) {
+      return { year, month, day };
+    }
+  }
+  throw new Error(`no Monday in the first week of ${year}-${month}`);
+}
+
+// Day-cell locator: visual refresh dropped `min-h-24`; cells are
+// `min-w-0 overflow-hidden p-1.5` with a background class. Escape the
+// dot in `p-1.5` so CSS does not treat `.5` as a separate class.
+function dayCells(page: Page): Locator {
+  return page.locator("div.min-w-0.overflow-hidden.p-1\\.5");
+}
+
+// Today's cell uses amber wash (research.md / cellBackgroundClass), not
+// the previous primary-50 tint.
+function todayCell(page: Page): Locator {
+  return page.locator("div.bg-amber-50");
+}
+
 // Drives shared/DatePicker.vue via its real UI (same as cases.spec.ts).
-async function setDateViaPicker(container: import("@playwright/test").Locator, triggerName: string, isoDate: string) {
+async function setDateViaPicker(container: Locator, triggerName: string, iso: string) {
   const trigger = container.getByRole("button", { name: triggerName, exact: true });
   await trigger.click();
   const popover = container.getByRole("dialog", { name: `${triggerName}を選択` });
   await expect(popover).toBeVisible();
 
-  const [yearPart, monthPart] = isoDate.split("-");
+  const [yearPart, monthPart] = iso.split("-");
   const targetYear = Number(yearPart);
   const targetMonth = Number(monthPart);
   const monthLabelLocator = popover.locator("span.text-sm.font-medium.text-slate-900");
@@ -119,12 +218,30 @@ async function setDateViaPicker(container: import("@playwright/test").Locator, t
     await popover.getByRole("button", { name: diff > 0 ? "次の月" : "前の月", exact: true }).click();
   }
 
-  await popover.getByRole("button", { name: isoDate, exact: true }).click();
+  await popover.getByRole("button", { name: iso, exact: true }).click();
   await popover.getByRole("button", { name: "決定", exact: true }).click();
   await expect(popover).toBeHidden();
 }
 
-test("期限日を持つタスクの表示・状態/優先度・担当者絞り込み・詳細モーダル (Requirements 1.1-1.3, 2.1-2.5, 5.1-5.3, 6.1)", async ({ page }) => {
+async function createCaseWithDates(
+  page: Page,
+  name: string,
+  opts: { startDate?: string; endDate?: string } = {},
+) {
+  await page.goto("/cases");
+  await page.getByRole("button", { name: "案件を登録" }).click();
+  const formModal = page.locator(".case-form-modal");
+  await expect(formModal).toBeVisible();
+  await formModal.getByLabel("案件名").fill(name);
+  if (opts.startDate) await setDateViaPicker(formModal, "開始日", opts.startDate);
+  if (opts.endDate) await setDateViaPicker(formModal, "終了日", opts.endDate);
+  await formModal.getByRole("button", { name: "登録", exact: true }).click();
+  await expect(formModal).toBeHidden();
+}
+
+test("期限日を持つタスクの表示・開発段階バッジ・担当者絞り込み・詳細モーダル (Requirements 1.1-1.3, 2.1-2.5, 5.1-5.3, 6.1)", async ({
+  page,
+}) => {
   const suffix = Date.now();
   const userAName = `e2e-cal-user-a-${suffix}`;
   const userBName = `e2e-cal-user-b-${suffix}`;
@@ -144,7 +261,9 @@ test("期限日を持つタスクの表示・状態/優先度・担当者絞り�
   await expect(page.locator("li", { hasText: noDateTaskTitle }).first()).toBeVisible();
 
   // Requirement 2.1/2.3/2.4 test data: two recurring templates, generated
-  // "now" so both instances land with scheduledDate = today.
+  // "now" so both instances land with scheduledDate = today. Priority is
+  // still set on the template (form requires it) but is no longer asserted
+  // on the calendar marker after the visual refresh (task 7.3 / 7.7).
   await registerDailyTemplate(page, taskATitle, "高");
   await registerDailyTemplate(page, taskBTitle, "低");
   await generateDueInstancesNow(page);
@@ -159,17 +278,19 @@ test("期限日を持つタスクの表示・状態/優先度・担当者絞り�
   const currentLabel = monthLabel(now.getFullYear(), now.getMonth() + 1);
 
   // Requirement 1.1: current month is shown by default.
-  await expect(page.locator("span.tabular-nums")).toHaveText(currentLabel);
+  await expect(monthHeading(page)).toHaveText(currentLabel);
   // Requirement 1.2: full weeks (multiple of 7 day-cells) are rendered.
   // The grid is behind `v-if="loaded"`, so wait for at least one cell
   // before counting -- `.count()` itself does not auto-wait like
   // `expect(locator)` does.
-  await expect(page.locator("div.min-h-24").first()).toBeVisible();
-  const cellCount = await page.locator("div.min-h-24").count();
+  await expect(dayCells(page).first()).toBeVisible();
+  const cellCount = await dayCells(page).count();
   expect(cellCount).toBeGreaterThanOrEqual(28);
   expect(cellCount % 7).toBe(0);
-  // Requirement 1.3: today's cell is visually distinguished.
-  await expect(page.locator("div.bg-primary-50")).toHaveCount(1);
+  // Requirement 1.3: today's cell is visually distinguished (amber wash +
+  // filled day number circle).
+  await expect(todayCell(page)).toHaveCount(1);
+  await expect(todayCell(page).locator("span.rounded-full.bg-primary-600")).toBeVisible();
 
   // Requirement 2.2: the dateless task never appears on the calendar.
   await expect(page.getByText(noDateTaskTitle)).toHaveCount(0);
@@ -179,11 +300,12 @@ test("期限日を持つタスクの表示・状態/優先度・担当者絞り�
   const markerA = page.getByRole("button", { name: `${taskATitle} の詳細を開く` });
   await expect(markerA).toBeVisible();
   await expect(page.getByRole("button", { name: `${taskBTitle} の詳細を開く` })).toHaveCount(0);
-  // Requirement 2.3/2.4: status ("未着手", a freshly generated instance
-  // starts not_started) and priority ("高", as registered) badges are
-  // shown on the marker.
-  await expect(markerA.getByText("未着手")).toBeVisible();
-  await expect(markerA.getByText("高", { exact: true })).toBeVisible();
+  // Requirement 2.3/2.4 (post visual refresh): development-stage badge is
+  // shown; status/priority badges are gone. Freshly generated instances
+  // have no stage → 「未設定」.
+  await expect(markerA.getByText("未設定")).toBeVisible();
+  await expect(markerA.getByText("未着手")).toHaveCount(0);
+  await expect(markerA.getByText("高", { exact: true })).toHaveCount(0);
 
   // Requirement 5.2 (symmetric check): filtering by userB narrows to just
   // taskB, proving the filter narrows regardless of which assignee.
@@ -193,14 +315,10 @@ test("期限日を持つタスクの表示・状態/優先度・担当者絞り�
   await expect(page.getByRole("button", { name: `${taskATitle} の詳細を開く` })).toHaveCount(0);
 
   // Requirement 6.1: selecting a task on the calendar opens its detail
-  // modal with title/status/priority/assignee. Done here (filter still
-  // narrowed to userB, guaranteed a single, un-overflowed marker for
-  // today) rather than after switching to "すべて" below, since today's
-  // day-cell accumulates task markers across every past run of this exact
-  // scenario (scheduledDate is always "today" -- see file header comment)
-  // and can already exceed the 3-marker overflow cap (Requirement 2.5)
-  // before this test even runs, which would make a specific marker
-  // undependably clickable in the unfiltered view.
+  // modal with title/assignee. Done here (filter still narrowed to userB)
+  // rather than after switching to "すべて" below — today's cell
+  // accumulates markers across runs and can exceed the per-day overflow
+  // budget (Requirement 2.5).
   await markerB.click();
   const taskModal = page.locator(".task-detail-modal");
   await expect(taskModal).toBeVisible();
@@ -209,41 +327,36 @@ test("期限日を持つタスクの表示・状態/優先度・担当者絞り�
   await taskModal.getByRole("button", { name: "閉じる", exact: true }).last().click();
   await expect(taskModal).toBeHidden();
 
-  // Requirement 5.1: "すべて" aggregates tasks across all assignees, not
-  // just one. Proven via a footprint count (visible markers + overflow
-  // count, both scoped to today's cell) rather than direct visibility of
-  // taskA/taskB specifically: today's cell is shared, ever-accumulating
-  // state (every prior run of this test -- or any other manual/automated
-  // verification -- adds more same-day tasks, and Requirement 2.5's
-  // 3-marker cap means individual markers can silently fall into "+N件"
-  // overflow independent of anything this test does). The single-assignee
-  // filter above is immune to that (a brand-new user has exactly one
-  // task, always under the cap), so comparing "すべて"'s total footprint
-  // against that known-exact baseline robustly proves aggregation without
-  // depending on which specific tasks happen to be in the visible top 3
-  // today.
-  async function todayFootprint(): Promise<number> {
-    const cell = page.locator("div.bg-primary-50");
-    const visibleMarkers = await cell.locator("div.bg-slate-50.ring-slate-100").count();
-    const cellText = await cell.innerText();
-    // Display label is 「他N件」/「他99+件」(capped). Footprint uses the
-    // raw digit when under the cap; 「99+」 means "at least 100" so treat
-    // it as 100 for the inequality check below.
-    const overflowMatch = cellText.match(/他(\d+)(\+)?件/);
-    if (!overflowMatch) return visibleMarkers;
-    const shown = Number(overflowMatch[1]);
-    return visibleMarkers + (overflowMatch[2] ? shown + 1 : shown);
+  // Requirement 5.1: "すべて" aggregates tasks across all assignees.
+  // Sum footprints across every day cell (task markers live inside cells;
+  // case bars live in the week overlay and are excluded). Do not pin to
+  // the amber "today" cell: generated `scheduledDate` follows the API
+  // host clock and can disagree with the browser's local `isToday`.
+  async function gridTaskFootprint(): Promise<number> {
+    const cells = dayCells(page);
+    const n = await cells.count();
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+      total += await dayFootprint(cells.nth(i));
+    }
+    return total;
   }
-  const userBOnlyFootprint = await todayFootprint();
+  const userBOnlyFootprint = await gridTaskFootprint();
   expect(userBOnlyFootprint).toBe(1);
 
   await page.getByLabel("担当者で絞り込み").selectOption({ label: "すべて" });
-  await expect.poll(todayFootprint, { message: "today's footprint should grow once unfiltered" }).toBeGreaterThan(
-    userBOnlyFootprint,
-  );
+  await expect
+    .poll(gridTaskFootprint, { message: "grid task footprint should grow once unfiltered" })
+    .toBeGreaterThan(userBOnlyFootprint);
 });
 
-test("案件期間バー・点マーカー・完了状態・詳細モーダル・月移動 (Requirements 1.1, 3.1-3.5, 4.1-4.3, 5.3, 6.2)", async ({ page }) => {
+test("案件期間バー・片側日付・完了状態・詳細モーダル・月移動 (Requirements 1.1, 3.1-3.5, 4.1-4.3, 5.3, 6.2)", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000);
+  await purgePollutingCalendarCases(request);
+
   const suffix = Date.now();
   const periodCaseName = `e2e-cal-case-period-${suffix}`;
   const pointCaseName = `e2e-cal-case-point-${suffix}`;
@@ -253,81 +366,66 @@ test("案件期間バー・点マーカー・完了状態・詳細モーダル�
   await createUser(page, filterUserName);
 
   const now = new Date();
+  const currentLabel = monthLabel(now.getFullYear(), now.getMonth() + 1);
   const { year: nmYear, month: nmMonth } = nextMonth(now.getFullYear(), now.getMonth() + 1);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const periodStart = `${nmYear}-${pad(nmMonth)}-05`;
-  const periodEnd = `${nmYear}-${pad(nmMonth)}-09`;
-  const pointDate = `${nmYear}-${pad(nmMonth)}-20`;
+  const nextLabel = monthLabel(nmYear, nmMonth);
+
+  // Span Mon–Fri of the first in-month Monday so both ends land in the
+  // same week (one week-lane bar).
+  const monday = firstMondayInMonth(nmYear, nmMonth);
+  const periodStart = isoDate(monday.year, monday.month, monday.day);
+  const periodEnd = isoDate(monday.year, monday.month, monday.day + 4);
+  const pointDate = isoDate(nmYear, nmMonth, 20);
 
   // Requirement 3.1: a case with both startDate/endDate set becomes a
   // period bar.
-  await page.goto("/cases");
-  await page.getByRole("button", { name: "案件を登録" }).click();
-  let formModal = page.locator(".case-form-modal");
-  await expect(formModal).toBeVisible();
-  await formModal.getByLabel("案件名").fill(periodCaseName);
-  await setDateViaPicker(formModal, "開始日", periodStart);
-  await setDateViaPicker(formModal, "終了日", periodEnd);
-  await formModal.getByRole("button", { name: "登録", exact: true }).click();
-  await expect(formModal).toBeHidden();
+  await createCaseWithDates(page, periodCaseName, { startDate: periodStart, endDate: periodEnd });
 
   // Requirement 3.2: a case with only one of startDate/endDate set becomes
-  // a point marker on that single day.
-  await page.getByRole("button", { name: "案件を登録" }).click();
-  formModal = page.locator(".case-form-modal");
-  await expect(formModal).toBeVisible();
-  await formModal.getByLabel("案件名").fill(pointCaseName);
-  await setDateViaPicker(formModal, "開始日", pointDate);
-  await formModal.getByRole("button", { name: "登録", exact: true }).click();
-  await expect(formModal).toBeHidden();
+  // an open-ended lane bar (fade + ›/‹) anchored on that date. Deleted at
+  // the end of this test so it does not re-pollute future weeks.
+  await createCaseWithDates(page, pointCaseName, { startDate: pointDate });
 
   // Requirement 3.3: a case with neither date set never appears on the
   // calendar.
-  await page.getByRole("button", { name: "案件を登録" }).click();
-  formModal = page.locator(".case-form-modal");
-  await expect(formModal).toBeVisible();
-  await formModal.getByLabel("案件名").fill(noDateCaseName);
-  await formModal.getByRole("button", { name: "登録", exact: true }).click();
-  await expect(formModal).toBeHidden();
+  await createCaseWithDates(page, noDateCaseName);
 
   await page.goto("/calendar");
-  const currentLabel = monthLabel(now.getFullYear(), now.getMonth() + 1);
-  const targetLabel = monthLabel(nmYear, nmMonth);
-  await expect(page.locator("span.tabular-nums")).toHaveText(currentLabel);
+  await expect(monthHeading(page)).toHaveText(currentLabel);
 
   // Requirement 4.1: moving to next month updates the displayed month.
   await page.getByRole("button", { name: "次月" }).click();
-  await expect(page.locator("span.tabular-nums")).toHaveText(targetLabel);
+  await expect(monthHeading(page)).toHaveText(nextLabel);
 
-  // Requirement 3.3: the no-date case is never rendered, in this month or
-  // any other.
+  // Requirement 3.3: the no-date case is never rendered.
   await expect(page.getByText(noDateCaseName)).toHaveCount(0);
 
-  // Requirement 3.1/3.4: the period case renders as a bar across its
-  // 5-day range (05..09 inclusive) within the displayed month only.
-  const periodSegments = page.getByRole("button", { name: `${periodCaseName} の詳細を開く` });
-  await expect(periodSegments).toHaveCount(5);
-  await expect(periodSegments.first()).toHaveClass(/rounded-l/);
-  await expect(periodSegments.last()).toHaveClass(/rounded-r/);
-  // Only the start/single segment renders the case name as visible text.
-  await expect(periodSegments.first()).toContainText(periodCaseName);
+  // Requirement 3.1/3.4: the period case renders as a single week-lane bar
+  // spanning its Mon–Fri range (same week by construction above).
+  const periodBars = page.getByRole("button", { name: `${periodCaseName} の詳細を開く` });
+  await expect(periodBars).toHaveCount(1);
+  await expect(periodBars).toHaveClass(/rounded-l/);
+  await expect(periodBars).toHaveClass(/rounded-r/);
+  await expect(periodBars).toContainText(periodCaseName);
 
-  // Requirement 3.2: the point case renders exactly one marker.
-  const pointSegment = page.getByRole("button", { name: `${pointCaseName} の詳細を開く` });
-  await expect(pointSegment).toHaveCount(1);
-  await expect(pointSegment).toContainText(pointCaseName);
+  // Requirement 3.2: the start-only case renders an open-ended bar
+  // (openEnd → ›). `buildWeekCaseLanes` continues open-ended ranges into
+  // every later week, so the same case can appear more than once in the
+  // month grid — assert the lead segment, not an exact count of 1.
+  const pointBar = page.getByRole("button", { name: `${pointCaseName} の詳細を開く` });
+  await expect(pointBar.first()).toBeVisible();
+  await expect(pointBar.first()).toContainText(pointCaseName);
+  await expect(pointBar.first()).toContainText("›");
 
-  // Requirement 5.3: case bars are unaffected by the assignee filter (a
-  // filter selecting a user with zero assigned tasks must not hide case
-  // bars, since cases have no assignee field at all).
+  // Requirement 5.3: case bars are unaffected by the assignee filter.
   await page.getByLabel("担当者で絞り込み").selectOption({ label: filterUserName });
-  await expect(periodSegments).toHaveCount(5);
-  await expect(pointSegment).toHaveCount(1);
+  await expect(periodBars).toHaveCount(1);
+  await expect(pointBar.first()).toBeVisible();
   await page.getByLabel("担当者で絞り込み").selectOption({ label: "すべて" });
 
   // Requirement 6.2: selecting a case period bar opens its detail modal
   // with name/period/completion state.
-  await periodSegments.first().click();
+  await periodBars.click();
   const caseModal = page.locator(".case-detail-modal");
   await expect(caseModal).toBeVisible();
   await expect(caseModal.getByText(periodCaseName)).toBeVisible();
@@ -343,16 +441,115 @@ test("案件期間バー・点マーカー・完了状態・詳細モーダル�
   await caseModal.getByRole("button", { name: "閉じる", exact: true }).last().click();
   await expect(caseModal).toBeHidden();
 
-  await expect(periodSegments.first()).toHaveClass(/line-through/);
+  await expect(periodBars).toHaveClass(/line-through/);
 
   // Requirement 4.2: moving to the previous month returns to the original
   // month.
   await page.getByRole("button", { name: "前月" }).click();
-  await expect(page.locator("span.tabular-nums")).toHaveText(currentLabel);
+  await expect(monthHeading(page)).toHaveText(currentLabel);
 
   // Requirement 4.3: "今月" returns to the current month from anywhere.
   await page.getByRole("button", { name: "次月" }).click();
-  await expect(page.locator("span.tabular-nums")).toHaveText(targetLabel);
+  await expect(monthHeading(page)).toHaveText(nextLabel);
   await page.getByRole("button", { name: "今月" }).click();
-  await expect(page.locator("span.tabular-nums")).toHaveText(currentLabel);
+  await expect(monthHeading(page)).toHaveText(currentLabel);
+
+  // Soft-delete the open-ended point case so later tests in this file keep
+  // a clean lane budget (see purgePollutingCalendarCases).
+  const listed = (await (await request.get(`${API_BASE_URL}/api/cases`)).json()) as ApiCase[];
+  const point = listed.find((item) => item.name === pointCaseName);
+  if (point) {
+    await request.delete(`${API_BASE_URL}/api/cases/${point.id}`);
+  }
+});
+
+test("案件が3件を超える週の「他N件」から一覧ポップアップ経由で案件詳細へ (Requirement 3.6)", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000);
+  await purgePollutingCalendarCases(request);
+
+  const suffix = Date.now();
+  const now = new Date();
+  const { year: targetYear, month: targetMonth } = nextMonth(now.getFullYear(), now.getMonth() + 1);
+  // Second Monday week: keeps this scenario off the first-Monday band used
+  // by the period-bar test when both run in the same suite.
+  const monday = firstMondayInMonth(targetYear, targetMonth);
+  const weekMondayDay = monday.day + 7;
+  const rangeStart = isoDate(targetYear, targetMonth, weekMondayDay);
+  const rangeEnd = isoDate(targetYear, targetMonth, weekMondayDay + 4);
+
+  // Four fully-overlapping cases in the same week: with maxLanes=3 the
+  // chip-aware second pass keeps 2 bars and overflows the rest → 「他2件」.
+  const caseNames = [0, 1, 2, 3].map((i) => `e2e-cal-overflow-${i}-${suffix}`);
+  for (const name of caseNames) {
+    await createCaseWithDates(page, name, { startDate: rangeStart, endDate: rangeEnd });
+  }
+
+  await page.goto("/calendar");
+  await goToMonth(page, targetYear, targetMonth);
+
+  const overflowChip = page.getByRole("button", { name: /\d+件の案件を一覧表示/ });
+  await expect(overflowChip).toHaveCount(1);
+  await expect(overflowChip).toHaveText(/他2件/);
+
+  await overflowChip.click();
+  const overflowDialog = page.getByRole("dialog").filter({ hasText: caseNames[0]! });
+  await expect(overflowDialog).toBeVisible();
+  await expect(overflowDialog).toHaveAttribute("aria-label", /\d+\/\d+\s*〜\s*\d+\/\d+/);
+
+  // Full-week list (lanes + overflow): every case created above must appear.
+  for (const name of caseNames) {
+    await expect(overflowDialog.getByRole("button", { name: new RegExp(name) })).toBeVisible();
+  }
+
+  const pickName = caseNames[3]!;
+  await overflowDialog.getByRole("button", { name: new RegExp(pickName) }).click();
+  await expect(overflowDialog).toBeHidden();
+
+  const caseModal = page.locator(".case-detail-modal");
+  await expect(caseModal).toBeVisible();
+  await expect(caseModal.getByText(pickName)).toBeVisible();
+  await caseModal.getByRole("button", { name: "閉じる", exact: true }).last().click();
+  await expect(caseModal).toBeHidden();
+});
+
+test("案件バー表示切替スイッチでバーの表示・非表示が切り替わる (Requirements 9.1, 9.2)", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(60_000);
+  await purgePollutingCalendarCases(request);
+
+  const suffix = Date.now();
+  const caseName = `e2e-cal-toggle-${suffix}`;
+  const now = new Date();
+  const { year: targetYear, month: targetMonth } = nextMonth(now.getFullYear(), now.getMonth() + 1);
+  // Third Monday week — distinct from period (1st) and overflow (2nd).
+  const monday = firstMondayInMonth(targetYear, targetMonth);
+  const weekMondayDay = monday.day + 14;
+  const rangeStart = isoDate(targetYear, targetMonth, weekMondayDay);
+  const rangeEnd = isoDate(targetYear, targetMonth, weekMondayDay + 2);
+
+  await createCaseWithDates(page, caseName, { startDate: rangeStart, endDate: rangeEnd });
+
+  await page.goto("/calendar");
+  await goToMonth(page, targetYear, targetMonth);
+
+  const bar = page.getByRole("button", { name: `${caseName} の詳細を開く` });
+  const toggle = page.getByRole("switch", { name: "案件バーを表示" });
+
+  // Requirement 9.1: bars are shown initially.
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(bar).toBeVisible();
+
+  // Requirement 9.2: toggle off hides bars; toggle on restores them.
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(bar).toHaveCount(0);
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(bar).toBeVisible();
 });

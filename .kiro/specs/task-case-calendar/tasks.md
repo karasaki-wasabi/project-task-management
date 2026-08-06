@@ -180,7 +180,7 @@
   - _Depends: 7.5_
   - _Boundary: CalendarPage_
 
-- [ ] 7.7 E2Eテストのビジュアル刷新への追従
+- [x] 7.7 E2Eテストのビジュアル刷新への追従
   - 既存の`frontend/e2e/calendar.spec.ts`を、新しいタスク行表示(開発段階バッジ+期限超過強調、状態/優先度バッジのアサーションを削除)に合わせて更新する
   - 案件が3件を超える週で「他N件」チップが表示され、選択して一覧ポップアップから案件詳細モーダルに遷移するシナリオを追加する
   - 「案件バー」表示切替ボタンで案件バーの表示・非表示が切り替わるシナリオを追加する
@@ -195,3 +195,4 @@
 - (task 7.4、4ラウンドかかったレビュー往復から) 案件バーと「他N件」チップの重なり回避で、「チップ用に土曜列を予約しバー側を削る」戦略は、土曜のみのバーが幾何学的に消滅する派生バグを繰り返したため捨てた。バー座標は`hasOverflow`に依存せず実の`startDayIndex`/`endDayIndex`から算出する。
 - (task 7.4 完了後の目視不具合修正) 上記の「チップをバーに重ねる」方式は見た目上の重なり・行数オーバーを残した。正しい行予算は research.md の `bandRows = min(lanes + dropped, maxLanes)` で、overflow があるときはバーレーンを `maxLanes - 1` に縮めチップ専用行を確保する(タスクの `truncateDayMarkers` も同様に「他N件」行を予算内に含める)。あわせて日セルへ `min-w-0 overflow-hidden`(土日列の内容によるトラック膨張でバーがずれないようにする)、`CASE_LANE_TOP_OFFSET_PX` にセルpaddingを含める(本日丸との重なり回避)、バー高さをレーン枠より低くする(縦隙間)を適用した。
 - (省略表示ラベル) タスク・案件とも「他N件」表記に統一。表示キャップはタスク99(「他99+件」)、案件9(「他9+件」)。チップ幅は最長形が入るよう予約する(`formatTaskOverflowLabel` / `formatCaseOverflowLabel`)。
+- (task 7.7) 片側日付のみの案件は`buildWeekCaseLanes`が週境界を超えて全週に載るため、共有dev DBに残るとレーン予算が常時飽和する。案件バー系E2Eは開始前に公開APIで open-ended 案件と`e2e-cal-*`をsoft-deleteする(`purgePollutingCalendarCases`)。
