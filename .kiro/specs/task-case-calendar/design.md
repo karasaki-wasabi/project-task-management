@@ -36,7 +36,7 @@
 - `recurrence`モジュールの`固定間隔`テンプレート廃止(別スペック`recurrence-simplification`の対象)
 
 ### Allowed Dependencies
-- `frontend/composables/useApiClient.ts`の`listTasks`/`listCases`(既存、変更不要)
+- `frontend/composables/useApiClient.ts`の`listTasks`/`listCases`/`listHolidays`(既存、変更不要。`listHolidays`はclaude designで確定した祝日セルの色分け表示のために追加で利用する)
 - `frontend/components/shared/DatePicker.helpers.ts`の`generateMonthGrid`/`weekdayKanji`/`computeTodayIso`/`formatSlashDate`/`DateCell`(既存の`export`関数・型をそのままimport)
 - `frontend/components/kanban/TaskDetailModal.vue`(`taskId`/`users`/`stages`/`cases`のprops契約を維持したまま呼び出す)
 - `frontend/components/cases/CaseDetailModal.vue`(`caseId`のprops契約を維持したまま呼び出す)
