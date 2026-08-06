@@ -135,7 +135,7 @@
   - _Requirements: 2.6, 3.6_
   - _Boundary: OverflowListPopup_
 
-- [ ] 7.2 CalendarHelpersの週次レーン割り当て・行予算・配色ロジックへの置き換え
+- [x] 7.2 CalendarHelpersの週次レーン割り当て・行予算・配色ロジックへの置き換え
   - 既存の`buildCaseSegments`(日セル単位のposition算出)を削除し、`buildWeekCaseLanes(weekDays, cases, maxLanes)`(区間スケジューリングによるレーン割り当て、overflow算出)に置き換える
   - `computeWeekRowBudget(laneCount, hasOverflow, totalRows, maxLanes)`と`colorIndexForCase(caseId)`を新規実装する
   - `buildTaskMarkersByDate`が返す`TaskMarkerView`に`stage`(開発段階ラベル)と`isOverdue`(期限超過フラグ)を含めるよう変更する(`status`/`priority`は削除)
