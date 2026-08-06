@@ -112,21 +112,45 @@ export function buildTaskMarkersByDate(
   return markersByDate;
 }
 
-// Requirement 2.5, 2.6: returns the top `maxVisible` markers for a day plus
-// how many were omitted, so the caller can render "+N件" once the day's
-// marker count would otherwise overflow the cell. `maxVisible` used to be a
-// module-internal constant (task 3.1); claude design's "週7行固定" logic
-// (research.md) makes the per-day task budget vary week to week
-// (`computeWeekRowBudget`), so the caller now supplies it per call.
+// Requirement 2.5, 2.6: returns the top markers for a day plus how many were
+// omitted, so the caller can render "他N件" once the day's marker count would
+// otherwise overflow the cell. `maxVisible` is the total row budget for that
+// day (from `computeWeekRowBudget`); the "他N件" chip itself consumes one of
+// those rows, so when overflowing we show at most `maxVisible - 1` markers
+// (e.g. budget 7 with 8 tasks → 6 visible + "他2件", not 7 + "他1件").
+// `maxVisible` used to be a module-internal constant (task 3.1); claude
+// design's "週7行固定" logic (research.md) makes the per-day task budget
+// vary week to week, so the caller now supplies it per call.
 export function truncateDayMarkers(markers: TaskMarkerView[], maxVisible: number): DayVisibleMarkers {
   if (markers.length <= maxVisible) {
     return { visible: markers, overflowCount: 0 };
   }
 
+  // Reserve one row for the "他N件" chip so visible + chip never exceed maxVisible.
+  const visibleCount = Math.max(0, maxVisible - 1);
   return {
-    visible: markers.slice(0, maxVisible),
-    overflowCount: markers.length - maxVisible,
+    visible: markers.slice(0, visibleCount),
+    overflowCount: markers.length - visibleCount,
   };
+}
+
+// Display caps for overflow chip labels. The reserved chip width is sized
+// for the capped forms ("他99+件" / "他9+件") so large counts never reflow.
+export const TASK_OVERFLOW_DISPLAY_CAP = 99;
+export const CASE_OVERFLOW_DISPLAY_CAP = 9;
+
+// Requirement 2.5: task day-cell overflow label. Uses the same 「他N件」
+// wording as case overflow (not 「+N件」) so the longest form is 「他99+件」.
+export function formatTaskOverflowLabel(overflowCount: number): string {
+  const n = overflowCount > TASK_OVERFLOW_DISPLAY_CAP ? `${TASK_OVERFLOW_DISPLAY_CAP}+` : String(overflowCount);
+  return `他${n}件`;
+}
+
+// Requirement 3.6: week case-band overflow label. Cap at 9 so the chip can
+// reserve a stable width for 「他9+件」.
+export function formatCaseOverflowLabel(overflowCount: number): string {
+  const n = overflowCount > CASE_OVERFLOW_DISPLAY_CAP ? `${CASE_OVERFLOW_DISPLAY_CAP}+` : String(overflowCount);
+  return `他${n}件`;
 }
 
 // Requirement 4.1, 4.2, 4.3: computes the year/month reached by shifting
@@ -317,6 +341,21 @@ export function buildWeekCaseLanes(weekDays: DateCell[], cases: Case[], maxLanes
 
   candidates.sort(compareCandidates);
 
+  // First pass: try to place everything into `maxLanes` bar lanes. If any
+  // case overflows, the "他N件" chip needs its own band row (research.md
+  // `bandRows = min(lanes + dropped, maxLanes)`), so bar lanes must shrink
+  // to `maxLanes - 1` — otherwise the chip shares the last lane and paints
+  // over a bar (e.g. 4 overlapping cases → 2 bars + 他2件, not 3 bars with
+  // an overlapping chip).
+  const firstPass = placeCandidatesIntoLanes(candidates, maxLanes);
+  if (firstPass.overflow.length === 0 || maxLanes <= 0) {
+    return firstPass;
+  }
+
+  return placeCandidatesIntoLanes(candidates, Math.max(0, maxLanes - 1));
+}
+
+function placeCandidatesIntoLanes(candidates: CaseLaneCandidate[], laneCap: number): WeekCaseLanes {
   const lanes: CaseLaneItem[][] = [];
   const overflow: CaseOverflowItem[] = [];
 
@@ -348,7 +387,7 @@ export function buildWeekCaseLanes(weekDays: DateCell[], cases: Case[], maxLanes
       continue;
     }
 
-    if (lanes.length < maxLanes) {
+    if (lanes.length < laneCap) {
       lanes.push([laneItem]);
     } else {
       overflow.push({

@@ -237,8 +237,8 @@ sequenceDiagram
 
 **Responsibilities & Constraints**
 - `Task[]`から、`scheduledDate`が設定されているタスクのみを日付(`YYYY-MM-DD`)ごとにグルーピングする(Requirement 2.1, 2.2)。各タスクの開発段階ラベルと、期限超過(`scheduledDate < 本日` かつ `status !== "done"`)フラグを算出する(Requirement 2.3, 2.4)
-- 1日あたりの表示件数がその週の残り行数(後述のレーン予算)を超える場合、上位N件+overflowCountを算出する(Requirement 2.5, 2.6)。閾値は固定定数ではなく、`computeWeekRowBudget`が週ごとに動的に算出する値を呼び出し側から渡す
-- `Case[]`から、週(7日分の`DateCell[]`)単位で区間スケジューリングによるレーン割り当てを行う(Requirement 3.1〜3.6、claude designで確定した「週単位レーン割り当て」方式、research.md「ビジュアルデザイン確定」参照)。開始日・終了日の両方が設定された案件は、重ならない案件同士を同じレーンに詰めて最大3レーンまで配置し、収まらない案件は週次の「他N件」としてoverflowに回す。開始日・終了日のいずれか一方のみ設定された案件は、設定されている方の日付から週の端までフェードするレーン項目として扱う(Requirement 3.2)。両方とも未設定の案件は対象から除外する(Requirement 3.3)。表示中の月の範囲外にはみ出す部分は算出しない(Requirement 3.4 — 週の`DateCell[]`の範囲内でのみレーン化する)。完了状態(Requirement 3.5)・案件ごとの配色インデックスもここで算出する
+- 1日あたりの表示件数がその週の残り行数(後述のレーン予算)を超える場合、上位N件+overflowCountを算出する(Requirement 2.5, 2.6)。閾値は固定定数ではなく、`computeWeekRowBudget`が週ごとに動的に算出する値を呼び出し側から渡す。省略ラベルは`formatTaskOverflowLabel`で「他N件」とし、Nが99を超えるときは「他99+件」にキャップする(表示領域は「他99+件」が1行で収まる前提で確保する)
+- `Case[]`から、週(7日分の`DateCell[]`)単位で区間スケジューリングによるレーン割り当てを行う(Requirement 3.1〜3.6、claude designで確定した「週単位レーン割り当て」方式、research.md「ビジュアルデザイン確定」参照)。開始日・終了日の両方が設定された案件は、重ならない案件同士を同じレーンに詰めて最大3レーンまで配置し、収まらない案件は週次の「他N件」としてoverflowに回す。省略ラベルは`formatCaseOverflowLabel`で「他N件」とし、Nが9を超えるときは「他9+件」にキャップする(チップ幅は「他9+件」が1行で収まるよう予約する)。開始日・終了日のいずれか一方のみ設定された案件は、設定されている方の日付から週の端までフェードするレーン項目として扱う(Requirement 3.2)。両方とも未設定の案件は対象から除外する(Requirement 3.3)。表示中の月の範囲外にはみ出す部分は算出しない(Requirement 3.4 — 週の`DateCell[]`の範囲内でのみレーン化する)。完了状態(Requirement 3.5)・案件ごとの配色インデックスもここで算出する
 - 案件のレーン数(overflowチップ含む、最大3)とタスクの表示行数の合計が、どの週でも常に7行になるよう、週ごとの表示可能タスク行数を算出する(claude design「週7行固定」ロジック)
 - 案件ごとに安定した配色インデックス(0〜5)を算出する(同じ案件は常に同じ色になる)
 - 年月の前後移動を計算する(Requirement 4.1〜4.3)
@@ -294,6 +294,8 @@ interface WeekRowBudget {
 interface CalendarHelpers {
   buildTaskMarkersByDate(tasks: Task[], stages: DevelopmentStage[], todayIso: string): Map<string, TaskMarkerView[]>;
   truncateDayMarkers(markers: TaskMarkerView[], maxVisible: number): DayVisibleMarkers;
+  formatTaskOverflowLabel(overflowCount: number): string; // 「他N件」、N>99 は「他99+件」
+  formatCaseOverflowLabel(overflowCount: number): string; // 「他N件」、N>9 は「他9+件」
   buildWeekCaseLanes(weekDays: DateCell[], cases: Case[], maxLanes: number): WeekCaseLanes;
   computeWeekRowBudget(laneCount: number, hasOverflow: boolean, totalRows: number, maxLanes: number): WeekRowBudget;
   colorIndexForCase(caseId: string): number; // 0-5、同一caseIdは常に同じ値(文字列ハッシュのmod 6)
@@ -369,6 +371,7 @@ flowchart LR
 ### Unit Tests
 - `CalendarHelpers.buildTaskMarkersByDate`: `scheduledDate`のあるタスクのみが日付キーでグルーピングされ、`scheduledDate`未設定のタスクが除外されることを検証(Requirement 2.1, 2.2)。開発段階ラベルと期限超過フラグ(`scheduledDate < 本日` かつ未完了)が正しく算出されることを検証(Requirement 2.3, 2.4)
 - `CalendarHelpers.truncateDayMarkers`: `maxVisible`引数に応じて上位N件+overflowCountが正しく算出されることを検証(Requirement 2.5, 2.6)
+- `CalendarHelpers.formatTaskOverflowLabel` / `formatCaseOverflowLabel`: 件数キャップ(タスク99 / 案件9)と「他N件」「他N+件」表記を検証(Requirement 2.5, 3.6)
 - `CalendarHelpers.buildWeekCaseLanes`: 重ならない案件が同じレーンに詰められること、重なる案件が別レーンに配置されること、`maxLanes`を超える場合に古いレーン優先ではなく期間の長さ・開始日でソートされた順にoverflowへ回ることを検証(Requirement 3.1, 3.6)。開始日・終了日の片方のみ設定された案件が`openStart`/`openEnd`付きのレーン項目になることを検証(Requirement 3.2)。両方とも未設定の案件が対象外になることを検証(Requirement 3.3)。週の範囲外にはみ出す部分の`startDayIndex`/`endDayIndex`が週の境界にクリップされることを検証(Requirement 3.4)。`isCompleted`が結果に反映されることを検証(Requirement 3.5)
 - `CalendarHelpers.computeWeekRowBudget`: レーン数0〜3・overflow有無の組み合わせで、`bandRows + maxTasks`が常に指定した`totalRows`(7)になることを検証
 - `CalendarHelpers.colorIndexForCase`: 同一`caseId`に対して常に同じ0〜5の値を返すことを検証

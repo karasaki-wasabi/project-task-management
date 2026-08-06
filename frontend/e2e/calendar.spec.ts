@@ -226,8 +226,13 @@ test("期限日を持つタスクの表示・状態/優先度・担当者絞り�
     const cell = page.locator("div.bg-primary-50");
     const visibleMarkers = await cell.locator("div.bg-slate-50.ring-slate-100").count();
     const cellText = await cell.innerText();
-    const overflowMatch = cellText.match(/\+(\d+)件/);
-    return visibleMarkers + (overflowMatch ? Number(overflowMatch[1]) : 0);
+    // Display label is 「他N件」/「他99+件」(capped). Footprint uses the
+    // raw digit when under the cap; 「99+」 means "at least 100" so treat
+    // it as 100 for the inequality check below.
+    const overflowMatch = cellText.match(/他(\d+)(\+)?件/);
+    if (!overflowMatch) return visibleMarkers;
+    const shown = Number(overflowMatch[1]);
+    return visibleMarkers + (overflowMatch[2] ? shown + 1 : shown);
   }
   const userBOnlyFootprint = await todayFootprint();
   expect(userBOnlyFootprint).toBe(1);

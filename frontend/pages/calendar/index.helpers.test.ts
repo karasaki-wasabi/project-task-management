@@ -5,6 +5,8 @@ import {
   buildWeekCaseLanes,
   colorIndexForCase,
   computeWeekRowBudget,
+  formatCaseOverflowLabel,
+  formatTaskOverflowLabel,
   shiftMonth,
   truncateDayMarkers,
 } from "./index.helpers";
@@ -163,20 +165,72 @@ describe("truncateDayMarkers (task 7.2, Requirement 2.5)", () => {
     expect(truncateDayMarkers(markers, 3)).toEqual({ visible: markers, overflowCount: 0 });
   });
 
-  it("truncates to the top maxVisible and reports the overflow count when over the threshold", () => {
+  it("reserves one row for the 他N chip when over the threshold (visible + chip <= maxVisible)", () => {
+    // budget 2 with 5 markers → 1 visible + "他4件", not 2 visible + "他3件"
     const markers = [makeMarker("t1"), makeMarker("t2"), makeMarker("t3"), makeMarker("t4"), makeMarker("t5")];
     const result = truncateDayMarkers(markers, 2);
-    expect(result.visible).toEqual([makeMarker("t1"), makeMarker("t2")]);
-    expect(result.overflowCount).toBe(3);
+    expect(result.visible).toEqual([makeMarker("t1")]);
+    expect(result.overflowCount).toBe(4);
+  });
+
+  it("shows 6 tasks + 他2件 when budget is 7 and there are 8 tasks", () => {
+    const markers = Array.from({ length: 8 }, (_, i) => makeMarker(`t${i + 1}`));
+    const result = truncateDayMarkers(markers, 7);
+    expect(result.visible).toHaveLength(6);
+    expect(result.overflowCount).toBe(2);
   });
 
   it("returns an empty visible list with zero overflow for an empty input", () => {
     expect(truncateDayMarkers([], 3)).toEqual({ visible: [], overflowCount: 0 });
   });
 
-  it("respects a maxVisible different from the old fixed constant of 3", () => {
+  it("shows only the 他N chip when budget is 1 and there is overflow", () => {
     const markers = [makeMarker("t1"), makeMarker("t2")];
-    expect(truncateDayMarkers(markers, 1)).toEqual({ visible: [makeMarker("t1")], overflowCount: 1 });
+    expect(truncateDayMarkers(markers, 1)).toEqual({ visible: [], overflowCount: 2 });
+  });
+});
+
+describe("formatTaskOverflowLabel / formatCaseOverflowLabel", () => {
+  function makeMarker(taskId: string) {
+    return { taskId, title: `Task ${taskId}`, stage: null, isOverdue: false };
+  }
+
+  it("formats task overflow as 他N件 and caps at 他99+件", () => {
+    expect(formatTaskOverflowLabel(1)).toBe("他1件");
+    expect(formatTaskOverflowLabel(99)).toBe("他99件");
+    expect(formatTaskOverflowLabel(100)).toBe("他99+件");
+    expect(formatTaskOverflowLabel(1000)).toBe("他99+件");
+  });
+
+  it("formats case overflow as 他N件 and caps at 他9+件", () => {
+    expect(formatCaseOverflowLabel(1)).toBe("他1件");
+    expect(formatCaseOverflowLabel(9)).toBe("他9件");
+    expect(formatCaseOverflowLabel(10)).toBe("他9+件");
+    expect(formatCaseOverflowLabel(100)).toBe("他9+件");
+  });
+
+  it("shows 他99+件 when a day has 100+ omitted tasks after truncation (Requirement 2.5)", () => {
+    // budget 7 → 6 visible; 106 total → overflowCount 100 → capped label
+    const markers = Array.from({ length: 106 }, (_, i) => makeMarker(`t${i + 1}`));
+    const truncated = truncateDayMarkers(markers, 7);
+    expect(truncated.visible).toHaveLength(6);
+    expect(truncated.overflowCount).toBe(100);
+    expect(formatTaskOverflowLabel(truncated.overflowCount)).toBe("他99+件");
+  });
+
+  it("shows 他9+件 when a week has 10+ omitted cases after lane assignment (Requirement 3.6)", () => {
+    // maxLanes=3 with overflow → 2 bar lanes; 12 overlapping cases → 10 overflow
+    const cases = Array.from({ length: 12 }, (_, i) =>
+      makeCase({
+        id: `c${i}`,
+        startDate: "2026-08-02T00:00:00.000Z",
+        endDate: "2026-08-08T00:00:00.000Z",
+      }),
+    );
+    const result = buildWeekCaseLanes(WEEK, cases, 3);
+    expect(result.lanes.length).toBe(2);
+    expect(result.overflow.length).toBe(10);
+    expect(formatCaseOverflowLabel(result.overflow.length)).toBe("他9+件");
   });
 });
 
@@ -295,10 +349,11 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
     expect(result.overflow).toEqual([]);
   });
 
-  it("sends cases beyond maxLanes to overflow, prioritized by open-ended-first then duration then start date", () => {
-    // 4 mutually-overlapping cases (all span the whole week) with maxLanes=3:
-    // one is open-ended (no endDate) so it must win a lane over all closed
-    // cases regardless of duration.
+  it("reserves one band row for the 他N chip when cases exceed maxLanes (2 bars + overflow, not 3 overlapping)", () => {
+    // 4 mutually-overlapping cases with maxLanes=3: the "他N件" chip needs
+    // its own band row, so bar lanes shrink to maxLanes-1=2.
+    // open-ended wins a lane over closed cases; closed-long is next; the
+    // two shorter closed cases overflow.
     const cases = [
       makeCase({ id: "closed-short", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-03T00:00:00.000Z" }),
       makeCase({ id: "closed-long", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
@@ -309,10 +364,22 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
     const result = buildWeekCaseLanes(WEEK, cases, 3);
 
     const allLaneIds = result.lanes.flat().map((item) => item.caseId);
-    // open-ended-first, then longest duration, then earliest start:
-    // open-ended, closed-long, closed-mid get lanes; closed-short overflows.
-    expect(allLaneIds).toEqual(["open-ended", "closed-long", "closed-mid"]);
-    expect(result.overflow.map((item) => item.caseId)).toEqual(["closed-short"]);
+    expect(result.lanes.length).toBe(2);
+    expect(allLaneIds).toEqual(["open-ended", "closed-long"]);
+    expect(result.overflow.map((item) => item.caseId)).toEqual(["closed-mid", "closed-short"]);
+  });
+
+  it("keeps all 3 bar lanes when exactly maxLanes overlapping cases fit with no overflow", () => {
+    const cases = [
+      makeCase({ id: "c1", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
+      makeCase({ id: "c2", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
+      makeCase({ id: "c3", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
+    ];
+
+    const result = buildWeekCaseLanes(WEEK, cases, 3);
+
+    expect(result.lanes.length).toBe(3);
+    expect(result.overflow).toEqual([]);
   });
 
   it("flags openStart/openEnd true when the case's date is literally unset on that side", () => {
@@ -387,14 +454,15 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
     expect(result.lanes.flat()[0]?.colorIndex).toBe(colorIndexForCase("c1"));
   });
 
-  it("never exceeds maxLanes lanes", () => {
+  it("never exceeds maxLanes lanes, and shrinks to maxLanes-1 when overflow is present", () => {
     const cases = Array.from({ length: 6 }, (_, i) =>
       makeCase({ id: `c${i}`, startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
     );
 
     const result = buildWeekCaseLanes(WEEK, cases, 3);
 
-    expect(result.lanes.length).toBeLessThanOrEqual(3);
+    expect(result.lanes.length).toBeLessThanOrEqual(2);
+    expect(result.overflow.length).toBeGreaterThan(0);
     expect(result.lanes.flat().length + result.overflow.length).toBe(6);
   });
 });
