@@ -153,6 +153,32 @@ export function formatCaseOverflowLabel(overflowCount: number): string {
   return `他${n}件`;
 }
 
+// Requirement 3.6 / tasks.md 7.6: the weekly "他N件" popup lists every case
+// that intersects the week (lane items + overflow), not only the omitted
+// ones — matching research.md "その週の全案件を一覧表示". Lane order is
+// preserved, then overflow items follow.
+export function collectWeekCasePopupItems(weekLanes: WeekCaseLanes, cases: Case[]): CaseOverflowItem[] {
+  const byId = new Map(cases.map((caseItem) => [caseItem.id, caseItem]));
+  const items: CaseOverflowItem[] = [];
+
+  for (const laneItem of weekLanes.lanes.flat()) {
+    const caseItem = byId.get(laneItem.caseId);
+    const startKey = caseItem?.startDate ? toLocalDateKey(caseItem.startDate) : null;
+    const endKey = caseItem?.endDate ? toLocalDateKey(caseItem.endDate) : null;
+    items.push({
+      caseId: laneItem.caseId,
+      name: laneItem.name,
+      rangeLabel: formatRangeLabel(startKey, endKey),
+    });
+  }
+
+  for (const overflowItem of weekLanes.overflow) {
+    items.push(overflowItem);
+  }
+
+  return items;
+}
+
 // Requirement 4.1, 4.2, 4.3: computes the year/month reached by shifting
 // `delta` months from `year`/`month` (1-indexed, matching
 // DatePicker.helpers.ts's `generateMonthGrid` convention). Handles

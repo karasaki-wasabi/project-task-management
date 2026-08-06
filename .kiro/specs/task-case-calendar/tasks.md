@@ -172,7 +172,7 @@
   - _Depends: 7.4_
   - _Boundary: CalendarPage_
 
-- [ ] 7.6 「他N件」からOverflowListPopupを開く統合
+- [x] 7.6 「他N件」からOverflowListPopupを開く統合
   - タスクの日次省略表示・案件の週次省略表示(overflow)のクリックで、`OverflowListPopup`にその日/週の全項目を渡して開く
   - `OverflowListPopup`の`select`イベントを受けてポップアップを閉じ、対応する`TaskDetailModal`/`CaseDetailModal`を開く
   - 観測可能な完了状態: 「他N件」をクリックすると一覧ポップアップが開き、行を選択すると一覧が閉じて該当タスク/案件の詳細モーダルが開くことをブラウザで確認できる

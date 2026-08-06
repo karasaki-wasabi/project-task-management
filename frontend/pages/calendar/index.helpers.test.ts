@@ -3,6 +3,7 @@ import type { DateCell } from "~/components/shared/DatePicker.helpers";
 import {
   buildTaskMarkersByDate,
   buildWeekCaseLanes,
+  collectWeekCasePopupItems,
   colorIndexForCase,
   computeWeekRowBudget,
   formatCaseOverflowLabel,
@@ -231,6 +232,29 @@ describe("formatTaskOverflowLabel / formatCaseOverflowLabel", () => {
     expect(result.lanes.length).toBe(2);
     expect(result.overflow.length).toBe(10);
     expect(formatCaseOverflowLabel(result.overflow.length)).toBe("他9+件");
+  });
+});
+
+describe("collectWeekCasePopupItems (task 7.6, Requirement 3.6)", () => {
+  it("lists lane-placed cases then overflow so the popup shows the whole week", () => {
+    const cases = [
+      makeCase({ id: "lane-a", name: "Lane A", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
+      makeCase({ id: "lane-b", name: "Lane B", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
+      makeCase({ id: "over-c", name: "Over C", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
+      makeCase({ id: "over-d", name: "Over D", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
+    ];
+    const weekLanes = buildWeekCaseLanes(WEEK, cases, 3);
+    // 4 overlapping → 2 lanes + 2 overflow under the overflow-row reservation
+    expect(weekLanes.lanes.length).toBe(2);
+    expect(weekLanes.overflow.length).toBe(2);
+
+    const items = collectWeekCasePopupItems(weekLanes, cases);
+    expect(items.map((item) => item.caseId)).toEqual([
+      ...weekLanes.lanes.flat().map((item) => item.caseId),
+      ...weekLanes.overflow.map((item) => item.caseId),
+    ]);
+    expect(items).toHaveLength(4);
+    expect(items.every((item) => item.rangeLabel.includes("〜"))).toBe(true);
   });
 });
 

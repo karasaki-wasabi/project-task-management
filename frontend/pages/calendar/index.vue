@@ -71,27 +71,28 @@
   so it re-lists everything for that day, matching research.md's mockup of
   a full re-listing rather than just the delta). The weekly case "他N件"
   chip (`openWeekCaseOverflowPopup`, now `pointer-events-auto` instead of
-  the interim `-none` from task 7.4) passes that week's `WeekCaseLanes.
-  overflow` straight through. Both set the local `overflowPopup` state
-  (`{ title, items }`) that drives the single `OverflowListPopup` instance
-  mounted below; its `select` emit closes the popup and reuses
-  `openTaskDetail`/`openCaseDetail` (task 4.4) for the corresponding kind
-  so only one detail modal or the popup is ever open at a time (design.md:
-  "ポップアップの二重表示にならないよう排他制御する"), and `close` just
-  clears `overflowPopup`.
+  the interim `-none` from task 7.4) builds the full week list via
+  `collectWeekCasePopupItems` (lane-placed cases first, then overflow —
+  matching Requirement 3.6's "その週の全案件"). Both set the local
+  `overflowPopup` state (`{ title, items }`) that drives the single
+  `OverflowListPopup` instance mounted below; its `select` emit closes the
+  popup and reuses `openTaskDetail`/`openCaseDetail` (task 4.4) for the
+  corresponding kind so only one detail modal or the popup is ever open at
+  a time (design.md: "ポップアップの二重表示にならないよう排他制御する"),
+  and `close` just clears `overflowPopup`.
 -->
 <script setup lang="ts">
 import { computeTodayIso, generateMonthGrid, weekdayKanji, type DateCell } from "~/components/shared/DatePicker.helpers";
 import {
   buildTaskMarkersByDate,
   buildWeekCaseLanes,
+  collectWeekCasePopupItems,
   computeWeekRowBudget,
   formatCaseOverflowLabel,
   formatTaskOverflowLabel,
   shiftMonth,
   truncateDayMarkers,
   type CaseLaneItem,
-  type CaseOverflowItem,
 } from "./index.helpers";
 import type { OverflowListPopupItem } from "~/components/shared/OverflowListPopup.vue";
 
@@ -506,14 +507,17 @@ function openDayTaskOverflowPopup(cell: DateCell) {
   };
 }
 
-// Requirement 3.6: opens OverflowListPopup with that week's
-// `CaseOverflowItem[]` (the cases that didn't fit within MAX_CASE_LANES).
-function openWeekCaseOverflowPopup(weekDays: DateCell[], overflow: CaseOverflowItem[]) {
+// Requirement 3.6 / tasks.md 7.6: opens OverflowListPopup with ALL cases
+// that intersect this week (lane-placed + overflow), not only the omitted
+// ones — research.md "その週の全案件を一覧表示".
+function openWeekCaseOverflowPopup(weekDays: DateCell[], weekIndex: number) {
   const start = weekDays[0]?.date ?? "";
   const end = weekDays[weekDays.length - 1]?.date ?? "";
+  const weekLanes = weekCaseLanes.value[weekIndex];
+  if (!weekLanes) return;
   overflowPopup.value = {
     title: formatPopupWeekRangeTitle(start, end),
-    items: overflow.map((item) => ({
+    items: collectWeekCasePopupItems(weekLanes, cases.value).map((item) => ({
       id: item.caseId,
       kind: "case" as const,
       label: item.name,
@@ -760,7 +764,8 @@ onMounted(load);
                  over Saturday segments. `OVERFLOW_CHIP_STYLE` is a small
                  fixed-size badge at the week's right edge (not a reserved
                  column — see `caseBarGeometry`). Task 7.6: clickable to open
-                 OverflowListPopup with this week's overflow list. -->
+                 OverflowListPopup with this week's full case list
+                 (lanes + overflow via collectWeekCasePopupItems). -->
             <div
               v-if="weekCaseLanes[rowIndex]!.overflow.length > 0"
               role="button"
@@ -773,8 +778,8 @@ onMounted(load);
                 height: `${CASE_BAR_HEIGHT_PX}px`,
               }"
               :aria-label="`${weekCaseLanes[rowIndex]!.overflow.length}件の案件を一覧表示`"
-              @click="openWeekCaseOverflowPopup(row, weekCaseLanes[rowIndex]!.overflow)"
-              @keydown.enter="openWeekCaseOverflowPopup(row, weekCaseLanes[rowIndex]!.overflow)"
+              @click="openWeekCaseOverflowPopup(row, rowIndex)"
+              @keydown.enter="openWeekCaseOverflowPopup(row, rowIndex)"
             >
               {{ formatCaseOverflowLabel(weekCaseLanes[rowIndex]!.overflow.length) }}
             </div>
