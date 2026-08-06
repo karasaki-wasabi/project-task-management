@@ -164,7 +164,7 @@
   - _Depends: 7.3_
   - _Boundary: CalendarPage_
 
-- [ ] 7.5 案件バー表示切替スイッチの実装
+- [x] 7.5 案件バー表示切替スイッチの実装
   - ヘッダーに「案件バーを表示」のトグルスイッチを追加し、操作で案件バー(レーン領域)の表示・非表示を切り替える(タスク表示行数は非表示時に7行まで広がる)
   - claude designのモックアップはボタン形式だったが、`CaseFormModal.vue`(`selection[task.id]?.selected`用・`isRequiredForCase`用)/`CaseDetailModal.vue`(`isCompleted`用)ですでに3箇所使われている既存のトグルスイッチの見た目(`role="switch"`、`toggle-switch`/`toggle-knob`クラス、`bg-primary-600`/`bg-slate-300`、`translate-x-4`/`translate-x-0.5`)をそのまま踏襲する。ラベルテキスト+スイッチの並びは`CaseDetailModal.vue`の「この案件を完了にする」と同じ構成にする
   - 観測可能な完了状態: トグル操作で案件バーが非表示になり、再度の操作で表示に戻ることをブラウザで確認できる。スイッチの見た目が案件登録・案件詳細画面の既存トグルと一致する

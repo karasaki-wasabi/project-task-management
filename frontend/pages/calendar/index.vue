@@ -1,8 +1,8 @@
 <!--
-  Calendar page (tasks 4.1-4.4, 7.3, 7.4, 7.6; design.md "Components and
+  Calendar page (tasks 4.1-4.4, 7.3, 7.4, 7.5, 7.6; design.md "Components and
   Interfaces > Frontend/calendar > CalendarPage", Requirements 1.1, 1.2,
   1.3, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 4.1, 4.2,
-  4.3, 5.1, 5.2, 5.3, 6.1, 6.2). Task 4.4 wires up
+  4.3, 5.1, 5.2, 5.3, 6.1, 6.2, 9.1, 9.2). Task 4.4 wires up
   TaskDetailModal/CaseDetailModal (`selectedTaskId`/`selectedCaseId`,
   design.md State Management), reusing both components exactly as built by
   the kanban/cases specs — this page never edits their source, only
@@ -240,6 +240,11 @@ const assigneeUserId = ref("");
 const selectedTaskId = ref<string | null>(null);
 const selectedCaseId = ref<string | null>(null);
 
+// Requirement 9.1, 9.2, design.md State Management (`hideCaseBars: boolean`):
+// local UI-only toggle for the case-lane overlay, no API re-fetch involved
+// (design.md "Persistence & consistency"). Default false — Requirement 9.1
+// requires case bars to be shown initially.
+const hideCaseBars = ref(false);
 
 // Requirement 2.6, 3.6, design.md State Management
 // (`overflowPopup: { kind, items } | null`): which "他N件" list popup is
@@ -346,11 +351,15 @@ const weekCaseLanes = computed(() => weekRows.value.map((row) => buildWeekCaseLa
 // the real lane count / overflow-presence from `weekCaseLanes` for that
 // week (task 7.4, replacing task 7.3's interim `0, false` placeholders) —
 // `maxTasks` now varies week to week as case bars actually occupy lanes.
+// Requirement 9.2: when `hideCaseBars` is on, the case-lane band collapses
+// to 0 rows (same `laneCount: 0, hasOverflow: false` call shape as task 7.3's
+// original interim placeholder, task 7.5 detail bullets) so task rows expand
+// to use the full TOTAL_ROWS_PER_WEEK budget for that week.
 const rowBudgets = computed(() =>
   weekCaseLanes.value.map((wcl) =>
     computeWeekRowBudget(
-      wcl.lanes.length,
-      wcl.overflow.length > 0,
+      hideCaseBars.value ? 0 : wcl.lanes.length,
+      hideCaseBars.value ? false : wcl.overflow.length > 0,
       TOTAL_ROWS_PER_WEEK,
       MAX_CASE_LANES,
     ),
@@ -588,6 +597,29 @@ onMounted(load);
         </div>
 
         <AssigneeFilter v-model="assigneeUserId" />
+
+        <!-- Requirement 9.1, 9.2: exact same toggle-switch visual pattern as
+             CaseDetailModal.vue's "この案件を完了にする" (role="switch",
+             toggle-switch/toggle-knob classes, bg-primary-600/bg-slate-300,
+             translate-x-4/translate-x-0.5), not the button-style mockup
+             (research.md "「案件バー」表示切替"). -->
+        <label class="flex items-center gap-2 text-sm text-slate-700">
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="!hideCaseBars"
+            aria-label="案件バーを表示"
+            class="toggle-switch relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors"
+            :class="!hideCaseBars ? 'bg-primary-600' : 'bg-slate-300'"
+            @click="hideCaseBars = !hideCaseBars"
+          >
+            <span
+              class="toggle-knob inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+              :class="!hideCaseBars ? 'translate-x-4' : 'translate-x-0.5'"
+            />
+          </button>
+          案件バーを表示
+        </label>
       </div>
     </div>
 
@@ -688,6 +720,7 @@ onMounted(load);
                stays clickable. Each bar's `top` is a plain pixel offset from
                `laneIndex * CASE_LANE_ROW_HEIGHT_PX`. -->
           <div
+            v-if="!hideCaseBars"
             class="pointer-events-none absolute inset-x-0"
             :style="{
               top: `${CASE_LANE_TOP_OFFSET_PX}px`,
