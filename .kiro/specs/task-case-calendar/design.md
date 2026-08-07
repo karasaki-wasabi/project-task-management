@@ -40,7 +40,8 @@
 - `frontend/components/shared/DatePicker.helpers.ts`の`generateMonthGrid`/`weekdayKanji`/`computeTodayIso`/`formatSlashDate`/`DateCell`(既存の`export`関数・型をそのままimport)
 - `frontend/components/kanban/TaskDetailModal.vue`(`taskId`/`users`/`stages`/`cases`のprops契約を維持したまま呼び出す)
 - `frontend/components/cases/CaseDetailModal.vue`(`caseId`のprops契約を維持したまま呼び出す)
-- `frontend/components/shared/StatusBadge.vue`/`PriorityBadge.vue`/`AssigneeFilter.vue`(既存、変更不要)
+- `frontend/components/shared/AssigneeFilter.vue`(既存、変更不要)
+- `frontend/components/shared/Badge.vue`(タスク行の開発段階表示。当初想定の`StatusBadge`/`PriorityBadge`はビジュアル確定後に採用しない)
 
 ### Revalidation Triggers
 - `DatePicker.helpers.ts`の`generateMonthGrid`のシグネチャ・`DateCell`型が変更された場合、カレンダー画面のグリッド描画ロジックを再検証する
@@ -147,9 +148,10 @@ sequenceDiagram
     CalendarPage->>Api: listCases()
     Api-->>CalendarPage: Task[], Case[]
     CalendarPage->>Helpers: generateMonthGrid(year, month)
-    CalendarPage->>Helpers: buildTaskMarkersByDate(tasks)
-    CalendarPage->>Helpers: buildCaseSegments(cells, cases)
-    Helpers-->>CalendarPage: DateCell[], マーカー/セグメントのマップ
+    CalendarPage->>Helpers: buildTaskMarkersByDate(tasks, stages, todayIso)
+    CalendarPage->>Helpers: buildWeekCaseLanes(weekDays, cases, maxLanes)
+    CalendarPage->>Helpers: computeWeekRowBudget(...)
+    Helpers-->>CalendarPage: DateCell[], マーカー/週次レーン/行予算
     CalendarPage-->>User: 月グリッド描画
 
     User->>CalendarPage: タスクを選択
@@ -178,7 +180,7 @@ sequenceDiagram
 | 2.3 | 開発段階の視覚的表示 | CalendarPage(`t.stage`表示) | - | 画面表示フロー |
 | 2.4 | 期限超過タスクの強調表示 | CalendarPage, CalendarHelpers(`isOverdue`算出) | - | 画面表示フロー |
 | 2.5, 2.6 | 日次省略表示・一覧確認 | CalendarPage, CalendarHelpers(`truncateDayMarkers`), OverflowListPopup | - | 詳細確認フロー |
-| 3.1, 3.2, 3.3, 3.4, 3.5 | 案件期間のバー/点表示、月またぎ、完了状態の区別 | CalendarPage, CalendarHelpers(`buildWeekCaseLanes`) | `listCases` | 画面表示フロー |
+| 3.1, 3.2, 3.3, 3.4, 3.5 | 案件期間のバー/片側オープン端表示、月またぎ、完了状態の区別 | CalendarPage, CalendarHelpers(`buildWeekCaseLanes`) | `listCases` | 画面表示フロー |
 | 3.6 | 週次省略表示・一覧確認 | CalendarPage, CalendarHelpers(`buildWeekCaseLanes`のoverflow), OverflowListPopup | - | 詳細確認フロー |
 | 4.1, 4.2, 4.3 | 月移動(前月/次月/今月) | CalendarPage, CalendarHelpers(`shiftMonth`) | - | 画面表示フロー |
 | 5.1, 5.2, 5.3 | 担当者絞り込み(タスクのみ、案件バーは全件) | CalendarPage, AssigneeFilter | `listTasks({ assigneeUserId })` | 画面表示フロー |

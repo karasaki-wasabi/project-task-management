@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. バックエンド: 非タスクイベント機能の廃止(データモデル・API)
+- [x] 1. バックエンド: 非タスクイベント機能の廃止(データモデル・API)
 - [x] 1.1 Prismaスキーマ更新とマイグレーションリセット
   - `Event`モデルと`Case.events`リレーションをスキーマから削除する
   - 既存の単一マイグレーション(`20260805030211_init_domain_schema`)を整理し、単一の初期マイグレーションとして再生成する(本番データなしの前提でのリセット)
@@ -32,7 +32,7 @@
   - 観測可能な完了状態: `validation.integration.test.ts`がgreenになり、バックエンドの全テストスイート(`npx vitest run --no-file-parallelism`)がEvent関連の失敗なしで完走する
   - _Requirements: 7.1_
 
-- [ ] 2. フロントエンド: 非タスクイベント機能の廃止
+- [x] 2. フロントエンド: 非タスクイベント機能の廃止
 - [x] 2.1 (P) useApiClientからのイベント関連メソッド削除とイベント画面の削除
   - `AppEvent`インターフェース、`listEvents`/`createEvent`/`deleteEvent`メソッドを`useApiClient.ts`から削除する
   - `frontend/pages/events/index.vue`を削除する
@@ -49,7 +49,7 @@
   - _Requirements: 8.1_
   - _Boundary: dashboard page, e2e_
 
-- [ ] 3. カレンダー表示ロジック(CalendarHelpers)の実装
+- [x] 3. カレンダー表示ロジック(CalendarHelpers)の実装
 - [x] 3.1 (P) タスク期限日のグルーピング・省略表示・月移動ロジック実装
   - `scheduledDate`が設定されたタスクのみを日付キー(`YYYY-MM-DD`)でグルーピングする関数を実装する
   - 1日あたりの表示件数が閾値を超える場合に上位N件+overflow件数を算出する関数を実装する
@@ -68,19 +68,19 @@
   - _Depends: 3.1_
   - _Boundary: CalendarHelpers_
 
-- [ ] 4. カレンダー画面(CalendarPage)の実装
+- [x] 4. カレンダー画面(CalendarPage)の実装
 - [x] 4.1 月グリッドとタスク期限日の表示
   - `DatePicker.helpers.ts`の`generateMonthGrid`を用いて週区切りの月グリッドを描画し、本日を強調表示する
-  - タスクの期限日を該当日セルに表示し、`StatusBadge`/`PriorityBadge`で状態・優先度を区別する
-  - 同日の表示件数が閾値を超える場合に省略表示(+N件)を反映する
+  - タスクの期限日を該当日セルに表示する(初期実装は`StatusBadge`/`PriorityBadge`。最終形はtask 7.3でタイトル+開発段階バッジ+期限超過強調へ刷新)
+  - 同日の表示件数が閾値を超える場合に省略表示(「他N件」。表記はtask 7.xで統一)を反映する
   - 観測可能な完了状態: 期限日を持つタスクが該当日セルに表示され、期限日未設定のタスクは表示されないことをブラウザで確認できる
   - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 2.5_
   - _Boundary: CalendarPage_
 
 - [x] 4.2 案件期間バーの表示
-  - `buildCaseSegments`の結果を用いて、日セル内に案件セグメントをstart/middle/end/single/pointに応じた角丸で描画し、視覚的に連続したバーに見せる
+  - 案件期間をカレンダー上に描画する(初期実装は`buildCaseSegments`による日セル単位セグメント。最終形はtask 7.2/7.4で`buildWeekCaseLanes`による週次レーンオーバーレイへ刷新)
   - 案件の完了状態(`isCompleted`)を視覚的に区別する
-  - 観測可能な完了状態: 開始日・終了日を持つ案件が期間バーとして連続して見え、片側のみ日付が設定された案件は点表示されることを確認できる
+  - 観測可能な完了状態: 開始日・終了日を持つ案件が期間バーとして見え、片側のみ日付が設定された案件はオープン端バー(‹/›)として確認できる(最終形。初期の点表示はtask 7.4で置換)
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
   - _Depends: 4.1_
   - _Boundary: CalendarPage_
@@ -102,7 +102,7 @@
   - _Depends: 4.2_
   - _Boundary: CalendarPage_
 
-- [ ] 5. 統合: ナビゲーションとsteeringの更新
+- [x] 5. 統合: ナビゲーションとsteeringの更新
 - [x] 5.1 グローバルナビゲーションの更新
   - `frontend/app.vue`の`{ to: "/events", label: "タイムライン" }`を`{ to: "/calendar", label: "カレンダー" }`に置き換える
   - 観測可能な完了状態: グローバルナビゲーションから「タイムライン」の項目が消え、「カレンダー」から`/calendar`へ遷移できる
@@ -115,7 +115,7 @@
   - _Requirements: 7.1_
   - _Depends: 1.2, 4.4_
 
-- [ ] 6. 検証: E2Eテスト
+- [x] 6. 検証: E2Eテスト
 - [x] 6.1 カレンダー画面の主要フローのE2E検証
   - 期限日を持つタスクと期間を持つ案件の表示、月移動、担当者絞り込み、タスク/案件詳細モーダルの起動をPlaywrightで検証する
   - 観測可能な完了状態: 一連の操作を自動検証する新規E2Eテストがgreenになる
@@ -128,7 +128,7 @@
   - _Requirements: 7.1, 7.2, 8.1_
   - _Depends: 5.1, 5.2_
 
-- [ ] 7. ビジュアルデザインの反映(claude design確定版)
+- [x] 7. ビジュアルデザインの反映(claude design確定版)
 - [x] 7.1 OverflowListPopupコンポーネントの新規実装
   - `frontend/components/shared/OverflowListPopup.vue`を新規作成する(`open`/`title`/`items`のprops、`select`/`close`のemits、claude design `詳細ポップアップ.dc.html`のレイアウトを実装)
   - 観測可能な完了状態: propsで渡した一覧が表示され、行クリックで`select(kind, id)`イベントが、背景クリック/閉じるボタンで`close`イベントが発火することを確認できる
@@ -196,3 +196,13 @@
 - (task 7.4 完了後の目視不具合修正) 上記の「チップをバーに重ねる」方式は見た目上の重なり・行数オーバーを残した。正しい行予算は research.md の `bandRows = min(lanes + dropped, maxLanes)` で、overflow があるときはバーレーンを `maxLanes - 1` に縮めチップ専用行を確保する(タスクの `truncateDayMarkers` も同様に「他N件」行を予算内に含める)。あわせて日セルへ `min-w-0 overflow-hidden`(土日列の内容によるトラック膨張でバーがずれないようにする)、`CASE_LANE_TOP_OFFSET_PX` にセルpaddingを含める(本日丸との重なり回避)、バー高さをレーン枠より低くする(縦隙間)を適用した。
 - (省略表示ラベル) タスク・案件とも「他N件」表記に統一。表示キャップはタスク99(「他99+件」)、案件9(「他9+件」)。チップ幅は最長形が入るよう予約する(`formatTaskOverflowLabel` / `formatCaseOverflowLabel`)。
 - (task 7.7) 片側日付のみの案件は`buildWeekCaseLanes`が週境界を超えて全週に載るため、共有dev DBに残るとレーン予算が常時飽和する。案件バー系E2Eは開始前に公開APIで open-ended 案件と`e2e-cal-*`をsoft-deleteする(`purgePollutingCalendarCases`)。
+- (`/kiro-validate-impl` で発覚、本スペック外へ切り出し)
+  - 背景
+    - 共有dev DBにE2E残骸が蓄積し、機能検証が通らなくなった([[testing.md]]「開発DBがE2E実行間でリセットされない」)
+    - 今回のゲート通過のため`prisma migrate reset --force`でDBを破棄・再構築した(一時対応)
+  - 別スペック候補1: E2Eテストデータの隔離
+    - テスト間で作成データを破棄する、またはスイート開始時にE2E専用DBを構築し終了時に破棄する
+    - 放置した`fixed_interval`日次テンプレートが`generateDueInstances(asOf=遠い未来)`で全アクティブテンプレ×年単位を走査し、backend recurrenceスイートをタイムアウトさせる二次被害もあった
+  - 別スペック候補2: 一覧取得の大量データ耐性
+    - タスクが約6000件の時点で`/tasks`の登録直後リロードが事実上固まり、カレンダーE2Eのセットアップが失敗した
+    - 運用で件数が伸びると同様に困るため、ボトルネック調査とページネーション／仮想スクロール等の設計が必要(本スペックの範囲外)
