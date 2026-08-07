@@ -67,17 +67,6 @@ export interface CaseProgress {
   isOverdueWithIncomplete: boolean;
 }
 
-export interface AppEvent {
-  id: string;
-  title: string;
-  occursAt: string;
-  caseId?: string | null;
-  assigneeUserId?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt?: string | null;
-}
-
 export interface User {
   id: string;
   name: string;
@@ -194,12 +183,6 @@ export function useApiClient() {
     ) => request<Case>(`/api/cases/${id}`, { method: "PATCH", body: input }),
     getCaseProgress: (id: string) => request<CaseProgress>(`/api/cases/${id}/progress`),
     deleteCase: (id: string) => request<void>(`/api/cases/${id}`, { method: "DELETE" }),
-
-    // Events (design.md "Backend/events" API Contract)
-    listEvents: (filter: { assigneeUserId?: string } = {}) => request<AppEvent[]>("/api/events", { query: filter }),
-    createEvent: (input: { title: string; occursAt: string; caseId?: string; assigneeUserId?: string }) =>
-      request<AppEvent>("/api/events", { method: "POST", body: input }),
-    deleteEvent: (id: string) => request<void>(`/api/events/${id}`, { method: "DELETE" }),
 
     // Holidays (design.md "Backend/holidays" API Contract)
     listHolidays: () => request<NonBusinessDay[]>("/api/holidays"),

@@ -1,11 +1,15 @@
 <!--
   Dashboard (task 17.1, design.md "Frontend/dashboard", Requirements
-  11.1-11.6). Aggregates two existing, already-owned views (overdue
-  cases from Frontend/cases' own progress logic, upcoming events
-  from Frontend/events) into one landing screen, so the user does not need
-  to open each detail screen separately to see what is currently at risk.
-  No new backend endpoint: reuses listCases/getCaseProgress/
-  listEvents exactly like the existing cases/timeline pages.
+  11.1-11.6). Aggregates the overdue-cases view (Frontend/cases' own
+  progress logic) into a landing screen, so the user does not need
+  to open the cases detail screen separately to see what is currently
+  at risk. No new backend endpoint: reuses listCases/getCaseProgress
+  exactly like the existing cases page.
+
+  The non-task-event ("直近のイベント") section was removed in
+  task-case-calendar task 2.2 as part of retiring the non-task-event
+  feature entirely (Requirement 8.1); it is not replaced by anything
+  on this page.
 -->
 <script setup lang="ts">
 interface CaseRow extends Case {
@@ -16,10 +20,8 @@ const DISPLAY_LIMIT = 5;
 
 const api = useApiClient();
 const overdueCases = ref<CaseRow[]>([]);
-const upcomingEvents = ref<AppEvent[]>([]);
 
 const visibleOverdueCases = computed(() => overdueCases.value.slice(0, DISPLAY_LIMIT));
-const visibleUpcomingEvents = computed(() => upcomingEvents.value.slice(0, DISPLAY_LIMIT));
 
 async function load() {
   const cases = await api.listCases();
@@ -27,10 +29,6 @@ async function load() {
     cases.map(async (case_) => ({ ...case_, progress: await api.getCaseProgress(case_.id) })),
   );
   overdueCases.value = withProgress.filter((c) => c.progress?.isOverdueWithIncomplete);
-
-  const events = await api.listEvents();
-  const now = new Date().toISOString();
-  upcomingEvents.value = events.filter((e) => e.occursAt >= now).sort((a, b) => a.occursAt.localeCompare(b.occursAt));
 }
 
 onMounted(load);
@@ -66,31 +64,6 @@ onMounted(load);
           class="mt-3 inline-block text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
         >
           すべての案件を見る({{ overdueCases.length }}件)
-        </NuxtLink>
-      </template>
-    </section>
-
-    <section class="rounded-lg bg-white p-4 ring-1 ring-slate-200">
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">直近のイベント</h2>
-      <p v-if="upcomingEvents.length === 0" class="mt-2 text-sm text-slate-600">直近のイベントはありません。</p>
-      <template v-else>
-        <ul class="mt-3 space-y-2">
-          <li v-for="event in visibleUpcomingEvents" :key="event.id">
-            <NuxtLink
-              to="/events"
-              class="block rounded-md px-3 py-2 text-sm hover:bg-slate-50"
-            >
-              <span class="font-medium text-slate-900">{{ event.title }}</span>
-              <span class="ml-2 text-slate-500">{{ event.occursAt }}</span>
-            </NuxtLink>
-          </li>
-        </ul>
-        <NuxtLink
-          v-if="upcomingEvents.length > DISPLAY_LIMIT"
-          to="/events"
-          class="mt-3 inline-block text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
-        >
-          すべてのイベントを見る({{ upcomingEvents.length }}件)
         </NuxtLink>
       </template>
     </section>

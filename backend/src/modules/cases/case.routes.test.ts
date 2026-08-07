@@ -139,7 +139,7 @@ describe("caseRoutes (task 3.3)", () => {
     await app.close();
   });
 
-  it("DELETE /api/cases/:id detaches linked Task/Event caseId to null (Requirements 8.1, 8.2)", async () => {
+  it("DELETE /api/cases/:id detaches linked Task caseId to null (Requirements 8.1, 8.2)", async () => {
     const app = await buildTestApp();
     const created = await app.inject({
       method: "POST",
@@ -148,19 +148,13 @@ describe("caseRoutes (task 3.3)", () => {
     });
     const { id } = created.json();
     const linkedTask = await db.task.create({ data: { title: "linked task", priority: "low", caseId: id } });
-    const linkedEvent = await db.event.create({
-      data: { title: "linked event", occursAt: new Date("2026-09-02T00:00:00.000Z"), caseId: id },
-    });
 
     const response = await app.inject({ method: "DELETE", url: `/api/cases/${id}` });
     expect(response.statusCode).toBe(204);
 
     const survivingTask = await db.task.findUnique({ where: { id: linkedTask.id } });
-    const survivingEvent = await db.event.findUnique({ where: { id: linkedEvent.id } });
     expect(survivingTask?.caseId).toBeNull();
-    expect(survivingEvent?.caseId).toBeNull();
 
-    await hardDelete("events", [linkedEvent.id]);
     await hardDelete("tasks", [linkedTask.id]);
     await hardDelete("cases", [id]);
     await app.close();

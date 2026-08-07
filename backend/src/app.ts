@@ -20,7 +20,6 @@ import { createLogger, type AppLogger } from "./shared/logger.js";
 import { userRoutes } from "./modules/users/user.routes.js";
 import { taskRoutes } from "./modules/tasks/task.routes.js";
 import { caseRoutes } from "./modules/cases/case.routes.js";
-import { eventRoutes } from "./modules/events/event.routes.js";
 import { holidayRoutes } from "./modules/holidays/holiday.routes.js";
 import { throughputRoutes } from "./modules/throughput/throughput.routes.js";
 import { recurrenceRoutes } from "./modules/recurrence/recurrence.routes.js";
@@ -61,7 +60,6 @@ export function buildApp(env: Env = loadEnv(), logger: AppLogger = createLogger(
   app.register(userRoutes);
   app.register(taskRoutes);
   app.register(caseRoutes);
-  app.register(eventRoutes);
   app.register(holidayRoutes);
   app.register(throughputRoutes);
   app.register(recurrenceRoutes);

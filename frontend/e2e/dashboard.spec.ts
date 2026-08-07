@@ -1,5 +1,9 @@
-// E2E: dashboard shows an overdue case + an upcoming event, with
-// drill-down navigation (task 18.3, Requirements 11.2, 11.3, 11.4).
+// E2E: dashboard shows an overdue case, with drill-down navigation
+// (task 18.3, Requirements 11.2, 11.3, 11.4).
+//
+// The dashboard's non-task-event ("直近のイベント") panel was removed in
+// task-case-calendar task 2.2 (Requirement 8.1), so this spec no longer
+// creates or asserts an event; only the overdue-case panel is verified.
 //
 // Case registration terminology/flow updated for case-management-ux (task
 // 9.4): the old inline /deliveries form is gone — cases are now registered
@@ -12,8 +16,7 @@
 //
 // Remediation (round 2, task 9.4): the dashboard's overdue panel
 // (frontend/pages/index.vue) caps its inline list to the first
-// DISPLAY_LIMIT=5 items and does NOT sort them first (unlike
-// upcomingEvents, which is sorted before slicing). The dev DB this suite
+// DISPLAY_LIMIT=5 items and does NOT sort them first. The dev DB this suite
 // runs against accumulates overdue-case rows across every prior E2E run
 // (no reset between runs), so a freshly created case almost never lands
 // in that capped, unsorted top-5 slice — asserting `page.getByText(caseName)`
@@ -67,13 +70,12 @@ async function setDateViaPicker(
   await expect(popover).toBeHidden();
 }
 
-test("dashboard shows an overdue case and an upcoming event, and drills down to the task list (Requirements 11.2-11.4)", async ({
+test("dashboard shows an overdue case and drills down to the task list (Requirements 11.2-11.4)", async ({
   page,
 }) => {
   const suffix = Date.now();
   const caseName = `e2e-dash-case-${suffix}`;
   const requiredTaskTitle = `e2e-dash-required-task-${suffix}`;
-  const eventTitle = `e2e-dash-event-${suffix}`;
 
   await page.goto("/tasks");
   await page.getByPlaceholder("タスク名").fill(requiredTaskTitle);
@@ -117,31 +119,20 @@ test("dashboard shows an overdue case and an upcoming event, and drills down to 
 
   await expect(page.locator("tbody tr", { hasText: caseName })).toBeVisible();
 
-  await page.goto("/events");
-  await page.getByPlaceholder("イベント名").fill(eventTitle);
-  await page.locator('input[type="datetime-local"]').fill("2040-01-01T09:00");
-  await page.getByRole("button", { name: "イベント登録" }).click();
-  await expect(page.locator("li", { hasText: eventTitle }).first()).toBeVisible();
-
   await page.goto("/");
 
-  // Both dashboard panels (frontend/pages/index.vue) slice their list to
-  // the first DISPLAY_LIMIT=5 items before rendering. The overdue-case
-  // list additionally isn't sorted first (the bug this remediation targets
-  // for `caseName`), but the upcoming-events list, while sorted ascending
-  // by occursAt, has the exact same accumulation problem here: this and
-  // timeline.spec.ts both create test events at the identical fixed
-  // future timestamp ("2040-01-01T09:00"), so ties from many prior runs
-  // sort ahead of a freshly created one and it likewise falls outside the
-  // capped top-5 slice. So neither panel's specific-item-by-name assertion
-  // is reliable against this shared, never-reset dev DB — only assert that
-  // each SECTION renders with a non-empty state; the event's real presence
-  // was already verified on /events above (no cap there), and the case's
-  // is verified via /cases' search box below.
+  // The dashboard's overdue panel (frontend/pages/index.vue) slices its
+  // list to the first DISPLAY_LIMIT=5 items before rendering, and does not
+  // sort them first (the bug this remediation targets for `caseName`). The
+  // dev DB this suite runs against accumulates overdue-case rows across
+  // every prior E2E run (no reset between runs), so a freshly created case
+  // almost never lands in that capped, unsorted top-5 slice. So the panel's
+  // specific-item-by-name assertion is not reliable against this shared,
+  // never-reset dev DB — only assert that the SECTION renders with a
+  // non-empty state; the case's real presence is verified via /cases'
+  // search box below.
   await expect(page.getByRole("heading", { name: "期限超過・未完了の案件" })).toBeVisible();
   await expect(page.getByText("期限超過の案件はありません")).not.toBeVisible();
-  await expect(page.getByRole("heading", { name: "直近のイベント" })).toBeVisible();
-  await expect(page.getByText("直近のイベントはありません")).not.toBeVisible();
 
   // Verify the case itself — and its 期限超過 status — via /cases' name
   // search box, which has no display cap (already proven reliable in

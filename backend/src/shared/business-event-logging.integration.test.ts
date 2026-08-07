@@ -15,7 +15,6 @@ import { db } from "./db.js";
 import { usersService } from "../modules/users/user.service.js";
 import { tasksService } from "../modules/tasks/task.service.js";
 import { caseService } from "../modules/cases/case.service.js";
-import { eventsService } from "../modules/events/event.service.js";
 import { holidaysService } from "../modules/holidays/holiday.service.js";
 import { recurrenceService } from "../modules/recurrence/recurrence.service.js";
 
@@ -154,22 +153,6 @@ describe("business event logging (task 10.2)", () => {
       expect(logged?.requestId).toBe("req-case-delete");
     } finally {
       if (caseId) await db.$executeRawUnsafe("DELETE FROM cases WHERE id = ?", caseId);
-    }
-  });
-
-  it("logs event.deleted with the deleted event's id", async () => {
-    let eventId: string | undefined;
-    try {
-      const event = await eventsService.create({ title: "loggable event", occursAt: new Date() });
-      eventId = event.id;
-
-      await eventsService.delete(event.id, "req-event-delete");
-
-      const logged = findEvent("event.deleted");
-      expect(logged?.entityId).toBe(event.id);
-      expect(logged?.requestId).toBe("req-event-delete");
-    } finally {
-      if (eventId) await db.$executeRawUnsafe("DELETE FROM events WHERE id = ?", eventId);
     }
   });
 
