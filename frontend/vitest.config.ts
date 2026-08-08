@@ -8,8 +8,11 @@ import vue from "@vitejs/plugin-vue";
 //
 // Vue SFC component tests (task 6.1+) use @vue/test-utils + happy-dom.
 // Helper-only unit tests remain compatible with the same config.
+//
+// `as never`: Nuxt pulls Vite 8 plugin types; vitest 3 still types against its
+// nested Vite 7 copy. Runtime is fine; this silences the defineConfig mismatch.
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue() as never],
   test: {
     environment: "happy-dom",
     exclude: ["**/node_modules/**", "**/e2e/**"],
