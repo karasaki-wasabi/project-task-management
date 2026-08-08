@@ -24,7 +24,7 @@
   - _Requirements: 1.1, 5.5_
   - _Depends: 1.1_
 
-- [ ] 2. Core: 繰り返しテンプレート API(固定間隔廃止・再開・起点4種)
+- [x] 2. Core: 繰り返しテンプレート API(固定間隔廃止・再開・起点4種)
 - [x] 2.1 登録・一覧・停止・再開・削除 API を案件連動のみに更新する
   - generate-due / rrule 依存を削除する。登録入力は起点4種・非負オフセット・非営業日ポリシー・既定メモとする
   - `onCaseCreated` / `onCaseEndDateChanged` など無確認の自動適用入口を RecurrenceService から削除する(呼び出し側の切替はタスク4)
@@ -44,7 +44,7 @@
   - _Depends: 2.1_
 
 - [ ] 3. Core: 案件への明示適用(applyToCase)と候補構築
-- [ ] 3.1 (P) buildCaseTemplateApplyCandidates 純関数を backend に置く
+- [x] 3.1 (P) buildCaseTemplateApplyCandidates 純関数を backend に置く
   - 旧→新日付から start/end/month の generate/regenerate/delete 候補を返す
   - 作成時は旧日付 null。遷移表は design の適用操作表どおり。候補ゼロ遷移も含めて固定する
   - 観測可能な完了状態: 遷移ごとの候補キー(ゼロ件含む)をユニットテストで固定できる
