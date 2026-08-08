@@ -84,7 +84,7 @@
   - _Boundary: caseTemplateApplyCandidates_
   - _Depends: 3.1_
 
-- [ ] 6. Core: 案件確認 UI
+- [x] 6. Core: 案件確認 UI
 - [x] 6.1 (P) CaseTemplateApplyConfirm を確定デザインどおり実装する
   - 画面A(未設定確認)、B(チェックリスト)、C(最終確認)。ネストモーダル。キャンセル/×/Esc で abort
   - 観測可能な完了状態: 3画面の切替と選択結果の返却をコンポーネントテストまたはブラウザで確認できる
@@ -99,7 +99,7 @@
   - _Boundary: CaseFormModal_
   - _Depends: 5.1, 6.1_
 
-- [ ] 6.3 (P) CaseDetailModal に編集時チェックリスト→最終確認→PATCH を組み込む
+- [x] 6.3 (P) CaseDetailModal に編集時チェックリスト→最終確認→PATCH を組み込む
   - 候補ゼロは直接保存。キャンセルは未保存。選択部分集合(空含む)を送る
   - 観測可能な完了状態: 日付変更で B/C が出て、チェック外しで日付のみ更新され、キャンセルでサーバ状態が変わらない
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 4.12, 4.13_
