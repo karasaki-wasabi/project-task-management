@@ -12,22 +12,22 @@
 // cases and prior `e2e-cal-*` rows on the shared dev DB otherwise saturate
 // every week-lane budget (see that helper's comment).
 //
-// Test-data setup notes (see this task's boundary in tasks.md 6.1 and
-// .kiro/steering/testing.md):
+// Test-data setup notes (see recurrence-holidays-ux task 8.2, prior
+// task-case-calendar 6.1, and .kiro/steering/testing.md):
 // - Cases: `startDate`/`endDate` are fully settable through the real
 //   CaseFormModal UI (/cases), so case period bars are driven end-to-end
-//   through actual form interaction, same as cases.spec.ts.
+//   through actual form interaction, same as cases.spec.ts. Missing one
+//   or both dates opens CaseTemplateApplyConfirm (Screen A); helpers
+//   approve with 「作成する」. Case-bar fixtures POST with
+//   `templateOperations: []` so leftover active templates do not inject
+//   tasks into shared-dev-DB runs.
 // - Tasks: there is no UI path to set an arbitrary task's `scheduledDate`
 //   directly (task.routes.ts's Zod create/update schemas don't accept it).
-//   The only legitimate UI path that produces a task with a real
-//   `scheduledDate` is the recurring-task-template flow (/recurrence):
-//   registering a `fixed_interval` template and clicking "今すぐ生成"
-//   (`POST /api/recurring-templates/generate-due` with no explicit `asOf`,
-//   which the backend defaults to `new Date()`) creates a real Task row
-//   whose `scheduledDate` is *today* (the template's own `createdAt`, which
-//   is always included as the rule's first occurrence). This is a real,
-//   already-shipped feature (recurrence spec) exercised exactly as a user
-//   would, not a private API call or DB write.
+//   The legitimate UI path is case-relative templates (/recurrence Modal)
+//   plus case create with both dates set (omit `templateOperations` →
+//   server applies full candidates, Req 3.4). Templates use
+//   `case_start` / offset 0 / `as_is` so instances land on the case
+//   startDate (= today for marker tests).
 // - Because generated instances land with today's date, and the dev DB
 //   accumulates data across runs (testing.md), today's day-cell could in
 //   principle already hold enough unrelated tasks to push new ones into
@@ -47,6 +47,8 @@
 //   page itself uses), since the generated task has no developmentStageId
 //   and therefore starts in the backlog panel — this sidesteps needing the
 //   calendar's own (possibly-overflowed) day cell to reach the edit form.
+// - Active templates registered in the marker test are stopped afterward
+//   so later case creates in this file are not contaminated.
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 
 // Backend URL for setup/teardown helpers. Mirrors events-removed.spec.ts;
@@ -85,23 +87,40 @@ async function createUser(page: Page, name: string) {
   await expect(page.locator("tr", { hasText: name })).toBeVisible();
 }
 
-// Registers a fixed_interval recurring template (daily, non_business_day
-// policy left at its "as_is" default so today's scheduled date is never
-// skipped/shifted regardless of weekday/holiday status).
-async function registerDailyTemplate(page: Page, title: string, priorityLabel: "高" | "中" | "低") {
+type ApiTemplate = {
+  id: string;
+  title: string;
+  isActive: boolean;
+};
+
+// Registers a case_start template (offset 0, as_is) via the create Modal so
+// a later case create with startDate=today yields scheduledDate=today
+// without holiday skip/shift.
+async function registerCaseStartTemplate(page: Page, title: string, priorityLabel: "高" | "中" | "低") {
   await page.goto("/recurrence");
-  const form = page.locator("form").first();
-  await form.getByPlaceholder("テンプレート名").fill(title);
-  await form.locator("select").nth(0).selectOption({ label: priorityLabel });
-  // kind (nth(1)) stays at its "固定間隔" default.
-  await form.locator("select").nth(2).selectOption({ label: "日" });
-  await form.getByRole("button", { name: "テンプレート登録" }).click();
+  await page.getByRole("button", { name: "テンプレートを登録" }).click();
+  const modal = page.locator(".recurrence-form-modal");
+  await expect(modal).toBeVisible();
+  await modal.getByLabel("テンプレート名").fill(title);
+  await modal.getByLabel("優先度").selectOption({ label: priorityLabel });
+  await modal.getByLabel("起点").selectOption({ label: "案件開始日" });
+  await modal.getByLabel("オフセット日数").fill("0");
+  await modal.getByLabel("非営業日に該当した場合の扱い").selectOption({ label: "そのまま登録" });
+  await modal.getByRole("button", { name: "登録", exact: true }).click();
+  await expect(modal).toBeHidden();
   await expect(page.locator("tbody tr", { hasText: title })).toBeVisible();
 }
 
-async function generateDueInstancesNow(page: Page) {
-  await page.getByRole("button", { name: "今すぐ生成" }).click();
-  await expect(page.getByText(/件のタスクを生成しました/)).toBeVisible();
+async function stopTemplatesByTitle(request: APIRequestContext, titles: string[]) {
+  const response = await request.get(`${API_BASE_URL}/api/recurring-templates`);
+  expect(response.ok()).toBeTruthy();
+  const templates = (await response.json()) as ApiTemplate[];
+  const wanted = new Set(titles);
+  for (const template of templates) {
+    if (!wanted.has(template.title) || !template.isActive) continue;
+    const stop = await request.post(`${API_BASE_URL}/api/recurring-templates/${template.id}/stop`);
+    expect([204, 200, 404]).toContain(stop.status());
+  }
 }
 
 // Assigns `userName` to the (currently unassigned, stage-less) task
@@ -223,31 +242,54 @@ async function setDateViaPicker(container: Locator, triggerName: string, iso: st
   await expect(popover).toBeHidden();
 }
 
-async function createCaseWithDates(
+// UI create that applies active templates when both dates are set (omit
+// templateOperations → server full candidates). Missing dates approve Screen A.
+async function createCaseApplyingTemplates(
   page: Page,
   name: string,
-  opts: { startDate?: string; endDate?: string } = {},
+  opts: { startDate: string; endDate: string },
 ) {
   await page.goto("/cases");
   await page.getByRole("button", { name: "案件を登録" }).click();
   const formModal = page.locator(".case-form-modal");
   await expect(formModal).toBeVisible();
   await formModal.getByLabel("案件名").fill(name);
-  if (opts.startDate) await setDateViaPicker(formModal, "開始日", opts.startDate);
-  if (opts.endDate) await setDateViaPicker(formModal, "終了日", opts.endDate);
+  await setDateViaPicker(formModal, "開始日", opts.startDate);
+  await setDateViaPicker(formModal, "終了日", opts.endDate);
   await formModal.getByRole("button", { name: "登録", exact: true }).click();
   await expect(formModal).toBeHidden();
 }
 
+// Case-bar fixtures: no template apply (templateOperations: []) so active
+// templates on the shared DB cannot inject scheduled tasks into bar tests.
+async function createCaseFixture(
+  request: APIRequestContext,
+  name: string,
+  opts: { startDate?: string; endDate?: string } = {},
+) {
+  const response = await request.post(`${API_BASE_URL}/api/cases`, {
+    data: {
+      name,
+      ...(opts.startDate ? { startDate: opts.startDate } : {}),
+      ...(opts.endDate ? { endDate: opts.endDate } : {}),
+      templateOperations: [],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+}
+
 test("期限日を持つタスクの表示・開発段階バッジ・担当者絞り込み・詳細モーダル (Requirements 1.1-1.3, 2.1-2.5, 5.1-5.3, 6.1)", async ({
   page,
+  request,
 }) => {
+  test.setTimeout(90_000);
   const suffix = Date.now();
   const userAName = `e2e-cal-user-a-${suffix}`;
   const userBName = `e2e-cal-user-b-${suffix}`;
   const taskATitle = `e2e-cal-task-a-${suffix}`;
   const taskBTitle = `e2e-cal-task-b-${suffix}`;
   const noDateTaskTitle = `e2e-cal-nodate-${suffix}`;
+  const seedCaseName = `e2e-cal-seed-${suffix}`;
 
   await createUser(page, userAName);
   await createUser(page, userBName);
@@ -260,13 +302,17 @@ test("期限日を持つタスクの表示・開発段階バッジ・担当者�
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: noDateTaskTitle }).first()).toBeVisible();
 
-  // Requirement 2.1/2.3/2.4 test data: two recurring templates, generated
-  // "now" so both instances land with scheduledDate = today. Priority is
-  // still set on the template (form requires it) but is no longer asserted
-  // on the calendar marker after the visual refresh (task 7.3 / 7.7).
-  await registerDailyTemplate(page, taskATitle, "高");
-  await registerDailyTemplate(page, taskBTitle, "低");
-  await generateDueInstancesNow(page);
+  // Requirement 2.1/2.3/2.4 (+ recurrence-holidays-ux 1.2 / 3.4): two
+  // case_start templates, then a case with both dates = today so the
+  // server applies full candidates and instances land on today.
+  // Priority is still set on the template (form requires it) but is no
+  // longer asserted on the calendar marker after the visual refresh.
+  const now = new Date();
+  const today = isoDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  await registerCaseStartTemplate(page, taskATitle, "高");
+  await registerCaseStartTemplate(page, taskBTitle, "低");
+  await createCaseApplyingTemplates(page, seedCaseName, { startDate: today, endDate: today });
+  await stopTemplatesByTitle(request, [taskATitle, taskBTitle]);
 
   await assignViaKanbanBacklog(page, taskATitle, userAName);
   await assignViaKanbanBacklog(page, taskBTitle, userBName);
@@ -274,7 +320,6 @@ test("期限日を持つタスクの表示・開発段階バッジ・担当者�
   await page.goto("/calendar");
   await expect(page.getByRole("heading", { name: "カレンダー" })).toBeVisible();
 
-  const now = new Date();
   const currentLabel = monthLabel(now.getFullYear(), now.getMonth() + 1);
 
   // Requirement 1.1: current month is shown by default.
@@ -379,16 +424,16 @@ test("案件期間バー・片側日付・完了状態・詳細モーダル・�
 
   // Requirement 3.1: a case with both startDate/endDate set becomes a
   // period bar.
-  await createCaseWithDates(page, periodCaseName, { startDate: periodStart, endDate: periodEnd });
+  await createCaseFixture(request, periodCaseName, { startDate: periodStart, endDate: periodEnd });
 
   // Requirement 3.2: a case with only one of startDate/endDate set becomes
   // an open-ended lane bar (fade + ›/‹) anchored on that date. Deleted at
   // the end of this test so it does not re-pollute future weeks.
-  await createCaseWithDates(page, pointCaseName, { startDate: pointDate });
+  await createCaseFixture(request, pointCaseName, { startDate: pointDate });
 
   // Requirement 3.3: a case with neither date set never appears on the
   // calendar.
-  await createCaseWithDates(page, noDateCaseName);
+  await createCaseFixture(request, noDateCaseName);
 
   await page.goto("/calendar");
   await expect(monthHeading(page)).toHaveText(currentLabel);
@@ -484,7 +529,7 @@ test("案件が3件を超える週の「他N件」から一覧ポップアップ
   // chip-aware second pass keeps 2 bars and overflows the rest → 「他2件」.
   const caseNames = [0, 1, 2, 3].map((i) => `e2e-cal-overflow-${i}-${suffix}`);
   for (const name of caseNames) {
-    await createCaseWithDates(page, name, { startDate: rangeStart, endDate: rangeEnd });
+    await createCaseFixture(request, name, { startDate: rangeStart, endDate: rangeEnd });
   }
 
   await page.goto("/calendar");
@@ -532,7 +577,7 @@ test("案件バー表示切替スイッチでバーの表示・非表示が切�
   const rangeStart = isoDate(targetYear, targetMonth, weekMondayDay);
   const rangeEnd = isoDate(targetYear, targetMonth, weekMondayDay + 2);
 
-  await createCaseWithDates(page, caseName, { startDate: rangeStart, endDate: rangeEnd });
+  await createCaseFixture(request, caseName, { startDate: rangeStart, endDate: rangeEnd });
 
   await page.goto("/calendar");
   await goToMonth(page, targetYear, targetMonth);

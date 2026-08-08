@@ -129,13 +129,13 @@
   - _Boundary: RecurrencePage_
   - _Depends: 7.1, 7.2_
 
-- [ ] 8. Integration: ステアリング追従とカレンダー E2E シード置換
+- [x] 8. Integration: ステアリング追従とカレンダー E2E シード置換
 - [x] 8.1 (P) product.md を案件連動のみの記載に更新し、tech.md から rrule 依存を外す
   - 「納品連動」等の旧称と固定間隔の現行能力記載を消す
   - 観測可能な完了状態: product.md / tech.md が Req 10 と design に一致する
   - _Requirements: 10.1, 10.2, 10.3_
 
-- [ ] 8.2 (P) カレンダー等の fixed_interval / generate-due 依存シード・E2E を案件連動作成に置換する
+- [x] 8.2 (P) カレンダー等の fixed_interval / generate-due 依存シード・E2E を案件連動作成に置換する
   - 観測可能な完了状態: 関連 E2E が新モデルで green
   - _Requirements: 1.2, 3.4_
   - _Depends: 4, 7.3_
