@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import { defineComponent } from "vue";
 import { mount, flushPromises } from "@vue/test-utils";
 import CaseTemplateApplyConfirm from "./CaseTemplateApplyConfirm.vue";
+import type { CaseTemplateApplyOperation } from "./caseTemplateApplyCandidates";
+import type { ConfirmMode, MissingDates } from "./CaseTemplateApplyConfirm.helpers";
 
 /** Slot-passthrough Modal stub — keeps close affordance for abort path. */
 const ModalStub = defineComponent({
@@ -24,7 +26,17 @@ const ModalStub = defineComponent({
   `,
 });
 
-function mountConfirm(props: Record<string, unknown>) {
+type ConfirmMountProps = {
+  mode: ConfirmMode;
+  missingDates?: MissingDates;
+  startDate?: string | null;
+  endDate?: string | null;
+  oldStartDate?: string | null;
+  oldEndDate?: string | null;
+  candidates?: CaseTemplateApplyOperation[];
+};
+
+function mountConfirm(props: ConfirmMountProps) {
   return mount(CaseTemplateApplyConfirm, {
     props: { open: true, ...props },
     global: {

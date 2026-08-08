@@ -1,16 +1,12 @@
 // Validation: 結合検証 (task 12.4-12.7). These exercise the already-approved
-// service-level behaviors (tasks 9.2, 9.3, 10.1, 9.5) through the actual
-// HTTP layer (buildApp + inject) rather than calling services directly, to
-// prove the full request/response/log path end-to-end — the specific gap
-// this validation phase is meant to close.
+// service-level behaviors through the actual HTTP layer (buildApp + inject)
+// rather than calling services directly, to prove the full request/response/log
+// path end-to-end.
 //
 // Cleanup policy: every `it()` deletes its own rows (and closes its app) in
-// a `finally` block. Several of these tests create `recurring_task_templates`
-// rows — a skipped cleanup there leaves them `isActive=true` forever, and
-// every later generate-due call (this file's own, or any other test file's)
-// picks up that leftover template and generates unbounded extra instances
-// against it. See recurrence.service.test.ts's header comment for the
-// incident this guards against.
+// a `finally` block. Active `recurring_task_templates` left behind are picked
+// up by later case create/update apply (omit = full candidates). Soft-deleted
+// tasks must also be hard-deleted so RESTRICT FKs allow case/template cleanup.
 import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
 import { afterAll, describe, expect, it } from "vitest";
@@ -52,14 +48,26 @@ async function hardDelete(table: string, ids: string[]): Promise<void> {
   await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
+async function hardDeleteTasksForCase(caseId: string): Promise<void> {
+  await db.$executeRawUnsafe(`DELETE FROM tasks WHERE case_id = ?`, caseId);
+}
+
+async function hardDeleteTemplates(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.$executeRawUnsafe(
+    `DELETE FROM tasks WHERE source_template_id IN (${ids.map(() => "?").join(",")})`,
+    ...ids,
+  );
+  await hardDelete("recurring_task_templates", ids);
+}
+
 afterAll(async () => {
   await db.$disconnect();
 });
 
 describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.3, 5.5, 5.6)", () => {
-  it("POST /api/cases triggers case_relative generation end-to-end (Requirement 5.3)", async () => {
+  it("POST /api/cases (omit templateOperations) triggers case-relative generation end-to-end (Requirement 5.3)", async () => {
     const { app } = buildTestApp();
-    const taskIds: string[] = [];
     const caseIds: string[] = [];
     const templateIds: string[] = [];
     try {
@@ -70,7 +78,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
           payload: {
             title: "e2e case-relative",
             priority: "low",
-            kind: "case_relative",
+            caseAnchor: "case_end",
             caseOffsetDays: 2,
             nonBusinessDayPolicy: "as_is",
           },
@@ -83,24 +91,23 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
         .then((r) => r.json());
       caseIds.push(caseEntity.id);
 
-      const tasksResponse = await app.inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` });
-      const tasks = tasksResponse.json();
-      taskIds.push(...tasks.map((t: { id: string }) => t.id));
+      const tasks = await app
+        .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
+        .then((r) => r.json());
+      const mine = tasks.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
 
-      expect(tasks).toHaveLength(1);
-      expect(tasks[0].sourceTemplateId).toBe(template.id);
-      expect(tasks[0].scheduledDate.slice(0, 10)).toBe("2041-03-08");
+      expect(mine).toHaveLength(1);
+      expect(mine[0].scheduledDate.slice(0, 10)).toBe("2041-03-08");
     } finally {
-      await hardDelete("tasks", taskIds);
+      for (const id of caseIds) await hardDeleteTasksForCase(id);
       await hardDelete("cases", caseIds);
-      await hardDelete("recurring_task_templates", templateIds);
+      await hardDeleteTemplates(templateIds);
       await app.close();
     }
   });
 
-  it("PATCH /api/cases/:id endDate change triggers onCaseEndDateChanged recalculation end-to-end (Requirements 2.5, 6.1, 6.2)", async () => {
+  it("PATCH /api/cases/:id endDate change with omit applies end_regenerate end-to-end (Requirements 5.2, 6.1, 6.2)", async () => {
     const { app } = buildTestApp();
-    const taskIds: string[] = [];
     const caseIds: string[] = [];
     const templateIds: string[] = [];
     try {
@@ -111,7 +118,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
           payload: {
             title: "e2e case-relative recalc",
             priority: "low",
-            kind: "case_relative",
+            caseAnchor: "case_end",
             caseOffsetDays: 3,
             nonBusinessDayPolicy: "as_is",
           },
@@ -127,29 +134,30 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
       const initialTasks = await app
         .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
         .then((r) => r.json());
-      taskIds.push(...initialTasks.map((t: { id: string }) => t.id));
-      expect(initialTasks).toHaveLength(1);
-      expect(initialTasks[0].scheduledDate.slice(0, 10)).toBe("2041-09-12");
+      const initialMine = initialTasks.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
+      expect(initialMine).toHaveLength(1);
+      expect(initialMine[0].scheduledDate.slice(0, 10)).toBe("2041-09-12");
+      const oldId = initialMine[0].id;
 
       await app.inject({ method: "PATCH", url: `/api/cases/${caseEntity.id}`, payload: { endDate: "2041-09-20" } });
 
       const recalculatedTasks = await app
         .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
         .then((r) => r.json());
-      expect(recalculatedTasks).toHaveLength(1);
-      expect(recalculatedTasks[0].id).toBe(initialTasks[0].id);
-      expect(recalculatedTasks[0].scheduledDate.slice(0, 10)).toBe("2041-09-17");
+      const mine = recalculatedTasks.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
+      expect(mine).toHaveLength(1);
+      expect(mine[0].id).not.toBe(oldId);
+      expect(mine[0].scheduledDate.slice(0, 10)).toBe("2041-09-17");
     } finally {
-      await hardDelete("tasks", taskIds);
+      for (const id of caseIds) await hardDeleteTasksForCase(id);
       await hardDelete("cases", caseIds);
-      await hardDelete("recurring_task_templates", templateIds);
+      await hardDeleteTemplates(templateIds);
       await app.close();
     }
   });
 
-  it("POST /api/cases without endDate does not trigger case_relative generation end-to-end (task 15.1, Requirements 2.4, 6.3)", async () => {
+  it("POST /api/cases without endDate does not trigger case_end generation end-to-end (Requirements 2.4, 6.3)", async () => {
     const { app } = buildTestApp();
-    const taskIds: string[] = [];
     const caseIds: string[] = [];
     const templateIds: string[] = [];
     try {
@@ -160,7 +168,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
           payload: {
             title: "e2e case-relative no enddate",
             priority: "low",
-            kind: "case_relative",
+            caseAnchor: "case_end",
             caseOffsetDays: 2,
             nonBusinessDayPolicy: "as_is",
           },
@@ -174,22 +182,22 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
       caseIds.push(caseEntity.id);
       expect(caseEntity.endDate).toBeNull();
 
-      const tasksResponse = await app.inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` });
-      const tasks = tasksResponse.json();
-      taskIds.push(...tasks.map((t: { id: string }) => t.id));
+      const tasks = await app
+        .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
+        .then((r) => r.json());
+      const mine = tasks.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
 
-      expect(tasks).toHaveLength(0);
+      expect(mine).toHaveLength(0);
     } finally {
-      await hardDelete("tasks", taskIds);
+      for (const id of caseIds) await hardDeleteTasksForCase(id);
       await hardDelete("cases", caseIds);
-      await hardDelete("recurring_task_templates", templateIds);
+      await hardDeleteTemplates(templateIds);
       await app.close();
     }
   });
 
-  it("PATCH /api/cases/:id setting endDate for the first time triggers case_relative generation end-to-end (task 15.1, Requirements 2.4, 2.5, 5.3)", async () => {
+  it("PATCH /api/cases/:id setting endDate for the first time triggers end_generate end-to-end (Requirements 2.4, 2.5, 5.3)", async () => {
     const { app } = buildTestApp();
-    const taskIds: string[] = [];
     const caseIds: string[] = [];
     const templateIds: string[] = [];
     try {
@@ -200,7 +208,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
           payload: {
             title: "e2e case-relative later enddate",
             priority: "low",
-            kind: "case_relative",
+            caseAnchor: "case_end",
             caseOffsetDays: 4,
             nonBusinessDayPolicy: "as_is",
           },
@@ -209,29 +217,32 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
       templateIds.push(template.id);
 
       const caseEntity = await app
-        .inject({ method: "POST", url: "/api/cases", payload: { name: "e2e case later endDate" } })
+        .inject({
+          method: "POST",
+          url: "/api/cases",
+          payload: { name: "e2e case later endDate", templateOperations: [] },
+        })
         .then((r) => r.json());
       caseIds.push(caseEntity.id);
 
       const beforeTasks = await app
         .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
         .then((r) => r.json());
-      expect(beforeTasks).toHaveLength(0);
+      expect(beforeTasks.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id)).toHaveLength(0);
 
       await app.inject({ method: "PATCH", url: `/api/cases/${caseEntity.id}`, payload: { endDate: "2041-11-20" } });
 
       const afterTasks = await app
         .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
         .then((r) => r.json());
-      taskIds.push(...afterTasks.map((t: { id: string }) => t.id));
+      const mine = afterTasks.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
 
-      expect(afterTasks).toHaveLength(1);
-      expect(afterTasks[0].sourceTemplateId).toBe(template.id);
-      expect(afterTasks[0].scheduledDate.slice(0, 10)).toBe("2041-11-16");
+      expect(mine).toHaveLength(1);
+      expect(mine[0].scheduledDate.slice(0, 10)).toBe("2041-11-16");
     } finally {
-      await hardDelete("tasks", taskIds);
+      for (const id of caseIds) await hardDeleteTasksForCase(id);
       await hardDelete("cases", caseIds);
-      await hardDelete("recurring_task_templates", templateIds);
+      await hardDeleteTemplates(templateIds);
       await app.close();
     }
   });
@@ -242,7 +253,11 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
     const caseIds: string[] = [];
     try {
       const caseEntity = await app
-        .inject({ method: "POST", url: "/api/cases", payload: { name: "e2e detach case", endDate: "2041-10-10" } })
+        .inject({
+          method: "POST",
+          url: "/api/cases",
+          payload: { name: "e2e detach case", endDate: "2041-10-10", templateOperations: [] },
+        })
         .then((r) => r.json());
       caseIds.push(caseEntity.id);
 
@@ -267,50 +282,67 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
     }
   });
 
-  it("POST /api/recurring-templates/generate-due generates fixed_interval instances, idempotently on rerun (Requirements 5.1, 5.5, 5.6)", async () => {
+  it("regenerate soft-delete then recreate same scheduled date succeeds via apply path (Requirements 5.2, 5.5)", async () => {
     const { app } = buildTestApp();
+    const caseIds: string[] = [];
     const templateIds: string[] = [];
-    let taskIds: string[] = [];
     try {
       const template = await app
         .inject({
           method: "POST",
           url: "/api/recurring-templates",
           payload: {
-            title: "e2e fixed-interval",
+            title: "e2e regenerate same day",
             priority: "low",
-            kind: "fixed_interval",
-            intervalUnit: "day",
-            intervalValue: 1,
+            caseAnchor: "case_end",
+            caseOffsetDays: 0,
             nonBusinessDayPolicy: "as_is",
           },
         })
         .then((r) => r.json());
       templateIds.push(template.id);
-      await db.$executeRawUnsafe(
-        "UPDATE recurring_task_templates SET created_at = ? WHERE id = ?",
-        new Date("2041-04-01T00:00:00.000Z"),
-        template.id,
-      );
-      const asOf = "2041-04-02T00:00:00.000Z";
 
-      const firstRun = await app
-        .inject({ method: "POST", url: "/api/recurring-templates/generate-due", payload: { asOf } })
+      const caseEntity = await app
+        .inject({
+          method: "POST",
+          url: "/api/cases",
+          payload: { name: "e2e regen case", endDate: "2041-04-10", templateOperations: ["end_generate"] },
+        })
         .then((r) => r.json());
-      const secondRun = await app
-        .inject({ method: "POST", url: "/api/recurring-templates/generate-due", payload: { asOf } })
+      caseIds.push(caseEntity.id);
+
+      const first = await app
+        .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
         .then((r) => r.json());
+      const firstMine = first.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
+      expect(firstMine).toHaveLength(1);
+      const oldId = firstMine[0].id;
+      expect(firstMine[0].scheduledDate.slice(0, 10)).toBe("2041-04-10");
 
-      const mine = (list: Array<{ sourceTemplateId: string }>) => list.filter((t) => t.sourceTemplateId === template.id);
-      expect(mine(firstRun)).toHaveLength(2);
-      expect(mine(secondRun)).toHaveLength(0);
+      // Soft-delete the active instance, then regenerate onto the same day.
+      await app.inject({ method: "DELETE", url: `/api/tasks/${oldId}` });
+      await app.inject({
+        method: "PATCH",
+        url: `/api/cases/${caseEntity.id}`,
+        payload: { endDate: "2041-04-11", templateOperations: ["end_regenerate"] },
+      });
+      await app.inject({
+        method: "PATCH",
+        url: `/api/cases/${caseEntity.id}`,
+        payload: { endDate: "2041-04-10", templateOperations: ["end_regenerate"] },
+      });
 
-      const all = await db.task.findMany({ where: { sourceTemplateId: template.id } });
-      taskIds = all.map((t) => t.id);
-      expect(all).toHaveLength(2);
+      const after = await app
+        .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
+        .then((r) => r.json());
+      const mine = after.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
+      expect(mine).toHaveLength(1);
+      expect(mine[0].id).not.toBe(oldId);
+      expect(mine[0].scheduledDate.slice(0, 10)).toBe("2041-04-10");
     } finally {
-      await hardDelete("tasks", taskIds);
-      await hardDelete("recurring_task_templates", templateIds);
+      for (const id of caseIds) await hardDeleteTasksForCase(id);
+      await hardDelete("cases", caseIds);
+      await hardDeleteTemplates(templateIds);
       await app.close();
     }
   });
@@ -329,11 +361,11 @@ describe("12.5: 非営業日ポリシー4パターンの統合検証 (Requiremen
   ];
 
   for (const scenario of scenarios) {
-    it(`policy=${scenario.policy}: generation result matches the spec via the real API`, async () => {
+    it(`policy=${scenario.policy}: generation result matches the spec via case apply`, async () => {
       const { app } = buildTestApp();
       const templateIds: string[] = [];
       const holidayIds: string[] = [];
-      let taskIds: string[] = [];
+      const caseIds: string[] = [];
       try {
         const holiday = await app
           .inject({ method: "POST", url: "/api/holidays", payload: { date: scenario.holidayDate } })
@@ -346,29 +378,31 @@ describe("12.5: 非営業日ポリシー4パターンの統合検証 (Requiremen
             payload: {
               title: `e2e policy ${scenario.policy}`,
               priority: "low",
-              kind: "fixed_interval",
-              intervalUnit: "day",
-              intervalValue: 1,
+              caseAnchor: "case_end",
+              caseOffsetDays: 0,
               nonBusinessDayPolicy: scenario.policy,
             },
           })
           .then((r) => r.json());
         templateIds.push(template.id);
-        await db.$executeRawUnsafe(
-          "UPDATE recurring_task_templates SET created_at = ? WHERE id = ?",
-          new Date(`${scenario.holidayDate}T00:00:00.000Z`),
-          template.id,
-        );
 
-        const created = await app
+        const caseEntity = await app
           .inject({
             method: "POST",
-            url: "/api/recurring-templates/generate-due",
-            payload: { asOf: `${scenario.holidayDate}T00:00:00.000Z` },
+            url: "/api/cases",
+            payload: {
+              name: `e2e policy case ${scenario.policy}`,
+              endDate: scenario.holidayDate,
+              templateOperations: ["end_generate"],
+            },
           })
           .then((r) => r.json());
-        const mine = created.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
-        taskIds = mine.map((t: { id: string }) => t.id);
+        caseIds.push(caseEntity.id);
+
+        const tasks = await app
+          .inject({ method: "GET", url: `/api/tasks?caseId=${caseEntity.id}` })
+          .then((r) => r.json());
+        const mine = tasks.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
 
         if (scenario.expectedScheduledDate === null) {
           expect(mine).toHaveLength(0);
@@ -377,8 +411,9 @@ describe("12.5: 非営業日ポリシー4パターンの統合検証 (Requiremen
           expect(mine[0].scheduledDate.slice(0, 10)).toBe(scenario.expectedScheduledDate);
         }
       } finally {
-        await hardDelete("tasks", taskIds);
-        await hardDelete("recurring_task_templates", templateIds);
+        for (const id of caseIds) await hardDeleteTasksForCase(id);
+        await hardDelete("cases", caseIds);
+        await hardDeleteTemplates(templateIds);
         await hardDelete("non_business_days", holidayIds);
         await app.close();
       }

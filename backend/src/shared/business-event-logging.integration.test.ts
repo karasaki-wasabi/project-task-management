@@ -58,7 +58,10 @@ describe("business event logging (task 10.2)", () => {
   it("logs case.created with the requestId and the new case's id (Requirement 10.2)", async () => {
     let caseId: string | undefined;
     try {
-      const caseEntity = await caseService.create({ name: `c-${randomUUID()}`, endDate: new Date() }, "req-case-create");
+      const caseEntity = await caseService.create(
+        { name: `c-${randomUUID()}`, endDate: new Date(), templateOperations: [] },
+        "req-case-create",
+      );
       caseId = caseEntity.id;
 
       const logged = findEvent("case.created");
@@ -71,38 +74,41 @@ describe("business event logging (task 10.2)", () => {
 
   // Cleanup runs in `finally` (not just at the end of the happy path): a
   // recurring_task_templates row left `isActive=true` by a skipped cleanup
-  // is picked up by every later generateDueInstances call in this suite and
-  // elsewhere, self-perpetuating unbounded extra instances (see
-  // recurrence.service.test.ts's header comment for the incident this
-  // guards against).
-  it("logs recurring_task_instance.generated for each instance generated via generateDueInstances", async () => {
+  // is picked up by later case create/update apply (omit = full candidates).
+  it("logs recurring_task_instance.generated for each instance generated via applyToCase", async () => {
     let templateId: string | undefined;
-    let taskId: string | undefined;
+    let caseId: string | undefined;
     try {
       const template = await recurrenceService.registerTemplate({
         title: "logging check",
         priority: "low",
-        kind: "fixed_interval",
-        intervalUnit: "day",
-        intervalValue: 1,
+        caseAnchor: "case_end",
+        caseOffsetDays: 0,
         nonBusinessDayPolicy: "as_is",
       });
       templateId = template.id;
-      await db.$executeRawUnsafe(
-        "UPDATE recurring_task_templates SET created_at = ? WHERE id = ?",
-        new Date("2037-01-01T00:00:00.000Z"),
-        template.id,
+
+      const caseEntity = await caseService.create(
+        {
+          name: `c-log-${randomUUID()}`,
+          endDate: new Date("2037-01-01T00:00:00.000Z"),
+          templateOperations: ["end_generate"],
+        },
+        "req-generate",
       );
+      caseId = caseEntity.id;
 
-      const created = await recurrenceService.generateDueInstances(new Date("2037-01-01T00:00:00.000Z"), "req-generate");
-      taskId = created[0]?.id;
+      const tasks = await db.task.findMany({
+        where: { caseId: caseEntity.id, sourceTemplateId: template.id, deletedAt: null },
+      });
+      expect(tasks).toHaveLength(1);
 
-      expect(created).toHaveLength(1);
       const logged = findEvent("recurring_task_instance.generated");
-      expect(logged?.entityId).toBe(created[0].id);
+      expect(logged?.entityId).toBe(tasks[0].id);
       expect(logged?.requestId).toBe("req-generate");
     } finally {
-      if (taskId) await db.$executeRawUnsafe("DELETE FROM tasks WHERE id = ?", taskId);
+      if (caseId) await db.$executeRawUnsafe("DELETE FROM tasks WHERE case_id = ?", caseId);
+      if (caseId) await db.$executeRawUnsafe("DELETE FROM cases WHERE id = ?", caseId);
       if (templateId) await db.$executeRawUnsafe("DELETE FROM recurring_task_templates WHERE id = ?", templateId);
     }
   });
@@ -162,9 +168,8 @@ describe("business event logging (task 10.2)", () => {
       const template = await recurrenceService.registerTemplate({
         title: "deletable logging check",
         priority: "low",
-        kind: "fixed_interval",
-        intervalUnit: "day",
-        intervalValue: 1,
+        caseAnchor: "case_start",
+        caseOffsetDays: 0,
         nonBusinessDayPolicy: "as_is",
       });
       templateId = template.id;
