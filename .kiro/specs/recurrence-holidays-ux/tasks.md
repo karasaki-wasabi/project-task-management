@@ -92,7 +92,7 @@
   - _Boundary: CaseTemplateApplyConfirm_
   - _Depends: 5.2_
 
-- [ ] 6.2 CaseFormModal に未設定確認→create→未割当関連付けの順序を組み込む
+- [x] 6.2 CaseFormModal に未設定確認→create→未割当関連付けの順序を組み込む
   - 両方日付ありは確認スキップで operations 省略。片方/両方未設定は画面A。既存の関連付け再試行は維持
   - 観測可能な完了状態: 確認キャンセルで案件が作られず、作成後の関連付け失敗時は案件+テンプレが残って再試行できる
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
