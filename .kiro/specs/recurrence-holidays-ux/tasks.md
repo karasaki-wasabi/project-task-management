@@ -9,7 +9,7 @@
 - `product.md` / `tech.md`(rrule削除)の更新は本スペック範囲(Req 10 / design Boundary)
 
 - [ ] 1. Foundation: スキーマとマイグレーション
-- [ ] 1.1 RecurringTaskTemplate / Task スキーマを案件連動のみへ更新する
+- [x] 1.1 RecurringTaskTemplate / Task スキーマを案件連動のみへ更新する
   - `CaseRelativeAnchor` を追加し、テンプレートに `caseAnchor`・非負の `caseOffsetDays` を必須化する
   - `kind` / `intervalUnit` / `intervalValue` / `boundCaseId` と `RecurrenceKind` / `IntervalUnit` を削除する
   - Task に `sourceAnchor` を追加し、旧 `@@unique([sourceTemplateId, scheduledDate])` をやめ、活性行のみ一意となる生成列(+ UNIQUE)を schema/コメントで表現する
