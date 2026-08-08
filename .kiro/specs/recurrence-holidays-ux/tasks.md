@@ -69,7 +69,7 @@
   - _Boundary: CaseService_
   - _Depends: 3.2_
 
-- [ ] 5. Core: フロント API クライアントと候補関数の移植
+- [x] 5. Core: フロント API クライアントと候補関数の移植
 - [x] 5.1 (P) useApiClient を新テンプレ契約と templateOperations に追従させる
   - fixed_interval / generateDue を削除。resume・caseAnchor 等を追加。createCase/updateCase に templateOperations を載せる
   - 観測可能な完了状態: 型チェックで旧 kind/generateDue 参照がクライアントから消え、新フィールドが型付けされる
@@ -77,7 +77,7 @@
   - _Boundary: useApiClient_
   - _Depends: 2.1, 4_
 
-- [ ] 5.2 (P) frontend の buildCaseTemplateApplyCandidates を backend と同仕様にし、一致テストを置く
+- [x] 5.2 (P) frontend の buildCaseTemplateApplyCandidates を backend と同仕様にし、一致テストを置く
   - 同一入力で操作キーの集合と順序が一致することを検証する(候補ゼロ遷移を含む)
   - 観測可能な完了状態: 一致テストが CI で green
   - _Requirements: 4.1, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 4.12_
