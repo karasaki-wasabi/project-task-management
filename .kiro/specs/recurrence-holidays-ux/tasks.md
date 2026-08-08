@@ -8,7 +8,7 @@
 - UI は research.md の Claude Design 確定に従う
 - `product.md` / `tech.md`(rrule削除)の更新は本スペック範囲(Req 10 / design Boundary)
 - MySQL は STORED GENERATED の基列に ON DELETE/UPDATE を付けられないため、`tasks.case_id` / `source_template_id` の FK は RESTRICT(手編集 migration コメント参照)
-- `applyToCase` は実装済みだが Prisma TX クライアント未配線。タスク4で CaseService → apply → tasks create/delete へ TX を通す
+- Prisma TX 配線はタスク4で完了(CaseService → applyToCase → tasks create/delete)
 
 - [x] 1. Foundation: スキーマとマイグレーション
 - [x] 1.1 RecurringTaskTemplate / Task スキーマを案件連動のみへ更新する
