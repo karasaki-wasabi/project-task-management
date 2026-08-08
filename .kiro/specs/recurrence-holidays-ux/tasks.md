@@ -85,7 +85,7 @@
   - _Depends: 3.1_
 
 - [ ] 6. Core: 案件確認 UI
-- [ ] 6.1 (P) CaseTemplateApplyConfirm を確定デザインどおり実装する
+- [x] 6.1 (P) CaseTemplateApplyConfirm を確定デザインどおり実装する
   - 画面A(未設定確認)、B(チェックリスト)、C(最終確認)。ネストモーダル。キャンセル/×/Esc で abort
   - 観測可能な完了状態: 3画面の切替と選択結果の返却をコンポーネントテストまたはブラウザで確認できる
   - _Requirements: 3.1, 3.5, 4.1, 4.2, 4.3, 4.4_
