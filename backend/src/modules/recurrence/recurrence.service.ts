@@ -3,16 +3,16 @@
 // "予定日計算", Requirements 2.3, 5.1, 5.6–5.8, 6.1–6.3) +
 // applyToCase (task 3.2, Requirements 3.2–3.4, 5.1–5.5).
 //
-// Task 4 note: CaseService will pass a Prisma TX client through
-// applyToCase → generateForAnchor / tasksService.create|delete. Those
-// call sites do not accept a TX client yet; thread SoftDeleteClient (or
-// Prisma.TransactionClient) when wiring the same-TX path.
+// Task 4: CaseService passes a DbClient (interactive TX) through
+// applyToCase → generateForAnchor / tryCreateInstance /
+// deleteGeneratedForAnchors → tasksService.create|delete.
 import { randomUUID } from "node:crypto";
 import type { Case } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { db } from "../../shared/db.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
+import type { DbClient } from "../../shared/soft-delete.repository.js";
 import { formatDateOnly, parseDateOnly } from "../holidays/holiday.repository.js";
 import { holidaysService } from "../holidays/holiday.service.js";
 import { tasksService } from "../tasks/task.service.js";
@@ -151,18 +151,22 @@ async function tryCreateInstance(
   template: RecurringTaskTemplate,
   scheduledDate: Date,
   caseId: string,
+  client: DbClient,
 ): Promise<Task | null> {
   let result;
   try {
-    result = await tasksService.create({
-      title: template.title,
-      priority: template.priority,
-      memo: template.defaultMemo ?? undefined,
-      caseId,
-      sourceTemplateId: template.id,
-      sourceAnchor: template.caseAnchor,
-      scheduledDate,
-    });
+    result = await tasksService.create(
+      {
+        title: template.title,
+        priority: template.priority,
+        memo: template.defaultMemo ?? undefined,
+        caseId,
+        sourceTemplateId: template.id,
+        sourceAnchor: template.caseAnchor,
+        scheduledDate,
+      },
+      client,
+    );
   } catch (error) {
     if (isUniqueConstraintViolation(error)) {
       return null;
@@ -183,12 +187,13 @@ async function deleteGeneratedForAnchors(
   caseId: string,
   anchors: CaseRelativeAnchor[],
   requestId: string,
+  client: DbClient,
 ): Promise<void> {
-  const tasks = await db.task.findMany({
+  const tasks = await client.task.findMany({
     where: { caseId, sourceAnchor: { in: anchors } },
   });
   for (const task of tasks) {
-    const result = await tasksService.delete(task.id, requestId);
+    const result = await tasksService.delete(task.id, requestId, client);
     if (!result.ok && result.error.type !== "not_found") {
       throw new Error(`recurrence: failed to delete task instance: ${result.error.type}`);
     }
@@ -247,6 +252,7 @@ export const recurrenceService = {
     caseEntity: Pick<Case, "id" | "startDate" | "endDate">,
     anchor: CaseRelativeAnchor,
     requestId: string = randomUUID(),
+    client: DbClient = db,
   ): Promise<Task[]> {
     const templates = (await recurrenceRepository.listActive()).filter((t) => t.caseAnchor === anchor);
     const created: Task[] = [];
@@ -261,7 +267,7 @@ export const recurrenceService = {
       for (const raw of rawDates) {
         const scheduledDate = await resolveScheduledDate(parseDateOnly(raw), template.nonBusinessDayPolicy);
         if (scheduledDate === null) continue;
-        const instance = await tryCreateInstance(template, scheduledDate, caseEntity.id);
+        const instance = await tryCreateInstance(template, scheduledDate, caseEntity.id, client);
         if (instance) {
           created.push(instance);
           logInstanceGenerated(instance, requestId);
@@ -280,10 +286,11 @@ export const recurrenceService = {
     caseId: string,
     operations: CaseTemplateApplyOperation[],
     requestId: string = randomUUID(),
+    client: DbClient = db,
   ): Promise<void> {
     if (operations.length === 0) return;
 
-    const caseEntity = await db.case.findUnique({ where: { id: caseId } });
+    const caseEntity = await client.case.findUnique({ where: { id: caseId } });
     if (!caseEntity) {
       throw notFound(`Case not found: ${caseId}`);
     }
@@ -291,36 +298,36 @@ export const recurrenceService = {
     for (const operation of operations) {
       switch (operation) {
         case "start_generate":
-          await recurrenceService.generateForAnchor(caseEntity, "case_start", requestId);
+          await recurrenceService.generateForAnchor(caseEntity, "case_start", requestId, client);
           break;
         case "start_delete":
-          await deleteGeneratedForAnchors(caseId, ["case_start"], requestId);
+          await deleteGeneratedForAnchors(caseId, ["case_start"], requestId, client);
           break;
         case "start_regenerate":
-          await deleteGeneratedForAnchors(caseId, ["case_start"], requestId);
-          await recurrenceService.generateForAnchor(caseEntity, "case_start", requestId);
+          await deleteGeneratedForAnchors(caseId, ["case_start"], requestId, client);
+          await recurrenceService.generateForAnchor(caseEntity, "case_start", requestId, client);
           break;
         case "end_generate":
-          await recurrenceService.generateForAnchor(caseEntity, "case_end", requestId);
+          await recurrenceService.generateForAnchor(caseEntity, "case_end", requestId, client);
           break;
         case "end_delete":
-          await deleteGeneratedForAnchors(caseId, ["case_end"], requestId);
+          await deleteGeneratedForAnchors(caseId, ["case_end"], requestId, client);
           break;
         case "end_regenerate":
-          await deleteGeneratedForAnchors(caseId, ["case_end"], requestId);
-          await recurrenceService.generateForAnchor(caseEntity, "case_end", requestId);
+          await deleteGeneratedForAnchors(caseId, ["case_end"], requestId, client);
+          await recurrenceService.generateForAnchor(caseEntity, "case_end", requestId, client);
           break;
         case "month_generate":
-          await recurrenceService.generateForAnchor(caseEntity, "period_month_start", requestId);
-          await recurrenceService.generateForAnchor(caseEntity, "period_month_end", requestId);
+          await recurrenceService.generateForAnchor(caseEntity, "period_month_start", requestId, client);
+          await recurrenceService.generateForAnchor(caseEntity, "period_month_end", requestId, client);
           break;
         case "month_delete":
-          await deleteGeneratedForAnchors(caseId, MONTH_ANCHORS, requestId);
+          await deleteGeneratedForAnchors(caseId, MONTH_ANCHORS, requestId, client);
           break;
         case "month_regenerate":
-          await deleteGeneratedForAnchors(caseId, MONTH_ANCHORS, requestId);
-          await recurrenceService.generateForAnchor(caseEntity, "period_month_start", requestId);
-          await recurrenceService.generateForAnchor(caseEntity, "period_month_end", requestId);
+          await deleteGeneratedForAnchors(caseId, MONTH_ANCHORS, requestId, client);
+          await recurrenceService.generateForAnchor(caseEntity, "period_month_start", requestId, client);
+          await recurrenceService.generateForAnchor(caseEntity, "period_month_end", requestId, client);
           break;
         default: {
           const _exhaustive: never = operation;

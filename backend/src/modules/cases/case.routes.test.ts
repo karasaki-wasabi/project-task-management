@@ -9,6 +9,9 @@ import { afterAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
 import { caseRoutes } from "./case.routes.js";
 
+/** Isolate route tests from active templates (omit templateOperations = full apply). */
+const noApply = { templateOperations: [] as const };
+
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
@@ -31,7 +34,7 @@ describe("caseRoutes (task 3.3)", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/cases",
-      payload: { name: "route case", endDate: "2026-09-01T00:00:00.000Z" },
+      payload: { name: "route case", endDate: "2026-09-01T00:00:00.000Z", ...noApply },
     });
 
     expect(response.statusCode).toBe(201);
@@ -53,6 +56,7 @@ describe("caseRoutes (task 3.3)", () => {
         name: "invalid range",
         startDate: "2026-09-10T00:00:00.000Z",
         endDate: "2026-09-01T00:00:00.000Z",
+        ...noApply,
       },
     });
 
@@ -65,14 +69,14 @@ describe("caseRoutes (task 3.3)", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/cases",
-      payload: { name: "patchable", endDate: "2026-09-01T00:00:00.000Z" },
+      payload: { name: "patchable", endDate: "2026-09-01T00:00:00.000Z", ...noApply },
     });
     const { id } = created.json();
 
     const okResponse = await app.inject({
       method: "PATCH",
       url: `/api/cases/${id}`,
-      payload: { isCompleted: true },
+      payload: { isCompleted: true, ...noApply },
     });
     expect(okResponse.statusCode).toBe(200);
     const body = okResponse.json();
@@ -82,7 +86,7 @@ describe("caseRoutes (task 3.3)", () => {
     const missingResponse = await app.inject({
       method: "PATCH",
       url: `/api/cases/${randomUUID()}`,
-      payload: { isCompleted: true },
+      payload: { isCompleted: true, ...noApply },
     });
     expect(missingResponse.statusCode).toBe(404);
 
@@ -95,14 +99,19 @@ describe("caseRoutes (task 3.3)", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/cases",
-      payload: { name: "original name", startDate: "2026-08-01T00:00:00.000Z", endDate: "2026-09-01T00:00:00.000Z" },
+      payload: {
+        name: "original name",
+        startDate: "2026-08-01T00:00:00.000Z",
+        endDate: "2026-09-01T00:00:00.000Z",
+        ...noApply,
+      },
     });
     const { id } = created.json();
 
     const nameOnly = await app.inject({
       method: "PATCH",
       url: `/api/cases/${id}`,
-      payload: { name: "renamed" },
+      payload: { name: "renamed", ...noApply },
     });
     expect(nameOnly.statusCode).toBe(200);
     expect(nameOnly.json()).toMatchObject({
@@ -114,7 +123,7 @@ describe("caseRoutes (task 3.3)", () => {
     const startDateOnly = await app.inject({
       method: "PATCH",
       url: `/api/cases/${id}`,
-      payload: { startDate: "2026-08-05T00:00:00.000Z" },
+      payload: { startDate: "2026-08-05T00:00:00.000Z", ...noApply },
     });
     expect(startDateOnly.statusCode).toBe(200);
     expect(startDateOnly.json()).toMatchObject({
@@ -126,7 +135,7 @@ describe("caseRoutes (task 3.3)", () => {
     const endDateOnly = await app.inject({
       method: "PATCH",
       url: `/api/cases/${id}`,
-      payload: { endDate: "2026-09-10T00:00:00.000Z" },
+      payload: { endDate: "2026-09-10T00:00:00.000Z", ...noApply },
     });
     expect(endDateOnly.statusCode).toBe(200);
     expect(endDateOnly.json()).toMatchObject({
@@ -144,7 +153,7 @@ describe("caseRoutes (task 3.3)", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/cases",
-      payload: { name: "detach case", endDate: "2026-09-01T00:00:00.000Z" },
+      payload: { name: "detach case", endDate: "2026-09-01T00:00:00.000Z", ...noApply },
     });
     const { id } = created.json();
     const linkedTask = await db.task.create({ data: { title: "linked task", priority: "low", caseId: id } });
@@ -165,7 +174,7 @@ describe("caseRoutes (task 3.3)", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/cases",
-      payload: { name: "progress route", endDate: "2026-09-01T00:00:00.000Z" },
+      payload: { name: "progress route", endDate: "2026-09-01T00:00:00.000Z", ...noApply },
     });
     const { id } = created.json();
 
@@ -190,7 +199,7 @@ describe("caseRoutes (task 3.3)", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/cases",
-      payload: { name: "listable", endDate: "2026-09-01T00:00:00.000Z" },
+      payload: { name: "listable", endDate: "2026-09-01T00:00:00.000Z", ...noApply },
     });
     const { id } = created.json();
 
@@ -221,7 +230,7 @@ describe("caseRoutes (task 3.3)", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/cases",
-      payload: { name: "no dates case" },
+      payload: { name: "no dates case", ...noApply },
     });
 
     expect(response.statusCode).toBe(201);
@@ -239,7 +248,7 @@ describe("caseRoutes (task 3.3)", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/cases",
-      payload: { name: "unset endDate case", endDate: "2026-09-01T00:00:00.000Z" },
+      payload: { name: "unset endDate case", endDate: "2026-09-01T00:00:00.000Z", ...noApply },
     });
     const { id, endDate } = created.json();
     expect(endDate).toBe("2026-09-01T00:00:00.000Z");
@@ -247,7 +256,7 @@ describe("caseRoutes (task 3.3)", () => {
     const response = await app.inject({
       method: "PATCH",
       url: `/api/cases/${id}`,
-      payload: { endDate: null },
+      payload: { endDate: null, ...noApply },
     });
 
     expect(response.statusCode).toBe(200);
@@ -263,7 +272,7 @@ describe("caseRoutes (task 3.3)", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/cases",
-      payload: { name: "unset startDate case", startDate: "2041-09-01T00:00:00.000Z" },
+      payload: { name: "unset startDate case", startDate: "2041-09-01T00:00:00.000Z", ...noApply },
     });
     const { id, startDate } = created.json();
     expect(startDate).toBe("2041-09-01T00:00:00.000Z");
@@ -271,7 +280,7 @@ describe("caseRoutes (task 3.3)", () => {
     const response = await app.inject({
       method: "PATCH",
       url: `/api/cases/${id}`,
-      payload: { startDate: null },
+      payload: { startDate: null, ...noApply },
     });
 
     expect(response.statusCode).toBe(200);

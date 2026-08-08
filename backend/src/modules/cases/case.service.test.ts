@@ -5,16 +5,34 @@
 // deliveries/delivery.service.test.ts (task 4.1/10.1) which this replaces.
 import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../shared/db.js";
 import { createLogger } from "../../shared/logger.js";
 import { setBusinessEventLoggerForTests } from "../../shared/business-event-logger.js";
 import { recurrenceService } from "../recurrence/recurrence.service.js";
 import { caseService } from "./case.service.js";
 
+/** Isolate non-apply tests from active templates in the shared DB (omit = full apply). */
+const noApply = { templateOperations: [] as const };
+
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
+}
+
+/** Physical delete of all tasks for a case (active + soft-deleted) so RESTRICT FK allows case cleanup. */
+async function hardDeleteTasksForCase(caseId: string): Promise<void> {
+  await db.$executeRawUnsafe(`DELETE FROM tasks WHERE case_id = ?`, caseId);
+}
+
+/** Drop template-sourced tasks then the template rows (RESTRICT on source_template_id). */
+async function hardDeleteTemplates(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.$executeRawUnsafe(
+    `DELETE FROM tasks WHERE source_template_id IN (${ids.map(() => "?").join(",")})`,
+    ...ids,
+  );
+  await hardDelete("recurring_task_templates", ids);
 }
 
 function collectingStream() {
@@ -57,7 +75,7 @@ describe("caseService.create (task 3.2)", () => {
   it("creates a case holding name/startDate/endDate (Requirement 2.2, 2.3)", async () => {
     const startDate = new Date("2036-09-01");
     const endDate = new Date("2036-09-30");
-    const created = await caseService.create({ name: "case A", startDate, endDate });
+    const created = await caseService.create({ name: "case A", startDate, endDate, ...noApply });
 
     expect(created.name).toBe("case A");
     expect(created.startDate?.getTime()).toBe(startDate.getTime());
@@ -67,19 +85,24 @@ describe("caseService.create (task 3.2)", () => {
   });
 
   it("rejects an empty name (Requirement 2.3)", async () => {
-    await expect(caseService.create({ name: "  ", endDate: new Date("2036-01-01") })).rejects.toMatchObject({
+    await expect(caseService.create({ name: "  ", endDate: new Date("2036-01-01"), ...noApply })).rejects.toMatchObject({
       statusCode: 400,
     });
   });
 
   it("rejects startDate later than endDate (Requirement 2.4)", async () => {
     await expect(
-      caseService.create({ name: "bad range", startDate: new Date("2036-05-10"), endDate: new Date("2036-05-01") }),
+      caseService.create({
+        name: "bad range",
+        startDate: new Date("2036-05-10"),
+        endDate: new Date("2036-05-01"),
+        ...noApply,
+      }),
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
   it("allows creating without a startDate", async () => {
-    const created = await caseService.create({ name: "no start", endDate: new Date("2036-11-01") });
+    const created = await caseService.create({ name: "no start", endDate: new Date("2036-11-01"), ...noApply });
 
     expect(created.startDate).toBeNull();
 
@@ -90,7 +113,7 @@ describe("caseService.create (task 3.2)", () => {
   // so the startDate > endDate ordering check must be skipped whenever
   // either side is missing, not just when startDate is missing.
   it("succeeds with only endDate provided (no startDate)", async () => {
-    const created = await caseService.create({ name: "only end", endDate: new Date("2036-11-02") });
+    const created = await caseService.create({ name: "only end", endDate: new Date("2036-11-02"), ...noApply });
 
     expect(created.startDate).toBeNull();
     expect(created.endDate?.getTime()).toBe(new Date("2036-11-02").getTime());
@@ -99,7 +122,7 @@ describe("caseService.create (task 3.2)", () => {
   });
 
   it("succeeds with only startDate provided (no endDate)", async () => {
-    const created = await caseService.create({ name: "only start", startDate: new Date("2036-11-03") });
+    const created = await caseService.create({ name: "only start", startDate: new Date("2036-11-03"), ...noApply });
 
     expect(created.startDate?.getTime()).toBe(new Date("2036-11-03").getTime());
     expect(created.endDate).toBeNull();
@@ -108,7 +131,7 @@ describe("caseService.create (task 3.2)", () => {
   });
 
   it("succeeds with neither startDate nor endDate provided", async () => {
-    const created = await caseService.create({ name: "no dates at all" });
+    const created = await caseService.create({ name: "no dates at all", ...noApply });
 
     expect(created.startDate).toBeNull();
     expect(created.endDate).toBeNull();
@@ -119,7 +142,7 @@ describe("caseService.create (task 3.2)", () => {
   it("defaults isCompleted to false and does not accept it as input (Requirement 2.5)", async () => {
     // CreateCaseInput has no isCompleted field at all — verified at the type
     // level by case.types.ts (task 3.1). Here we assert the runtime default.
-    const created = await caseService.create({ name: "fresh case", endDate: new Date("2036-12-01") });
+    const created = await caseService.create({ name: "fresh case", endDate: new Date("2036-12-01"), ...noApply });
 
     expect(created.isCompleted).toBe(false);
 
@@ -129,7 +152,10 @@ describe("caseService.create (task 3.2)", () => {
   it("logs case.created with the requestId and the new case's id (Requirement 10.2 pattern)", async () => {
     let caseId: string | undefined;
     try {
-      const created = await caseService.create({ name: `logged-${randomUUID()}`, endDate: new Date("2037-01-01") }, "req-case-create");
+      const created = await caseService.create(
+        { name: `logged-${randomUUID()}`, endDate: new Date("2037-01-01"), ...noApply },
+        "req-case-create",
+      );
       caseId = created.id;
 
       const logged = findEvent("case.created");
@@ -145,9 +171,9 @@ describe("caseService.update (task 3.2)", () => {
   it("updates isCompleted alone without touching dates (Requirement 5.1, 5.4)", async () => {
     const startDate = new Date("2036-01-01");
     const endDate = new Date("2036-01-31");
-    const created = await caseService.create({ name: "toggle only", startDate, endDate });
+    const created = await caseService.create({ name: "toggle only", startDate, endDate, ...noApply });
 
-    const updated = await caseService.update(created.id, { isCompleted: true });
+    const updated = await caseService.update(created.id, { isCompleted: true, ...noApply });
 
     expect(updated.isCompleted).toBe(true);
     expect(updated.startDate?.getTime()).toBe(startDate.getTime());
@@ -157,9 +183,9 @@ describe("caseService.update (task 3.2)", () => {
   });
 
   it("updates name alone", async () => {
-    const created = await caseService.create({ name: "old name", endDate: new Date("2036-02-01") });
+    const created = await caseService.create({ name: "old name", endDate: new Date("2036-02-01"), ...noApply });
 
-    const updated = await caseService.update(created.id, { name: "new name" });
+    const updated = await caseService.update(created.id, { name: "new name", ...noApply });
 
     expect(updated.name).toBe("new name");
 
@@ -171,9 +197,10 @@ describe("caseService.update (task 3.2)", () => {
       name: "clearable",
       startDate: new Date("2036-03-01"),
       endDate: new Date("2036-03-31"),
+      ...noApply,
     });
 
-    const updated = await caseService.update(created.id, { startDate: null });
+    const updated = await caseService.update(created.id, { startDate: null, ...noApply });
 
     expect(updated.startDate).toBeNull();
 
@@ -185,11 +212,14 @@ describe("caseService.update (task 3.2)", () => {
       name: "merge check",
       startDate: new Date("2036-04-01"),
       endDate: new Date("2036-04-30"),
+      ...noApply,
     });
 
     // Only endDate is supplied; must merge with the persisted startDate
     // (2036-04-01) to detect the violation.
-    await expect(caseService.update(created.id, { endDate: new Date("2036-03-01") })).rejects.toMatchObject({
+    await expect(
+      caseService.update(created.id, { endDate: new Date("2036-03-01"), ...noApply }),
+    ).rejects.toMatchObject({
       statusCode: 400,
     });
 
@@ -197,7 +227,9 @@ describe("caseService.update (task 3.2)", () => {
   });
 
   it("returns not_found (404) when updating a non-existent case", async () => {
-    await expect(caseService.update(randomUUID(), { name: "ghost" })).rejects.toMatchObject({ statusCode: 404 });
+    await expect(caseService.update(randomUUID(), { name: "ghost", ...noApply })).rejects.toMatchObject({
+      statusCode: 404,
+    });
   });
 
   // Task 13.2 (Requirement 5.3, 5.4): both startDate and endDate can now be
@@ -205,9 +237,9 @@ describe("caseService.update (task 3.2)", () => {
   // tolerate null on either side of the comparison, not just skip validation
   // when only startDate was previously unset.
   it("sets only endDate when the case currently has no startDate, without triggering the ordering check", async () => {
-    const created = await caseService.create({ name: "no start yet" });
+    const created = await caseService.create({ name: "no start yet", ...noApply });
 
-    const updated = await caseService.update(created.id, { endDate: new Date("2036-09-05") });
+    const updated = await caseService.update(created.id, { endDate: new Date("2036-09-05"), ...noApply });
 
     expect(updated.startDate).toBeNull();
     expect(updated.endDate?.getTime()).toBe(new Date("2036-09-05").getTime());
@@ -216,11 +248,17 @@ describe("caseService.update (task 3.2)", () => {
   });
 
   it("rejects updating endDate to before the persisted startDate even when the case was created without an endDate (merge-validation)", async () => {
-    const created = await caseService.create({ name: "merge from unset endDate", startDate: new Date("2026-01-01") });
+    const created = await caseService.create({
+      name: "merge from unset endDate",
+      startDate: new Date("2026-01-01"),
+      ...noApply,
+    });
 
     // Post-merge: startDate=2026-01-01 (persisted), endDate=2025-12-01 (new)
     // — both non-null and out of order, so this must be rejected.
-    await expect(caseService.update(created.id, { endDate: new Date("2025-12-01") })).rejects.toMatchObject({
+    await expect(
+      caseService.update(created.id, { endDate: new Date("2025-12-01"), ...noApply }),
+    ).rejects.toMatchObject({
       statusCode: 400,
     });
 
@@ -232,9 +270,10 @@ describe("caseService.update (task 3.2)", () => {
       name: "clear end only",
       startDate: new Date("2036-09-10"),
       endDate: new Date("2036-09-20"),
+      ...noApply,
     });
 
-    const updated = await caseService.update(created.id, { endDate: null });
+    const updated = await caseService.update(created.id, { endDate: null, ...noApply });
 
     expect(updated.startDate?.getTime()).toBe(new Date("2036-09-10").getTime());
     expect(updated.endDate).toBeNull();
@@ -245,11 +284,11 @@ describe("caseService.update (task 3.2)", () => {
 
 describe("caseService.getProgress (task 3.2)", () => {
   it("returns isOverdueWithIncomplete=false when isCompleted=true even though endDate is in the past and required tasks are incomplete (Requirement 6.2)", async () => {
-    const created = await caseService.create({ name: "past but done", endDate: new Date("2000-01-01") });
+    const created = await caseService.create({ name: "past but done", endDate: new Date("2000-01-01"), ...noApply });
     const openTask = await db.task.create({
       data: { title: "still open", priority: "low", caseId: created.id, isRequiredForCase: true },
     });
-    await caseService.update(created.id, { isCompleted: true });
+    await caseService.update(created.id, { isCompleted: true, ...noApply });
 
     const progress = await caseService.getProgress(created.id);
 
@@ -261,7 +300,7 @@ describe("caseService.getProgress (task 3.2)", () => {
   });
 
   it("returns isOverdueWithIncomplete=true when not completed, endDate is past, and required tasks incomplete (Requirement 6.1)", async () => {
-    const created = await caseService.create({ name: "overdue", endDate: new Date("2000-01-01") });
+    const created = await caseService.create({ name: "overdue", endDate: new Date("2000-01-01"), ...noApply });
     const openTask = await db.task.create({
       data: { title: "still open", priority: "low", caseId: created.id, isRequiredForCase: true },
     });
@@ -284,7 +323,7 @@ describe("caseService.getProgress (task 3.2)", () => {
   // task) except for the missing endDate, to prove that specific guard —
   // not isCompleted or requiredIncomplete — is what suppresses the flag.
   it("returns isOverdueWithIncomplete=false when endDate is unset even though not completed and required tasks are incomplete (Requirement 6.3)", async () => {
-    const created = await caseService.create({ name: "no end date" });
+    const created = await caseService.create({ name: "no end date", ...noApply });
     const openTask = await db.task.create({
       data: { title: "still open", priority: "low", caseId: created.id, isRequiredForCase: true },
     });
@@ -305,7 +344,7 @@ describe("caseService.getProgress (task 3.2)", () => {
 
 describe("caseService.delete (task 3.2)", () => {
   it("detaches linked tasks and removes the case, logging case.deleted (Requirement 8.1, 8.2)", async () => {
-    const created = await caseService.create({ name: "to delete", endDate: new Date("2036-06-01") });
+    const created = await caseService.create({ name: "to delete", endDate: new Date("2036-06-01"), ...noApply });
     const linkedTask = await db.task.create({ data: { title: "keep me", priority: "low", caseId: created.id } });
 
     await caseService.delete(created.id, "req-case-delete");
@@ -329,140 +368,183 @@ describe("caseService.delete (task 3.2)", () => {
   });
 });
 
-describe("caseService <-> RecurrenceService wiring (task 3.2)", () => {
-  it("create() triggers onCaseCreated: an active case_relative template generates a task instance", async () => {
-    const template = await recurrenceService.registerTemplate({
-      title: "wired estimate doc",
-      priority: "high",
-      kind: "case_relative",
-      caseOffsetDays: 3,
-      nonBusinessDayPolicy: "as_is",
-    });
+describe("caseService templateOperations + same-TX apply (task 4, Requirements 3.2–3.4, 3.6, 4.3, 4.13)", () => {
+  it("create with both dates (omit templateOperations) attaches tasks from active start/end/month templates (Requirements 3.4, 3.6)", async () => {
+    const templateIds: string[] = [];
+    let caseId: string | undefined;
+    try {
+      const startTpl = await recurrenceService.registerTemplate({
+        title: `t4-start-${randomUUID()}`,
+        priority: "high",
+        caseAnchor: "case_start",
+        caseOffsetDays: 0,
+        nonBusinessDayPolicy: "as_is",
+      });
+      templateIds.push(startTpl.id);
+      const endTpl = await recurrenceService.registerTemplate({
+        title: `t4-end-${randomUUID()}`,
+        priority: "medium",
+        caseAnchor: "case_end",
+        caseOffsetDays: 0,
+        nonBusinessDayPolicy: "as_is",
+      });
+      templateIds.push(endTpl.id);
+      const monthStartTpl = await recurrenceService.registerTemplate({
+        title: `t4-mstart-${randomUUID()}`,
+        priority: "low",
+        caseAnchor: "period_month_start",
+        caseOffsetDays: 0,
+        nonBusinessDayPolicy: "as_is",
+      });
+      templateIds.push(monthStartTpl.id);
 
-    const created = await caseService.create({ name: "wired case", endDate: new Date("2036-06-15") });
+      const created = await caseService.create({
+        name: `t4-both-${randomUUID()}`,
+        startDate: new Date("2036-06-01T00:00:00.000Z"),
+        endDate: new Date("2036-06-15T00:00:00.000Z"),
+      });
+      caseId = created.id;
 
-    const instances = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: created.id } });
-    expect(instances).toHaveLength(1);
-    expect(instances[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2036-06-12");
-
-    await hardDelete("tasks", [instances[0].id]);
-    await hardDelete("cases", [created.id]);
-    await hardDelete("recurring_task_templates", [template.id]);
+      const instances = await db.task.findMany({
+        where: { caseId: created.id },
+        orderBy: { scheduledDate: "asc" },
+      });
+      const byTemplate = new Set(instances.map((t) => t.sourceTemplateId));
+      expect(byTemplate.has(startTpl.id)).toBe(true);
+      expect(byTemplate.has(endTpl.id)).toBe(true);
+      expect(byTemplate.has(monthStartTpl.id)).toBe(true);
+      expect(instances.some((t) => t.sourceAnchor === "case_start")).toBe(true);
+      expect(instances.some((t) => t.sourceAnchor === "case_end")).toBe(true);
+      expect(instances.some((t) => t.sourceAnchor === "period_month_start")).toBe(true);
+    } finally {
+      if (caseId) {
+        await hardDeleteTasksForCase(caseId);
+        await hardDelete("cases", [caseId]);
+      }
+      await hardDeleteTemplates(templateIds);
+    }
   });
 
-  it("update() with a changed endDate triggers onCaseEndDateChanged: recomputes an incomplete instance's scheduledDate", async () => {
-    const template = await recurrenceService.registerTemplate({
-      title: "wired recalculation doc",
-      priority: "low",
-      kind: "case_relative",
-      caseOffsetDays: 2,
-      nonBusinessDayPolicy: "as_is",
-    });
-    const created = await caseService.create({ name: "wired recalculation", endDate: new Date("2036-07-10") });
-    const [instance] = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: created.id } });
-    expect(instance.scheduledDate?.toISOString().slice(0, 10)).toBe("2036-07-08");
-
-    await caseService.update(created.id, { endDate: new Date("2036-07-20") });
-
-    const recalculated = await db.task.findUnique({ where: { id: instance.id } });
-    expect(recalculated?.scheduledDate?.toISOString().slice(0, 10)).toBe("2036-07-18");
-
-    await hardDelete("tasks", [instance.id]);
-    await hardDelete("cases", [created.id]);
-    await hardDelete("recurring_task_templates", [template.id]);
+  it("create rejects templateOperations that are not a subset of full candidates with 400", async () => {
+    await expect(
+      caseService.create({
+        name: `t4-bad-ops-${randomUUID()}`,
+        startDate: new Date("2036-06-01T00:00:00.000Z"),
+        endDate: new Date("2036-06-15T00:00:00.000Z"),
+        // create candidates are generate-only; delete is not a subset
+        templateOperations: ["start_delete"],
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  // Task 13.4 (Requirement 2.4, 5.3; design.md CaseService Dependencies):
-  // endDate unset at create time means the case_relative template must not
-  // generate anything at all yet — no call to onCaseCreated.
-  it("create() with no endDate does not trigger onCaseCreated: no task instance is generated", async () => {
-    const template = await recurrenceService.registerTemplate({
-      title: "wired no-end-date doc",
-      priority: "low",
-      kind: "case_relative",
-      caseOffsetDays: 3,
-      nonBusinessDayPolicy: "as_is",
-    });
+  it("apply failure rolls back the case row (same TX; Requirements 3.6, 4.3)", async () => {
+    const name = `t4-rollback-${randomUUID()}`;
+    const spy = vi.spyOn(recurrenceService, "applyToCase").mockRejectedValueOnce(new Error("forced apply failure"));
+    try {
+      await expect(
+        caseService.create({
+          name,
+          startDate: new Date("2036-06-01T00:00:00.000Z"),
+          endDate: new Date("2036-06-15T00:00:00.000Z"),
+        }),
+      ).rejects.toThrow("forced apply failure");
 
-    const created = await caseService.create({ name: "wired case without end date" });
-
-    const instances = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: created.id } });
-    expect(instances).toHaveLength(0);
-
-    await hardDelete("cases", [created.id]);
-    await hardDelete("recurring_task_templates", [template.id]);
+      const leftover = await db.case.findMany({ where: { name } });
+      expect(leftover).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+      const leftover = await db.case.findMany({ where: { name } });
+      if (leftover.length > 0) {
+        for (const row of leftover) await hardDeleteTasksForCase(row.id);
+        await hardDelete(
+          "cases",
+          leftover.map((c) => c.id),
+        );
+      }
+    }
   });
 
-  // Task 13.4: 「未設定→値あり」transition on update() must run first-time
-  // generation via the same onCaseCreated function create() uses, even
-  // though the case was originally created without an endDate at all.
-  it("update() setting endDate for the first time (null->value) triggers first-time generation via onCaseCreated", async () => {
-    const template = await recurrenceService.registerTemplate({
-      title: "wired first-time-set doc",
-      priority: "medium",
-      kind: "case_relative",
-      caseOffsetDays: 4,
-      nonBusinessDayPolicy: "as_is",
-    });
-    const created = await caseService.create({ name: "wired first-time-set" });
-    const beforeUpdate = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: created.id } });
-    expect(beforeUpdate).toHaveLength(0);
+  it("update with templateOperations: [] changes dates only and does not regenerate (Requirement 4.13)", async () => {
+    const templateIds: string[] = [];
+    let caseId: string | undefined;
+    try {
+      const template = await recurrenceService.registerTemplate({
+        title: `t4-empty-ops-${randomUUID()}`,
+        priority: "low",
+        caseAnchor: "case_end",
+        caseOffsetDays: 2,
+        nonBusinessDayPolicy: "as_is",
+      });
+      templateIds.push(template.id);
+      const created = await caseService.create({
+        name: `t4-empty-ops-case-${randomUUID()}`,
+        startDate: new Date("2036-07-01T00:00:00.000Z"),
+        endDate: new Date("2036-07-10T00:00:00.000Z"),
+        templateOperations: ["end_generate"],
+      });
+      caseId = created.id;
+      const [instance] = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: created.id } });
+      expect(instance).toBeDefined();
+      expect(instance.scheduledDate?.toISOString().slice(0, 10)).toBe("2036-07-08");
 
-    await caseService.update(created.id, { endDate: new Date("2036-10-20") });
+      const updated = await caseService.update(created.id, {
+        endDate: new Date("2036-07-20T00:00:00.000Z"),
+        templateOperations: [],
+      });
+      expect(updated.endDate?.toISOString().slice(0, 10)).toBe("2036-07-20");
 
-    const instances = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: created.id } });
-    expect(instances).toHaveLength(1);
-    expect(instances[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2036-10-16");
-
-    await hardDelete("tasks", [instances[0].id]);
-    await hardDelete("cases", [created.id]);
-    await hardDelete("recurring_task_templates", [template.id]);
+      const unchanged = await db.task.findUnique({ where: { id: instance.id } });
+      expect(unchanged?.deletedAt).toBeNull();
+      expect(unchanged?.scheduledDate?.toISOString().slice(0, 10)).toBe("2036-07-08");
+    } finally {
+      if (caseId) {
+        await hardDeleteTasksForCase(caseId);
+        await hardDelete("cases", [caseId]);
+      }
+      await hardDeleteTemplates(templateIds);
+    }
   });
 
-  // Task 13.4: 「値あり→未設定」transition must call neither recurrence
-  // function — no crash, and any already-generated instance is left
-  // exactly as it was (no recalculation, no deletion).
-  it("update() clearing endDate to null calls neither recurrence function: existing instance is left untouched", async () => {
-    const template = await recurrenceService.registerTemplate({
-      title: "wired clear-to-null doc",
-      priority: "low",
-      kind: "case_relative",
-      caseOffsetDays: 2,
-      nonBusinessDayPolicy: "as_is",
-    });
-    const created = await caseService.create({ name: "wired clear-to-null", endDate: new Date("2036-11-10") });
-    const [instance] = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: created.id } });
-    expect(instance.scheduledDate?.toISOString().slice(0, 10)).toBe("2036-11-08");
+  it("create with startDate only (omit) applies start_generate only (Requirement 3.2)", async () => {
+    const templateIds: string[] = [];
+    let caseId: string | undefined;
+    try {
+      const startTpl = await recurrenceService.registerTemplate({
+        title: `t4-start-only-${randomUUID()}`,
+        priority: "high",
+        caseAnchor: "case_start",
+        caseOffsetDays: 1,
+        nonBusinessDayPolicy: "as_is",
+      });
+      templateIds.push(startTpl.id);
+      const endTpl = await recurrenceService.registerTemplate({
+        title: `t4-end-ignored-${randomUUID()}`,
+        priority: "low",
+        caseAnchor: "case_end",
+        caseOffsetDays: 0,
+        nonBusinessDayPolicy: "as_is",
+      });
+      templateIds.push(endTpl.id);
 
-    const updated = await caseService.update(created.id, { endDate: null });
-    expect(updated.endDate).toBeNull();
+      const created = await caseService.create({
+        name: `t4-start-only-case-${randomUUID()}`,
+        startDate: new Date("2036-08-10T00:00:00.000Z"),
+      });
+      caseId = created.id;
 
-    const unchanged = await db.task.findUnique({ where: { id: instance.id } });
-    expect(unchanged?.scheduledDate?.toISOString().slice(0, 10)).toBe("2036-11-08");
-
-    await hardDelete("tasks", [instance.id]);
-    await hardDelete("cases", [created.id]);
-    await hardDelete("recurring_task_templates", [template.id]);
-  });
-
-  it("update() without an endDate change does not call onCaseEndDateChanged (instance untouched)", async () => {
-    const template = await recurrenceService.registerTemplate({
-      title: "wired untouched doc",
-      priority: "low",
-      kind: "case_relative",
-      caseOffsetDays: 1,
-      nonBusinessDayPolicy: "as_is",
-    });
-    const created = await caseService.create({ name: "wired untouched", endDate: new Date("2036-08-10") });
-    const [instance] = await db.task.findMany({ where: { sourceTemplateId: template.id, caseId: created.id } });
-
-    await caseService.update(created.id, { name: "renamed only" });
-
-    const unchanged = await db.task.findUnique({ where: { id: instance.id } });
-    expect(unchanged?.scheduledDate?.toISOString().slice(0, 10)).toBe("2036-08-09");
-
-    await hardDelete("tasks", [instance.id]);
-    await hardDelete("cases", [created.id]);
-    await hardDelete("recurring_task_templates", [template.id]);
+      // Shared DB may have other active case_start templates; assert ours and that end is unused.
+      const fromStart = await db.task.findMany({ where: { caseId: created.id, sourceTemplateId: startTpl.id } });
+      expect(fromStart).toHaveLength(1);
+      expect(fromStart[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2036-08-11");
+      const fromEnd = await db.task.findMany({ where: { caseId: created.id, sourceTemplateId: endTpl.id } });
+      expect(fromEnd).toHaveLength(0);
+      expect(await db.task.count({ where: { caseId: created.id, sourceAnchor: "case_end" } })).toBe(0);
+    } finally {
+      if (caseId) {
+        await hardDeleteTasksForCase(caseId);
+        await hardDelete("cases", [caseId]);
+      }
+      await hardDeleteTemplates(templateIds);
+    }
   });
 });

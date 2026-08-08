@@ -3,15 +3,22 @@
 // "Backend/cases" CaseService, renamed/extended from the former
 // deliveries/delivery.service.ts, task 4.1/10.1/10.2, Requirements 2.3, 2.4,
 // 2.5, 5.3, 5.4, 6.1, 6.2, 8.1, 8.2).
+//
+// Task 4: date save + template apply run in one Prisma TX. templateOperations
+// omit = full candidates, [] = no apply, non-subset = 400 (Requirements
+// 3.2–3.4, 3.6, 4.3, 4.13; design.md CaseService / Architecture Integration).
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
+import { db } from "../../shared/db.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
+import { recurrenceService } from "../recurrence/recurrence.service.js";
 import { caseRepository } from "./case.repository.js";
+import {
+  buildCaseTemplateApplyCandidates,
+  type CaseTemplateApplyOperation,
+} from "./caseTemplateApplyCandidates.js";
 import type { Case, CaseProgress, CreateCaseInput, UpdateCaseInput } from "./case.types.js";
-// Task 2.1: removed unconfirmed RecurrenceService.onCaseCreated /
-// onCaseEndDateChanged call sites. Explicit applyToCase via
-// templateOperations lands in task 4.
 
 function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
@@ -28,6 +35,30 @@ function validateDateRange(startDate: Date | null | undefined, endDate: Date | n
   }
 }
 
+/**
+ * Resolve templateOperations per design.md templateOperations 導出の原則:
+ * undefined → full candidates; [] → none; non-subset of candidates → 400.
+ */
+function resolveTemplateOperations(
+  provided: CaseTemplateApplyOperation[] | undefined,
+  oldStart: Date | null | undefined,
+  oldEnd: Date | null | undefined,
+  newStart: Date | null | undefined,
+  newEnd: Date | null | undefined,
+): CaseTemplateApplyOperation[] {
+  const full = buildCaseTemplateApplyCandidates(oldStart, oldEnd, newStart, newEnd);
+  if (provided === undefined) {
+    return full;
+  }
+  const allowed = new Set(full);
+  for (const op of provided) {
+    if (!allowed.has(op)) {
+      throw badRequest(`templateOperations must be a subset of apply candidates; invalid: ${op}`);
+    }
+  }
+  return provided;
+}
+
 export const caseService = {
   async create(input: CreateCaseInput, requestId: string = randomUUID()): Promise<Case> {
     const name = input.name.trim();
@@ -36,18 +67,35 @@ export const caseService = {
     }
     validateDateRange(input.startDate ?? null, input.endDate ?? null);
 
+    const operations = resolveTemplateOperations(
+      input.templateOperations,
+      null,
+      null,
+      input.startDate ?? null,
+      input.endDate ?? null,
+    );
+
     // isCompleted is intentionally not part of CreateCaseInput (Requirement
     // 2.5): caseRepository.create() always lets the Prisma column default
-    // (false) apply.
-    const caseEntity = await caseRepository.create({ name, startDate: input.startDate, endDate: input.endDate });
+    // (false) apply. Date write + apply share one TX (design.md CaseService).
+    const caseEntity = await db.$transaction(async (tx) => {
+      const created = await caseRepository.create(
+        { name, startDate: input.startDate, endDate: input.endDate },
+        tx,
+      );
+      if (operations.length > 0) {
+        await recurrenceService.applyToCase(created.id, operations, requestId, tx);
+      }
+      return created;
+    });
+
     // Requirement 10.2: case creation is a broad-impact operation.
+    // Log only after the TX commits so rolled-back creates are not logged.
     businessEventLogger.logBusinessEvent("case.created", { requestId, entityId: caseEntity.id });
-    // Task 2.1 stub: no unconfirmed template apply here. Task 4 wires
-    // recurrenceService.applyToCase(templateOperations) in the same TX.
     return caseEntity;
   },
 
-  async update(id: string, input: UpdateCaseInput): Promise<Case> {
+  async update(id: string, input: UpdateCaseInput, requestId: string = randomUUID()): Promise<Case> {
     const current = await caseRepository.findById(id);
     if (!current) {
       throw notFound(`Case not found: ${id}`);
@@ -68,26 +116,34 @@ export const caseService = {
     const nextEndDate = input.endDate !== undefined ? input.endDate : current.endDate;
     validateDateRange(nextStartDate, nextEndDate);
 
+    const operations = resolveTemplateOperations(
+      input.templateOperations,
+      current.startDate,
+      current.endDate,
+      nextStartDate,
+      nextEndDate,
+    );
+
     const data: Partial<{ name: string; startDate: Date | null; endDate: Date | null; isCompleted: boolean }> = {};
     if (input.name !== undefined) data.name = input.name.trim();
     if (input.startDate !== undefined) data.startDate = input.startDate;
     if (input.endDate !== undefined) data.endDate = input.endDate;
     if (input.isCompleted !== undefined) data.isCompleted = input.isCompleted;
 
-    let updated: Case;
     try {
-      updated = await caseRepository.update(id, data);
+      return await db.$transaction(async (tx) => {
+        const updated = await caseRepository.update(id, data, tx);
+        if (operations.length > 0) {
+          await recurrenceService.applyToCase(id, operations, requestId, tx);
+        }
+        return updated;
+      });
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         throw notFound(`Case not found: ${id}`);
       }
       throw error;
     }
-
-    // Task 2.1 stub: no unconfirmed onCaseEndDateChanged / onCaseCreated.
-    // Task 4 wires applyToCase(templateOperations) in the same TX.
-
-    return updated;
   },
 
   async getProgress(id: string): Promise<CaseProgress> {

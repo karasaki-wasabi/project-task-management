@@ -7,10 +7,24 @@ import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
 import { caseService } from "./case.service.js";
 
+const caseTemplateApplyOperationSchema = z.enum([
+  "start_generate",
+  "start_regenerate",
+  "start_delete",
+  "end_generate",
+  "end_regenerate",
+  "end_delete",
+  "month_generate",
+  "month_regenerate",
+  "month_delete",
+]);
+
 const createCaseBodySchema = z.object({
   name: z.string(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
+  // Task 4 / design.md CaseCreateInput: omit = full candidates, [] = no apply.
+  templateOperations: z.array(caseTemplateApplyOperationSchema).optional(),
 });
 // design.md "Backend/cases" Implementation Notes: PATCH replaces the old
 // due-date-only update with a generic field update — every field is
@@ -21,6 +35,7 @@ const updateCaseBodySchema = z.object({
   startDate: z.coerce.date().nullable().optional(),
   endDate: z.coerce.date().nullable().optional(),
   isCompleted: z.boolean().optional(),
+  templateOperations: z.array(caseTemplateApplyOperationSchema).optional(),
 });
 const caseIdParamsSchema = z.object({ id: z.string() });
 

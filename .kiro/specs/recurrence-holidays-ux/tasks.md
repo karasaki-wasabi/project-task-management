@@ -61,7 +61,7 @@
   - _Boundary: RecurrenceService_
   - _Depends: 2.2, 3.1_
 
-- [ ] 4. CaseService の無確認フックを除去し、templateOperations 付き create/update を同一 TX で行う
+- [x] 4. CaseService の無確認フックを除去し、templateOperations 付き create/update を同一 TX で行う
   - 省略=フル候補、`[]`=適用なし、非部分集合=400。適用失敗で案件行もロールバック
   - TX クライアントを apply / tasks 書き込みへ渡す
   - 観測可能な完了状態: 両方日付あり作成でテンプレタスクが付き、apply 失敗時に案件が残らないこと、`[]` で日付のみ更新できることをテストで確認できる

@@ -4,7 +4,9 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
+import { db } from "../../shared/db.js";
 import { err, ok, type Result } from "../../shared/result.js";
+import type { DbClient } from "../../shared/soft-delete.repository.js";
 import { taskRepository } from "./task.repository.js";
 import type { CreateTaskInput, Task, TaskError, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
 
@@ -17,14 +19,14 @@ function isForeignKeyViolation(error: unknown): boolean {
 }
 
 export const tasksService = {
-  async create(input: CreateTaskInput): Promise<Result<Task, TaskError>> {
+  async create(input: CreateTaskInput, client: DbClient = db): Promise<Result<Task, TaskError>> {
     const title = input.title.trim();
     if (title.length === 0) {
       return err({ type: "validation_error", message: "title is required" });
     }
 
     try {
-      const task = await taskRepository.create({ ...input, title });
+      const task = await taskRepository.create({ ...input, title }, client);
       return ok(task);
     } catch (error) {
       if (isForeignKeyViolation(error)) {
@@ -203,9 +205,13 @@ export const tasksService = {
     }
   },
 
-  async delete(taskId: string, requestId: string = randomUUID()): Promise<Result<void, TaskError>> {
+  async delete(
+    taskId: string,
+    requestId: string = randomUUID(),
+    client: DbClient = db,
+  ): Promise<Result<void, TaskError>> {
     try {
-      await taskRepository.delete(taskId);
+      await taskRepository.delete(taskId, client);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         return err({ type: "not_found", taskId });
