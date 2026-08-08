@@ -8,6 +8,7 @@
 - UI は research.md の Claude Design 確定に従う
 - `product.md` / `tech.md`(rrule削除)の更新は本スペック範囲(Req 10 / design Boundary)
 - MySQL は STORED GENERATED の基列に ON DELETE/UPDATE を付けられないため、`tasks.case_id` / `source_template_id` の FK は RESTRICT(手編集 migration コメント参照)
+- `applyToCase` は実装済みだが Prisma TX クライアント未配線。タスク4で CaseService → apply → tasks create/delete へ TX を通す
 
 - [x] 1. Foundation: スキーマとマイグレーション
 - [x] 1.1 RecurringTaskTemplate / Task スキーマを案件連動のみへ更新する
@@ -43,7 +44,7 @@
   - _Boundary: RecurrenceService_
   - _Depends: 2.1_
 
-- [ ] 3. Core: 案件への明示適用(applyToCase)と候補構築
+- [x] 3. Core: 案件への明示適用(applyToCase)と候補構築
 - [x] 3.1 (P) buildCaseTemplateApplyCandidates 純関数を backend に置く
   - 旧→新日付から start/end/month の generate/regenerate/delete 候補を返す
   - 作成時は旧日付 null。遷移表は design の適用操作表どおり。候補ゼロ遷移も含めて固定する
@@ -52,7 +53,7 @@
   - _Boundary: caseTemplateApplyCandidates_
   - _Depends: 1.2_
 
-- [ ] 3.2 applyToCase で起点別の生成・削除・生成し直しを実行する
+- [x] 3.2 applyToCase で起点別の生成・削除・生成し直しを実行する
   - 公開 HTTP は設けず CaseService 同一 TX からのみ呼ぶ。削除は sourceAnchor+caseId、完了済み含む、手動タスク除外、論理削除
   - 停止テンプレは生成に使わず、旧生成タスクは削除対象。活性一意衝突は冪等 no-op
   - 観測可能な完了状態: 各 operation キーと手動タスク非削除・完了済み削除・停止テンプレ挙動のテストが green

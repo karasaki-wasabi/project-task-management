@@ -1,10 +1,22 @@
 // RecurringTaskTemplate domain types (task 2.1 template management,
-// design.md "RecurrenceService" Service Interface).
+// design.md "RecurrenceService" Service Interface; task 3.2 applyToCase).
 import type { RecurringTaskTemplate } from "@prisma/client";
 
 export type { RecurringTaskTemplate, Task } from "@prisma/client";
 export type CaseRelativeAnchor = RecurringTaskTemplate["caseAnchor"];
 export type NonBusinessDayPolicy = RecurringTaskTemplate["nonBusinessDayPolicy"];
+
+/** design.md CaseTemplateApplyOperation — executed by applyToCase. */
+export type CaseTemplateApplyOperation =
+  | "start_generate"
+  | "start_regenerate"
+  | "start_delete"
+  | "end_generate"
+  | "end_regenerate"
+  | "end_delete"
+  | "month_generate"
+  | "month_regenerate"
+  | "month_delete";
 
 export interface RegisterTemplateInput {
   title: string;

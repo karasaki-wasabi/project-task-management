@@ -512,3 +512,471 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
     }
   });
 });
+
+describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1–5.5)", () => {
+  async function listActiveTasksForCase(caseId: string) {
+    return db.task.findMany({ where: { caseId }, orderBy: { createdAt: "asc" } });
+  }
+
+  it("start_generate creates tasks from active case_start templates (Requirement 3.2)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      const template = await recurrenceService.registerTemplate(
+        baseInput({ title: "apply-start-gen", caseAnchor: "case_start", caseOffsetDays: 1 }),
+      );
+      templateIds.push(template.id);
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-start-gen-${randomUUID()}`,
+          startDate: new Date("2037-01-10T00:00:00.000Z"),
+          endDate: null,
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["start_generate"]);
+
+      const tasks = await listActiveTasksForCase(caseEntity.id);
+      taskIds = tasks.map((t) => t.id);
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0].sourceAnchor).toBe("case_start");
+      expect(tasks[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2037-01-11");
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
+  it("end_generate creates tasks from active case_end templates (Requirement 3.3)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      const template = await recurrenceService.registerTemplate(
+        baseInput({ title: "apply-end-gen", caseAnchor: "case_end", caseOffsetDays: 2 }),
+      );
+      templateIds.push(template.id);
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-end-gen-${randomUUID()}`,
+          startDate: null,
+          endDate: new Date("2037-02-20T00:00:00.000Z"),
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["end_generate"]);
+
+      const tasks = await listActiveTasksForCase(caseEntity.id);
+      taskIds = tasks.map((t) => t.id);
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0].sourceAnchor).toBe("case_end");
+      expect(tasks[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2037-02-18");
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
+  it("month_generate creates tasks from active period_month_* templates (Requirement 3.4)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      const startTpl = await recurrenceService.registerTemplate(
+        baseInput({ title: "apply-month-start", caseAnchor: "period_month_start", caseOffsetDays: 0 }),
+      );
+      const endTpl = await recurrenceService.registerTemplate(
+        baseInput({ title: "apply-month-end", caseAnchor: "period_month_end", caseOffsetDays: 0 }),
+      );
+      templateIds.push(startTpl.id, endTpl.id);
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-month-gen-${randomUUID()}`,
+          startDate: new Date("2037-03-15T00:00:00.000Z"),
+          endDate: new Date("2037-04-10T00:00:00.000Z"),
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["month_generate"]);
+
+      const tasks = await listActiveTasksForCase(caseEntity.id);
+      taskIds = tasks.map((t) => t.id);
+      const byAnchor = {
+        period_month_start: tasks.filter((t) => t.sourceAnchor === "period_month_start"),
+        period_month_end: tasks.filter((t) => t.sourceAnchor === "period_month_end"),
+      };
+      expect(byAnchor.period_month_start.map((t) => t.scheduledDate?.toISOString().slice(0, 10)).sort()).toEqual([
+        "2037-04-01",
+      ]);
+      expect(byAnchor.period_month_end.map((t) => t.scheduledDate?.toISOString().slice(0, 10)).sort()).toEqual([
+        "2037-03-31",
+      ]);
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
+  it("start_delete soft-deletes case_start generated tasks including completed (Requirements 5.2, 5.5)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      const template = await recurrenceService.registerTemplate(
+        baseInput({ title: "apply-start-del", caseAnchor: "case_start", caseOffsetDays: 0 }),
+      );
+      templateIds.push(template.id);
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-start-del-${randomUUID()}`,
+          startDate: new Date("2037-05-01T00:00:00.000Z"),
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["start_generate"]);
+      const before = await listActiveTasksForCase(caseEntity.id);
+      taskIds = before.map((t) => t.id);
+      expect(before).toHaveLength(1);
+
+      await db.task.update({ where: { id: before[0].id }, data: { status: "done", completedAt: new Date() } });
+
+      await recurrenceService.applyToCase(caseEntity.id, ["start_delete"]);
+
+      const active = await listActiveTasksForCase(caseEntity.id);
+      expect(active).toHaveLength(0);
+      const softDeleted = await db.task.findFirst({
+        where: { id: before[0].id, deletedAt: { not: null } },
+      });
+      expect(softDeleted).not.toBeNull();
+      expect(softDeleted?.deletedAt).toBeInstanceOf(Date);
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
+  it("end_delete soft-deletes case_end generated tasks (Requirement 5.2)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      const template = await recurrenceService.registerTemplate(
+        baseInput({ title: "apply-end-del", caseAnchor: "case_end", caseOffsetDays: 0 }),
+      );
+      templateIds.push(template.id);
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-end-del-${randomUUID()}`,
+          endDate: new Date("2037-06-15T00:00:00.000Z"),
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["end_generate"]);
+      const before = await listActiveTasksForCase(caseEntity.id);
+      taskIds = before.map((t) => t.id);
+      expect(before).toHaveLength(1);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["end_delete"]);
+
+      expect(await listActiveTasksForCase(caseEntity.id)).toHaveLength(0);
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
+  it("month_delete soft-deletes both period_month_* generated tasks (Requirement 5.2)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      templateIds.push(
+        (
+          await recurrenceService.registerTemplate(
+            baseInput({ title: "apply-month-del-s", caseAnchor: "period_month_start", caseOffsetDays: 0 }),
+          )
+        ).id,
+        (
+          await recurrenceService.registerTemplate(
+            baseInput({ title: "apply-month-del-e", caseAnchor: "period_month_end", caseOffsetDays: 0 }),
+          )
+        ).id,
+      );
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-month-del-${randomUUID()}`,
+          startDate: new Date("2037-07-01T00:00:00.000Z"),
+          endDate: new Date("2037-07-31T00:00:00.000Z"),
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["month_generate"]);
+      const before = await listActiveTasksForCase(caseEntity.id);
+      taskIds = before.map((t) => t.id);
+      expect(before.length).toBeGreaterThanOrEqual(2);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["month_delete"]);
+
+      expect(await listActiveTasksForCase(caseEntity.id)).toHaveLength(0);
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
+  it("start_regenerate deletes then regenerates case_start tasks for the new date (Requirement 5.2)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      const template = await recurrenceService.registerTemplate(
+        baseInput({ title: "apply-start-regen", caseAnchor: "case_start", caseOffsetDays: 0 }),
+      );
+      templateIds.push(template.id);
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-start-regen-${randomUUID()}`,
+          startDate: new Date("2037-08-01T00:00:00.000Z"),
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["start_generate"]);
+      const first = await listActiveTasksForCase(caseEntity.id);
+      expect(first).toHaveLength(1);
+      expect(first[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2037-08-01");
+      const oldId = first[0].id;
+
+      await db.case.update({
+        where: { id: caseEntity.id },
+        data: { startDate: new Date("2037-08-10T00:00:00.000Z") },
+      });
+
+      await recurrenceService.applyToCase(caseEntity.id, ["start_regenerate"]);
+
+      const after = await listActiveTasksForCase(caseEntity.id);
+      taskIds = [...after.map((t) => t.id), oldId];
+      expect(after).toHaveLength(1);
+      expect(after[0].id).not.toBe(oldId);
+      expect(after[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2037-08-10");
+      const softDeleted = await db.task.findFirst({ where: { id: oldId, deletedAt: { not: null } } });
+      expect(softDeleted).not.toBeNull();
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
+  it("end_regenerate deletes then regenerates case_end tasks (Requirement 5.2)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      const template = await recurrenceService.registerTemplate(
+        baseInput({ title: "apply-end-regen", caseAnchor: "case_end", caseOffsetDays: 0 }),
+      );
+      templateIds.push(template.id);
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-end-regen-${randomUUID()}`,
+          endDate: new Date("2037-09-20T00:00:00.000Z"),
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["end_generate"]);
+      const first = await listActiveTasksForCase(caseEntity.id);
+      const oldId = first[0].id;
+
+      await db.case.update({
+        where: { id: caseEntity.id },
+        data: { endDate: new Date("2037-09-25T00:00:00.000Z") },
+      });
+
+      await recurrenceService.applyToCase(caseEntity.id, ["end_regenerate"]);
+
+      const after = await listActiveTasksForCase(caseEntity.id);
+      taskIds = [...after.map((t) => t.id), oldId];
+      expect(after).toHaveLength(1);
+      expect(after[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2037-09-25");
+      expect(after[0].id).not.toBe(oldId);
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
+  it("month_regenerate deletes then regenerates period_month_* tasks (Requirement 5.2)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      templateIds.push(
+        (
+          await recurrenceService.registerTemplate(
+            baseInput({ title: "apply-month-regen-s", caseAnchor: "period_month_start", caseOffsetDays: 0 }),
+          )
+        ).id,
+      );
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-month-regen-${randomUUID()}`,
+          startDate: new Date("2037-10-01T00:00:00.000Z"),
+          endDate: new Date("2037-10-31T00:00:00.000Z"),
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["month_generate"]);
+      const first = await listActiveTasksForCase(caseEntity.id);
+      expect(first).toHaveLength(1);
+      const oldId = first[0].id;
+
+      await db.case.update({
+        where: { id: caseEntity.id },
+        data: {
+          startDate: new Date("2037-11-01T00:00:00.000Z"),
+          endDate: new Date("2037-11-30T00:00:00.000Z"),
+        },
+      });
+
+      await recurrenceService.applyToCase(caseEntity.id, ["month_regenerate"]);
+
+      const after = await listActiveTasksForCase(caseEntity.id);
+      taskIds = [...after.map((t) => t.id), oldId];
+      expect(after).toHaveLength(1);
+      expect(after[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2037-11-01");
+      expect(after[0].id).not.toBe(oldId);
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
+  it("does not delete manual tasks when deleting by sourceAnchor (Requirement 5.4)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      const template = await recurrenceService.registerTemplate(
+        baseInput({ title: "apply-manual", caseAnchor: "case_start", caseOffsetDays: 0 }),
+      );
+      templateIds.push(template.id);
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-manual-${randomUUID()}`,
+          startDate: new Date("2037-12-01T00:00:00.000Z"),
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["start_generate"]);
+      const generated = await listActiveTasksForCase(caseEntity.id);
+      expect(generated).toHaveLength(1);
+
+      const manual = await db.task.create({
+        data: {
+          title: "manual task",
+          priority: "medium",
+          caseId: caseEntity.id,
+          scheduledDate: new Date("2037-12-01T00:00:00.000Z"),
+        },
+      });
+      taskIds = [generated[0].id, manual.id];
+
+      await recurrenceService.applyToCase(caseEntity.id, ["start_delete"]);
+
+      const remaining = await listActiveTasksForCase(caseEntity.id);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].id).toBe(manual.id);
+      expect(remaining[0].sourceTemplateId).toBeNull();
+      expect(remaining[0].sourceAnchor).toBeNull();
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
+  it("stopped templates are unused for generate, but prior generated tasks remain deletable (Requirements 5.1, 5.3)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      const template = await recurrenceService.registerTemplate(
+        baseInput({ title: "apply-stopped", caseAnchor: "case_end", caseOffsetDays: 0 }),
+      );
+      templateIds.push(template.id);
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-stopped-${randomUUID()}`,
+          endDate: new Date("2038-01-15T00:00:00.000Z"),
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["end_generate"]);
+      const before = await listActiveTasksForCase(caseEntity.id);
+      taskIds = before.map((t) => t.id);
+      expect(before).toHaveLength(1);
+
+      await recurrenceService.stopTemplate(template.id);
+
+      // generate must not create new instances from stopped templates
+      await recurrenceService.applyToCase(caseEntity.id, ["end_generate"]);
+      expect(await listActiveTasksForCase(caseEntity.id)).toHaveLength(1);
+
+      // delete still targets previously generated tasks regardless of template activity
+      await recurrenceService.applyToCase(caseEntity.id, ["end_delete"]);
+      expect(await listActiveTasksForCase(caseEntity.id)).toHaveLength(0);
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
+  it("active unique collision on generate is an idempotent no-op (Requirement 5.5)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      const template = await recurrenceService.registerTemplate(
+        baseInput({ title: "apply-idempotent", caseAnchor: "case_start", caseOffsetDays: 0 }),
+      );
+      templateIds.push(template.id);
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-idempotent-${randomUUID()}`,
+          startDate: new Date("2038-02-01T00:00:00.000Z"),
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["start_generate"]);
+      const first = await listActiveTasksForCase(caseEntity.id);
+      taskIds = first.map((t) => t.id);
+      expect(first).toHaveLength(1);
+
+      await expect(recurrenceService.applyToCase(caseEntity.id, ["start_generate"])).resolves.toBeUndefined();
+
+      const second = await listActiveTasksForCase(caseEntity.id);
+      expect(second).toHaveLength(1);
+      expect(second[0].id).toBe(first[0].id);
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
+  it("empty operations is a no-op", async () => {
+    const caseIds: string[] = [];
+    try {
+      const caseEntity = await db.case.create({
+        data: {
+          name: `apply-empty-${randomUUID()}`,
+          startDate: new Date("2038-03-01T00:00:00.000Z"),
+        },
+      });
+      caseIds.push(caseEntity.id);
+
+      await expect(recurrenceService.applyToCase(caseEntity.id, [])).resolves.toBeUndefined();
+      expect(await listActiveTasksForCase(caseEntity.id)).toHaveLength(0);
+    } finally {
+      await cleanup({ caseIds });
+    }
+  });
+});
