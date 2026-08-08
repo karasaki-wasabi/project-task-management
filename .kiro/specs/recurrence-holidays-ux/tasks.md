@@ -114,7 +114,7 @@
   - _Boundary: RecurrenceFormModal, RecurrenceDetailModal_
   - _Depends: 5.1_
 
-- [ ] 7.2 (P) /holidays 専用ページを追加し、app.vue ナビから両画面へ到達可能にする
+- [x] 7.2 (P) /holidays 専用ページを追加し、app.vue ナビから両画面へ到達可能にする
   - 休日 CRUD・外部祝日 sync の画面を新設する。ナビリンクの所有はこのタスク(app.vue)
   - /recurrence からの休日 UI 除去は 7.3 の責務とし、このタスクは `pages/holidays` とナビ以外を触らない
   - 観測可能な完了状態: /holidays で追加削除 sync ができ、ナビに /recurrence と /holidays の両方がある
