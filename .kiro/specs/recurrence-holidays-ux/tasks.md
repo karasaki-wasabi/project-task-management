@@ -70,7 +70,7 @@
   - _Depends: 3.2_
 
 - [ ] 5. Core: フロント API クライアントと候補関数の移植
-- [ ] 5.1 (P) useApiClient を新テンプレ契約と templateOperations に追従させる
+- [x] 5.1 (P) useApiClient を新テンプレ契約と templateOperations に追従させる
   - fixed_interval / generateDue を削除。resume・caseAnchor 等を追加。createCase/updateCase に templateOperations を載せる
   - 観測可能な完了状態: 型チェックで旧 kind/generateDue 参照がクライアントから消え、新フィールドが型付けされる
   - _Requirements: 1.1, 1.2, 2.1, 2.7_

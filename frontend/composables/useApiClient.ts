@@ -75,19 +75,33 @@ export interface User {
   deletedAt?: string | null;
 }
 
-export type RecurrenceKind = "fixed_interval" | "case_relative";
-export type IntervalUnit = "day" | "week" | "month";
 export type NonBusinessDayPolicy = "as_is" | "skip" | "next_business_day" | "previous_business_day";
+
+/** design.md CaseRelativeAnchor — template schedule origin relative to a case. */
+export type CaseRelativeAnchor =
+  | "case_start"
+  | "case_end"
+  | "period_month_start"
+  | "period_month_end";
+
+/** design.md CaseTemplateApplyOperation — carried on case create/update. */
+export type CaseTemplateApplyOperation =
+  | "start_generate"
+  | "start_regenerate"
+  | "start_delete"
+  | "end_generate"
+  | "end_regenerate"
+  | "end_delete"
+  | "month_generate"
+  | "month_regenerate"
+  | "month_delete";
 
 export interface RecurringTaskTemplate {
   id: string;
   title: string;
   priority: Priority;
-  kind: RecurrenceKind;
-  intervalUnit?: IntervalUnit | null;
-  intervalValue?: number | null;
-  boundCaseId?: string | null;
-  caseOffsetDays?: number | null;
+  caseAnchor: CaseRelativeAnchor;
+  caseOffsetDays: number;
   defaultMemo?: string | null;
   nonBusinessDayPolicy: NonBusinessDayPolicy;
   isActive: boolean;
@@ -99,13 +113,27 @@ export interface RecurringTaskTemplate {
 export interface RegisterTemplateInput {
   title: string;
   priority: Priority;
-  kind: RecurrenceKind;
-  intervalUnit?: IntervalUnit;
-  intervalValue?: number;
-  boundCaseId?: string;
-  caseOffsetDays?: number;
+  caseAnchor: CaseRelativeAnchor;
+  caseOffsetDays: number;
   defaultMemo?: string;
   nonBusinessDayPolicy: NonBusinessDayPolicy;
+}
+
+/** design.md CaseCreateInput (wire: ISO date strings). */
+export interface CreateCaseInput {
+  name: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  templateOperations?: CaseTemplateApplyOperation[];
+}
+
+/** design.md CaseUpdateInput (wire: ISO date strings). */
+export interface UpdateCaseInput {
+  name?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  isCompleted?: boolean;
+  templateOperations?: CaseTemplateApplyOperation[];
 }
 
 export interface NonBusinessDay {
@@ -173,14 +201,12 @@ export function useApiClient() {
       }),
     deleteTask: (id: string) => request<void>(`/api/tasks/${id}`, { method: "DELETE" }),
 
-    // Cases (design.md "Backend/cases" API Contract)
+    // Cases (design.md "Backend/cases" API Contract + CaseService templateOperations)
     listCases: () => request<Case[]>("/api/cases"),
-    createCase: (input: { name: string; startDate?: string; endDate?: string }) =>
+    createCase: (input: CreateCaseInput) =>
       request<Case>("/api/cases", { method: "POST", body: input }),
-    updateCase: (
-      id: string,
-      input: { name?: string; startDate?: string | null; endDate?: string | null; isCompleted?: boolean },
-    ) => request<Case>(`/api/cases/${id}`, { method: "PATCH", body: input }),
+    updateCase: (id: string, input: UpdateCaseInput) =>
+      request<Case>(`/api/cases/${id}`, { method: "PATCH", body: input }),
     getCaseProgress: (id: string) => request<CaseProgress>(`/api/cases/${id}/progress`),
     deleteCase: (id: string) => request<void>(`/api/cases/${id}`, { method: "DELETE" }),
 
@@ -192,14 +218,14 @@ export function useApiClient() {
     syncHolidays: () =>
       request<{ added: NonBusinessDay[]; skippedExisting: number }>("/api/holidays/sync", { method: "POST" }),
 
-    // Recurrence (design.md "Backend/recurrence" API Contract)
+    // Recurrence (design.md RecurrenceService API — case-relative only)
     listRecurringTemplates: () => request<RecurringTaskTemplate[]>("/api/recurring-templates"),
     registerRecurringTemplate: (input: RegisterTemplateInput) =>
       request<RecurringTaskTemplate>("/api/recurring-templates", { method: "POST", body: input }),
     stopRecurringTemplate: (id: string) => request<void>(`/api/recurring-templates/${id}/stop`, { method: "POST" }),
+    resumeRecurringTemplate: (id: string) =>
+      request<void>(`/api/recurring-templates/${id}/resume`, { method: "POST" }),
     deleteRecurringTemplate: (id: string) => request<void>(`/api/recurring-templates/${id}`, { method: "DELETE" }),
-    generateDueInstances: (asOf?: string) =>
-      request<Task[]>("/api/recurring-templates/generate-due", { method: "POST", body: { asOf } }),
 
     // Throughput (design.md "Backend/throughput" API Contract)
     getThroughput: (periodType: PeriodType, rangeCount: number) =>
