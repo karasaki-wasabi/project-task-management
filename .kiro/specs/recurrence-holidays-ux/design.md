@@ -48,13 +48,15 @@
 - `Case` の日付フィールド意味が変わった場合
 - `Task` の一意制約・ソフトデリート規約が変わった場合
 - `CaseFormModal` の保存フロー契約が変わった場合
+- `CaseDetailModal` の保存フロー契約が変わった場合
 - 休日/営業日API契約が変わった場合
 
 ## Architecture
 
 ### Existing Architecture Analysis
-- 現行は案件 create/update から `onCaseCreated` / `onCaseEndDateChanged` を無確認で呼ぶ。本仕様ではこれを廃止し、案件 create/update に載せる `templateOperations` による明示適用へ切り替える。
+- 変更前は案件 create/update から `onCaseCreated` / `onCaseEndDateChanged` を無確認で呼んでいた。本仕様ではこれを廃止し、案件 create/update に載せる `templateOperations` による明示適用へ切り替える。
 - `CaseFormModal` は作成専用で、create 成功後に未割当タスク関連付けを順次行い、関連付けだけ失敗した場合は案件を残したまま再試行する。テンプレート確認はこの create の前に差し込む(後述 System Flows)。
+- `CaseDetailModal` は編集保存時に候補があれば確認 UI を挟み、選択した `templateOperations` を PATCH に載せる。
 - テンプレートはグローバル設定のまま。生成タスクは必ず `caseId` を持つ。
 
 ### Architecture Pattern & Boundary Map
@@ -63,6 +65,7 @@
 graph TB
     subgraph Frontend
         CaseForm[CaseFormModal]
+        CaseDetail[CaseDetailModal]
         ApplyConfirm[CaseTemplateApplyConfirm]
         RecurrencePage[recurrence page]
         HolidaysPage[holidays page]
@@ -80,7 +83,9 @@ graph TB
     end
 
     CaseForm --> ApplyConfirm
+    CaseDetail --> ApplyConfirm
     CaseForm --> ApiClient
+    CaseDetail --> ApiClient
     RecurrencePage --> ApiClient
     HolidaysPage --> ApiClient
     ApiClient --> CaseRoutes
@@ -240,8 +245,8 @@ sequenceDiagram
 |-------------|---------|------------|
 | 1.1–1.3 | 固定間隔廃止 | RecurrenceService/Routes/Page, schema |
 | 2.1–2.8 | テンプレ登録・停止再開 | RecurrenceService, Form/Detail Modal |
-| 3.1–3.6 | 案件作成時適用 | CaseFormModal, RecurrenceService.apply |
-| 4.1–4.13 | 編集時確認付き適用 | CaseTemplateApplyConfirm, CaseFormModal, apply API |
+| 3.1–3.6 | 案件作成時適用 | CaseFormModal, CaseService, RecurrenceService.applyToCase |
+| 4.1–4.13 | 編集時確認付き適用 | CaseTemplateApplyConfirm, CaseDetailModal, CaseService（`templateOperations`） |
 | 5.1–5.8 | 生成・削除ルール | RecurrenceService, TasksService |
 | 6.1–6.3 | 月初月末内容 | RecurrenceService |
 | 7.1–7.4 | 画面分離 | RecurrencePage, HolidaysPage, app.vue |

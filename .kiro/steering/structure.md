@@ -8,7 +8,7 @@
 
 ### バックエンドモジュール
 **Location**: `backend/src/modules/<domain>/`
-**Purpose**: 1ドメイン(tasks, deliveries, events, holidays, throughput, recurrence, users, client-errors)につき1ディレクトリ。以下4ファイルの組み合わせが基本形
+**Purpose**: 1ドメイン(tasks, cases, holidays, throughput, recurrence, users, client-errors, development-stages など)につき1ディレクトリ。以下4ファイルの組み合わせが基本形
 - `<domain>.types.ts` — ドメイン型・入力型・エラー型(Prisma生成型を`import type`で再エクスポートすることが多い)
 - `<domain>.repository.ts` — Prisma経由のデータアクセス(ソフトデリートは`shared/soft-delete.repository.ts`のPrisma Client Extensionが自動適用するため、repository側で明示的に気にする必要はない)
 - `<domain>.service.ts` — 業務ロジック。エラーは`HttpError`をthrowするのが基本形(`TasksService`のみ一部`Result<T, E>`パターンを併用、[[error-handling]]参照)
@@ -53,9 +53,14 @@ import { tasksService } from "./task.service.js";
 
 ## Code Organization Principles
 
-- **依存方向**: `routes.ts` → `service.ts` → `repository.ts`の一方向。他モジュールへ依存する場合はそのモジュールの`service`公開インターフェース経由のみ(例: `deliveries`→`recurrence`、`recurrence`→`holidays`/`tasks`)で、内部実装やPrismaクエリへ直接アクセスしない
-- **境界(Boundary)の遵守**: 新しいタスクを実装する際は、design.mdの`Boundary Commitments`とtasks.mdの`_Boundary:_`注記を確認し、他ドメインの責務を無断で肩代わりしない(例: 通知配信・認証・外部連携はOut of Boundary)
-- **フロントエンドのAPI境界**: `frontend/composables/useApiClient.ts`が唯一のHTTPクライアント。ページ/コンポーネントから直接`$fetch`/`fetch`を呼ばない(例外: `plugins/error-reporter.client.ts`のエラー通報のみ、設計上の意図的な例外)
+- 依存方向
+  - `routes.ts` → `service.ts` → `repository.ts`の一方向
+  - 他モジュールへ依存する場合はそのモジュールの`service`公開インターフェース経由のみ(例: `cases`→`recurrence`、`recurrence`→`holidays`/`tasks`)で、内部実装やPrismaクエリへ直接アクセスしない
+- 境界(Boundary)の遵守
+  - 新しいタスクを実装する際は、design.mdの`Boundary Commitments`とtasks.mdの`_Boundary:_`注記を確認し、他ドメインの責務を無断で肩代わりしない(例: 通知配信・認証・外部連携はOut of Boundary)
+- フロントエンドのAPI境界
+  - `frontend/composables/useApiClient.ts`が唯一のHTTPクライアント
+  - ページ/コンポーネントから直接`$fetch`/`fetch`を呼ばない(例外: `plugins/error-reporter.client.ts`のエラー通報のみ、設計上の意図的な例外)
 
 ---
 _Document patterns, not file trees. New files following patterns shouldn't require updates_
