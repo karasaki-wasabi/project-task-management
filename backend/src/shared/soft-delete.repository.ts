@@ -91,3 +91,9 @@ export function withSoftDelete(prisma: PrismaClient) {
 }
 
 export type SoftDeleteClient = ReturnType<typeof withSoftDelete>;
+
+/** Interactive TX client yielded by SoftDeleteClient.$transaction. */
+export type SoftDeleteTx = Parameters<Parameters<SoftDeleteClient["$transaction"]>[0]>[0];
+
+/** Shared db or an interactive transaction client (same-TX writes). */
+export type DbClient = SoftDeleteClient | SoftDeleteTx;

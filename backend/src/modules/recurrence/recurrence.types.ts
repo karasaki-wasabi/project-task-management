@@ -1,21 +1,28 @@
-// RecurringTaskTemplate domain types (task 9.1 template management + task
-// 9.2 instance generation, design.md "Backend/recurrence" Service
-// Interface).
+// RecurringTaskTemplate domain types (task 2.1 template management,
+// design.md "RecurrenceService" Service Interface; task 3.2 applyToCase).
 import type { RecurringTaskTemplate } from "@prisma/client";
 
 export type { RecurringTaskTemplate, Task } from "@prisma/client";
-export type RecurrenceKind = RecurringTaskTemplate["kind"];
-export type IntervalUnit = NonNullable<RecurringTaskTemplate["intervalUnit"]>;
+export type CaseRelativeAnchor = RecurringTaskTemplate["caseAnchor"];
 export type NonBusinessDayPolicy = RecurringTaskTemplate["nonBusinessDayPolicy"];
+
+/** design.md CaseTemplateApplyOperation — executed by applyToCase. */
+export type CaseTemplateApplyOperation =
+  | "start_generate"
+  | "start_regenerate"
+  | "start_delete"
+  | "end_generate"
+  | "end_regenerate"
+  | "end_delete"
+  | "month_generate"
+  | "month_regenerate"
+  | "month_delete";
 
 export interface RegisterTemplateInput {
   title: string;
   priority: RecurringTaskTemplate["priority"];
-  kind: RecurrenceKind;
-  intervalUnit?: IntervalUnit;
-  intervalValue?: number;
-  boundCaseId?: string;
-  caseOffsetDays?: number;
+  caseAnchor: CaseRelativeAnchor;
+  caseOffsetDays: number;
   defaultMemo?: string;
   nonBusinessDayPolicy: NonBusinessDayPolicy;
 }

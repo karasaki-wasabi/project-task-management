@@ -1,27 +1,33 @@
 // Persistence for Cases (task 3.1, design.md "Backend/cases"; renamed and
 // extended from the former deliveries/delivery.repository.ts, task 4.1).
 // Soft-delete / audit-column behavior comes from the shared `db` client
-// (task 1.4).
+// (task 1.4). Optional DbClient lets CaseService run create/update in the
+// same TX as template apply (task 4).
 import { db } from "../../shared/db.js";
-import type { Case, CreateCaseInput } from "./case.types.js";
+import type { DbClient } from "../../shared/soft-delete.repository.js";
+import type { Case } from "./case.types.js";
 
 export const caseRepository = {
-  create(input: CreateCaseInput): Promise<Case> {
+  create(
+    input: { name: string; startDate?: Date; endDate?: Date },
+    client: DbClient = db,
+  ): Promise<Case> {
     // isCompleted is intentionally not accepted here: design.md CaseService
     // Responsibilities & Constraints — it is always false on create and the
     // Prisma column default applies.
-    return db.case.create({ data: { name: input.name, startDate: input.startDate, endDate: input.endDate } });
+    return client.case.create({ data: { name: input.name, startDate: input.startDate, endDate: input.endDate } });
   },
 
-  findById(id: string): Promise<Case | null> {
-    return db.case.findUnique({ where: { id } });
+  findById(id: string, client: DbClient = db): Promise<Case | null> {
+    return client.case.findUnique({ where: { id } });
   },
 
   update(
     id: string,
     data: Partial<{ name: string; startDate: Date | null; endDate: Date | null; isCompleted: boolean }>,
+    client: DbClient = db,
   ): Promise<Case> {
-    return db.case.update({ where: { id }, data });
+    return client.case.update({ where: { id }, data });
   },
 
   list(): Promise<Case[]> {

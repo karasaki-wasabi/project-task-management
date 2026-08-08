@@ -1,12 +1,14 @@
 // Persistence for Tasks (task 3.1, design.md "Backend/tasks"). Soft-delete /
 // audit-column behavior and the default `deletedAt: null` list filter come
-// from the shared `db` client (task 1.4).
+// from the shared `db` client (task 1.4). Optional DbClient supports
+// CaseService same-TX apply (task 4).
 import { db } from "../../shared/db.js";
+import type { DbClient } from "../../shared/soft-delete.repository.js";
 import type { CreateTaskInput, Task, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
 
 export const taskRepository = {
-  create(input: CreateTaskInput): Promise<Task> {
-    return db.task.create({
+  create(input: CreateTaskInput, client: DbClient = db): Promise<Task> {
+    return client.task.create({
       data: {
         title: input.title,
         priority: input.priority,
@@ -19,6 +21,7 @@ export const taskRepository = {
         parentTaskId: input.parentTaskId,
         // RecurrenceService-only (see task.types.ts CreateTaskInput comment).
         sourceTemplateId: input.sourceTemplateId,
+        sourceAnchor: input.sourceAnchor,
         scheduledDate: input.scheduledDate,
       },
     });
@@ -43,8 +46,8 @@ export const taskRepository = {
     return db.task.update({ where: { id }, data });
   },
 
-  delete(id: string): Promise<Task> {
-    return db.task.delete({ where: { id } });
+  delete(id: string, client: DbClient = db): Promise<Task> {
+    return client.task.delete({ where: { id } });
   },
 
   list(filter: TaskListFilter): Promise<Task[]> {

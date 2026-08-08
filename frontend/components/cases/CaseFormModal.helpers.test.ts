@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildCreateCaseInput,
   buildTaskAssociationCalls,
   filterTasksByTitle,
   initSelectionState,
   isAllSelected,
+  resolveMissingDates,
   selectAll,
   setRequired,
   setSelected,
@@ -149,6 +151,53 @@ describe("filterTasksByTitle (Requirement 3.1 list + search box)", () => {
     const tasks = [makeTask({ id: "a", title: "Alpha" })];
     const result = filterTasksByTitle(tasks, "alpha");
     expect(result).not.toBe(tasks);
+  });
+});
+
+describe("resolveMissingDates (Requirements 3.1, 3.5, 3.6)", () => {
+  it("returns null when both start and end are set (skip screen A)", () => {
+    expect(resolveMissingDates("2026-08-01", "2026-08-10")).toBeNull();
+  });
+
+  it("returns start when only start is unset", () => {
+    expect(resolveMissingDates("", "2026-08-10")).toBe("start");
+  });
+
+  it("returns end when only end is unset", () => {
+    expect(resolveMissingDates("2026-08-01", "")).toBe("end");
+  });
+
+  it("returns both when neither date is set", () => {
+    expect(resolveMissingDates("", "")).toBe("both");
+  });
+
+  it("treats whitespace-only as unset", () => {
+    expect(resolveMissingDates("  ", "2026-08-10")).toBe("start");
+  });
+});
+
+describe("buildCreateCaseInput (Requirements 3.2–3.4, 3.6 — omit templateOperations)", () => {
+  it("omits templateOperations so the server applies full candidates", () => {
+    const input = buildCreateCaseInput({
+      name: " 案件A ",
+      startDate: "2026-08-01",
+      endDate: "2026-08-10",
+    });
+    expect(input).toEqual({
+      name: "案件A",
+      startDate: "2026-08-01",
+      endDate: "2026-08-10",
+    });
+    expect(input).not.toHaveProperty("templateOperations");
+  });
+
+  it("omits empty dates (partial / both missing)", () => {
+    expect(
+      buildCreateCaseInput({ name: "案件A", startDate: "2026-08-01", endDate: "" }),
+    ).toEqual({ name: "案件A", startDate: "2026-08-01" });
+    expect(buildCreateCaseInput({ name: "案件A", startDate: "", endDate: "" })).toEqual({
+      name: "案件A",
+    });
   });
 });
 

@@ -23,6 +23,8 @@ export interface CreateTaskInput {
   // function rather than duplicating the Prisma insert). Never set by the
   // public POST /api/tasks route's own request schema.
   sourceTemplateId?: string;
+  // Snapshot of the template caseAnchor at generation time (Req 5.3).
+  sourceAnchor?: PrismaTask["sourceAnchor"];
   scheduledDate?: Date;
 }
 

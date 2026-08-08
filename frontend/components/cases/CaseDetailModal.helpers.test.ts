@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildUpdateCaseInput, validateCaseEditForm } from "./CaseDetailModal.helpers";
+import {
+  buildUpdateCaseInput,
+  resolveEditApplyCandidates,
+  validateCaseEditForm,
+} from "./CaseDetailModal.helpers";
 
 describe("validateCaseEditForm (Requirement 5.3)", () => {
   it("accepts a valid edit form", () => {
@@ -88,5 +92,67 @@ describe("buildUpdateCaseInput (Requirement 5.2/5.4)", () => {
     });
     expect(withCompletion.isCompleted).toBe(true);
     expect(withCompletion.endDate).toBe("2020-01-01");
+  });
+
+  it("omits templateOperations when options are not provided (Req 4.12 path)", () => {
+    const body = buildUpdateCaseInput({
+      name: "案件A",
+      startDate: "2026-01-01",
+      endDate: "2026-01-31",
+      isCompleted: false,
+    });
+    expect(body).not.toHaveProperty("templateOperations");
+  });
+
+  it("includes templateOperations when provided, including empty array (Req 4.13)", () => {
+    expect(
+      buildUpdateCaseInput(
+        { name: "案件A", startDate: "2026-01-01", endDate: "2026-01-31", isCompleted: false },
+        { templateOperations: [] },
+      ),
+    ).toEqual({
+      name: "案件A",
+      startDate: "2026-01-01",
+      endDate: "2026-01-31",
+      isCompleted: false,
+      templateOperations: [],
+    });
+
+    expect(
+      buildUpdateCaseInput(
+        { name: "案件A", startDate: "2026-02-01", endDate: "2026-01-31", isCompleted: false },
+        { templateOperations: ["start_regenerate", "month_regenerate"] },
+      ).templateOperations,
+    ).toEqual(["start_regenerate", "month_regenerate"]);
+  });
+});
+
+describe("resolveEditApplyCandidates (Requirements 4.5–4.12)", () => {
+  it("returns empty when dates are unchanged (Req 4.12)", () => {
+    expect(
+      resolveEditApplyCandidates("2026-08-01", "2026-08-10", "2026-08-01", "2026-08-10"),
+    ).toEqual([]);
+  });
+
+  it("maps start change to start_regenerate + month_regenerate (Req 4.6, 4.10)", () => {
+    expect(
+      resolveEditApplyCandidates("2026-08-01", "2026-08-10", "2026-09-01", "2026-08-10"),
+    ).toEqual(["start_regenerate", "month_regenerate"]);
+  });
+
+  it("maps null→both dates to start_generate, end_generate, month_generate (Req 4.5, 4.8, 4.9)", () => {
+    expect(resolveEditApplyCandidates(null, null, "2026-08-01", "2026-08-10")).toEqual([
+      "start_generate",
+      "end_generate",
+      "month_generate",
+    ]);
+  });
+
+  it("treats empty new date strings as unset (Req 4.7, 4.11)", () => {
+    expect(resolveEditApplyCandidates("2026-08-01", "2026-08-10", "", "")).toEqual([
+      "start_delete",
+      "end_delete",
+      "month_delete",
+    ]);
   });
 });

@@ -1,45 +1,31 @@
 <!--
-  Case detail/edit/delete popup (task 6.3, design.md "Frontend / cases >
-  CaseDetailModal", Requirements 5.1-5.4, 6.3, 7.2, 8.1-8.2, 9.1-9.2).
-  Standalone here — not yet wired into cases/index.vue (that's task 8.1);
-  this component only needs a nullable `caseId` prop, mirroring
-  TaskDetailModal's `taskId` prop pattern so the parent controls
-  open/closed by setting/clearing it.
+  Case detail/edit/delete popup (task 6.3, design.md System Flow「案件編集保存(確認付き)」,
+  Requirements 4.1–4.13). Standalone — parent opens by setting `caseId`.
 
   Chrome (overlay, open/close animation, focus trap, close button) is
-  delegated to shared/Modal.vue, same as TaskDetailModal and
-  CaseFormModal — this component only supplies domain content via its
-  title/default/actions slots.
+  delegated to shared/Modal.vue. Fetch-on-open: listCases + find(id),
+  getCaseProgress, listTasks({ caseId }) in parallel.
 
-  Fetch-on-open (watch `caseId`): there is no single `GET /api/cases/:id`
-  in useApiClient (design.md's API Contract only lists list/create/patch/
-  progress/delete), and this task is explicitly barred from touching
-  useApiClient.ts. So the case itself is fetched via `listCases()` +
-  client-side `find(id)` (task 6.1's cases/index.vue already does the same
-  listCases + getCaseProgress combo, so this isn't a new pattern). Progress
-  (`getCaseProgress`) and the related-tasks list (`listTasks({ caseId })`)
-  are fetched in parallel with it. If the id isn't found in the list
-  (already deleted elsewhere), that's surfaced as an error rather than a
-  silent blank modal.
+  Edit save flow:
+  1. validate
+  2. resolveEditApplyCandidates(old, new)
+  3. no candidates → PATCH with templateOperations omitted
+  4. has candidates → CaseTemplateApplyConfirm B→C; cancel = no API;
+     approve → PATCH with selected templateOperations (may be [])
 
-  Starts in read-only "view" mode and switches to "edit" only via the
-  explicit edit button; saving returns to view mode rather than closing
-  (same flow as TaskDetailModal). After a successful save, progress is
-  re-fetched too — `isCompleted` and `endDate` both feed
-  `CaseProgress.isOverdueWithIncomplete`, so the view-mode badge would
-  otherwise show a stale overdue state until the next full reopen.
-
-  Editing does not touch task associations (Out of Boundary per design.md
-  — task add/remove only happens at case-creation time via CaseFormModal
-  or from the task's own detail popup via Requirement 4); the related-task
-  list here is read-only, for context only.
-
-  Delete requires the same inline confirm step (`confirmingDelete`) as
-  TaskDetailModal, not `window.confirm` (design.md: "TaskDetailModalの
-  confirmingDeleteと同じインライン確認ステップ").
+  Explicit Vue / useApiClient imports so vitest can mount without Nuxt
+  auto-import runtime (same approach as CaseFormModal.vue).
 -->
 <script setup lang="ts">
-import { buildUpdateCaseInput, validateCaseEditForm } from "./CaseDetailModal.helpers";
+import { computed, ref, watch } from "vue";
+import { useApiClient } from "../../composables/useApiClient";
+import type { CaseTemplateApplyOperation } from "./caseTemplateApplyCandidates";
+import CaseTemplateApplyConfirm from "./CaseTemplateApplyConfirm.vue";
+import {
+  buildUpdateCaseInput,
+  resolveEditApplyCandidates,
+  validateCaseEditForm,
+} from "./CaseDetailModal.helpers";
 
 const props = defineProps<{ caseId: string | null }>();
 const emit = defineEmits<{
@@ -65,6 +51,9 @@ const name = ref("");
 const startDate = ref("");
 const endDate = ref("");
 const isCompleted = ref(false);
+
+const confirmOpen = ref(false);
+const confirmCandidates = ref<CaseTemplateApplyOperation[]>([]);
 
 function toDateInputValue(value?: string | null): string {
   return value ? value.slice(0, 10) : "";
@@ -99,6 +88,8 @@ watch(
   async (id) => {
     error.value = null;
     confirmingDelete.value = false;
+    confirmOpen.value = false;
+    confirmCandidates.value = [];
     mode.value = "view";
     caseEntity.value = null;
     progress.value = null;
@@ -137,29 +128,33 @@ function startEdit() {
 function cancelEdit() {
   if (caseEntity.value) resetForm(caseEntity.value);
   error.value = null;
+  confirmOpen.value = false;
+  confirmCandidates.value = [];
   mode.value = "view";
 }
 
-async function save() {
+async function performSave(templateOperations?: CaseTemplateApplyOperation[]) {
   if (!props.caseId || !caseEntity.value) return;
-  error.value = null;
-  const validation = validateCaseEditForm({ name: name.value, startDate: startDate.value, endDate: endDate.value });
-  if (!validation.valid) {
-    error.value = validation.error ?? "入力内容を確認してください";
-    return;
-  }
-
   saving.value = true;
   try {
-    const updated = await api.updateCase(
-      props.caseId,
-      buildUpdateCaseInput({
-        name: name.value,
-        startDate: startDate.value,
-        endDate: endDate.value,
-        isCompleted: isCompleted.value,
-      }),
-    );
+    const body =
+      templateOperations === undefined
+        ? buildUpdateCaseInput({
+            name: name.value,
+            startDate: startDate.value,
+            endDate: endDate.value,
+            isCompleted: isCompleted.value,
+          })
+        : buildUpdateCaseInput(
+            {
+              name: name.value,
+              startDate: startDate.value,
+              endDate: endDate.value,
+              isCompleted: isCompleted.value,
+            },
+            { templateOperations },
+          );
+    const updated = await api.updateCase(props.caseId, body);
     caseEntity.value = updated;
     progress.value = await api.getCaseProgress(props.caseId);
     resetForm(updated);
@@ -170,6 +165,46 @@ async function save() {
   } finally {
     saving.value = false;
   }
+}
+
+async function save() {
+  if (!props.caseId || !caseEntity.value) return;
+  error.value = null;
+  const validation = validateCaseEditForm({
+    name: name.value,
+    startDate: startDate.value,
+    endDate: endDate.value,
+  });
+  if (!validation.valid) {
+    error.value = validation.error ?? "入力内容を確認してください";
+    return;
+  }
+
+  const candidates = resolveEditApplyCandidates(
+    caseEntity.value.startDate,
+    caseEntity.value.endDate,
+    startDate.value,
+    endDate.value,
+  );
+
+  if (candidates.length === 0) {
+    await performSave();
+    return;
+  }
+
+  confirmCandidates.value = candidates;
+  confirmOpen.value = true;
+}
+
+function onConfirmClose() {
+  // Req 4.4: abort keeps editing state; no API call.
+  confirmOpen.value = false;
+}
+
+async function onConfirmApprove(operations: CaseTemplateApplyOperation[] | null) {
+  // edit-apply always returns selected subset (may be []); null is create-missing only.
+  confirmOpen.value = false;
+  await performSave(operations ?? []);
 }
 
 async function confirmDelete() {
@@ -197,7 +232,7 @@ async function confirmDelete() {
     <p v-if="loading" class="text-sm text-slate-500">読み込み中…</p>
 
     <template v-else-if="caseEntity">
-      <!-- 閲覧モード(既定): 開始日・終了日・完了状態・必須タスク進捗・関連タスク一覧(Requirements 5.1, 6.3, 7.2) -->
+      <!-- 閲覧モード -->
       <div v-if="mode === 'view'" class="space-y-3">
         <div class="flex flex-wrap items-center gap-2">
           <Badge v-if="statusBadge" :tone="statusBadge.tone" :label="statusBadge.label" />
@@ -238,7 +273,7 @@ async function confirmDelete() {
                 :class="task.status === 'done' ? 'text-green-600' : 'text-slate-400'"
                 :aria-label="task.status === 'done' ? '完了' : '未完了'"
               >
-                {{ task.status === "done" ? "✓" : "○" }}
+                {{ task.status === 'done' ? "✓" : "○" }}
               </span>
               <span class="min-w-0 flex-1 truncate text-sm text-slate-800">{{ task.title }}</span>
               <Badge v-if="task.isRequiredForCase" tone="warning" label="必須" />
@@ -247,7 +282,7 @@ async function confirmDelete() {
         </div>
       </div>
 
-      <!-- 編集モード: 編集ボタン経由でのみ到達(TaskDetailModalと同じフロー、Requirements 5.1-5.4) -->
+      <!-- 編集モード -->
       <form v-else id="case-detail-form" class="space-y-3" @submit.prevent="save">
         <div class="flex flex-col gap-1">
           <label class="text-xs font-medium text-slate-500" for="case-detail-name">案件名</label>
@@ -358,4 +393,16 @@ async function confirmDelete() {
       </div>
     </template>
   </Modal>
+
+  <CaseTemplateApplyConfirm
+    :open="confirmOpen"
+    mode="edit-apply"
+    :candidates="confirmCandidates"
+    :old-start-date="caseEntity?.startDate ?? null"
+    :old-end-date="caseEntity?.endDate ?? null"
+    :start-date="startDate || null"
+    :end-date="endDate || null"
+    @close="onConfirmClose"
+    @approve="onConfirmApprove"
+  />
 </template>

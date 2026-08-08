@@ -1,9 +1,10 @@
 // Pure logic for CaseFormModal (task 6.2, design.md "Frontend / cases >
-// CaseFormModal" State Management block, Requirements 2.3/2.4/3.1-3.7).
+// CaseFormModal" + System Flow「案件新規作成」, Requirements 2.3/2.4, 3.1-3.7).
 // Extracted from the .vue SFC so it can be unit-tested without mounting a
-// component (this repo has no @vue/test-utils / DOM test environment, see
-// frontend/vitest.config.ts — same rationale as
-// kanban/UnassignedBacklogPanel.helpers.ts).
+// component (helper tests) and to keep submit decisions free of DOM details.
+// Mount coverage for confirm → create → associate lives in CaseFormModal.test.ts.
+
+import type { MissingDates } from "./CaseTemplateApplyConfirm.helpers";
 
 // Requirement 3.3: "選択された各タスクについて…個別に指定できる" — the
 // required flag is only meaningful for a selected task. Modeled as a single
@@ -119,4 +120,36 @@ export function validateCaseForm(input: { name: string; startDate: string; endDa
     return { valid: false, error: "開始日は終了日より前の日付を指定してください" };
   }
   return { valid: true };
+}
+
+// Requirements 3.1 / 3.5 / 3.6: both dates set → null (skip screen A).
+// Otherwise which date(s) are unset for CaseTemplateApplyConfirm.
+export function resolveMissingDates(startDate: string, endDate: string): MissingDates | null {
+  const startMissing = startDate.trim() === "";
+  const endMissing = endDate.trim() === "";
+  if (!startMissing && !endMissing) return null;
+  if (startMissing && endMissing) return "both";
+  if (startMissing) return "start";
+  return "end";
+}
+
+// Create payload always omits templateOperations (design.md: omit → server
+// full candidates). Empty dates are omitted so partial/both-missing create
+// still lets the server derive apply ops from the dates that are present
+// (both missing → empty candidates → no template tasks).
+export function buildCreateCaseInput(input: {
+  name: string;
+  startDate: string;
+  endDate: string;
+}): { name: string; startDate?: string; endDate?: string } {
+  const body: { name: string; startDate?: string; endDate?: string } = {
+    name: input.name.trim(),
+  };
+  if (input.startDate.trim() !== "") {
+    body.startDate = input.startDate.trim();
+  }
+  if (input.endDate.trim() !== "") {
+    body.endDate = input.endDate.trim();
+  }
+  return body;
 }
