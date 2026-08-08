@@ -19,6 +19,7 @@ export const taskRepository = {
         parentTaskId: input.parentTaskId,
         // RecurrenceService-only (see task.types.ts CreateTaskInput comment).
         sourceTemplateId: input.sourceTemplateId,
+        sourceAnchor: input.sourceAnchor,
         scheduledDate: input.scheduledDate,
       },
     });
