@@ -26,6 +26,16 @@ CREATE TABLE `cases` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+-- `template_case_date_active_key` is a STORED GENERATED COLUMN (Prisma cannot
+-- express this; see schema.prisma comment). While the row is active and carries
+-- a template-generated identity (source_template_id + case_id + scheduled_date),
+-- it stores CONCAT(...); soft-deleted or incomplete rows yield NULL so the
+-- UNIQUE INDEX only enforces uniqueness among active generated tasks.
+-- WARNING: running `prisma migrate dev` again after this hand-edit will detect
+-- the generated column/unique index as schema drift and may generate a
+-- follow-up migration that drops them. Use `prisma migrate deploy` / reset to
+-- apply this migration verbatim; re-verify `SHOW CREATE TABLE tasks` after any
+-- future `prisma migrate dev` run touching this table.
 CREATE TABLE `tasks` (
     `id` VARCHAR(191) NOT NULL,
     `title` VARCHAR(191) NOT NULL,
@@ -37,19 +47,36 @@ CREATE TABLE `tasks` (
     `parent_task_id` VARCHAR(191) NULL,
     `assignee_user_id` VARCHAR(191) NULL,
     `source_template_id` VARCHAR(191) NULL,
+    `source_anchor` ENUM('case_start', 'case_end', 'period_month_start', 'period_month_end') NULL,
     `development_stage_id` VARCHAR(191) NULL,
     `scheduled_date` DATE NULL,
     `completed_at` DATETIME(3) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
+    `template_case_date_active_key` VARCHAR(191) GENERATED ALWAYS AS (
+        IF(
+            `deleted_at` IS NULL
+                AND `source_template_id` IS NOT NULL
+                AND `case_id` IS NOT NULL
+                AND `scheduled_date` IS NOT NULL,
+            CONCAT(
+                `source_template_id`,
+                ':',
+                `case_id`,
+                ':',
+                DATE_FORMAT(`scheduled_date`, '%Y-%m-%d')
+            ),
+            NULL
+        )
+    ) STORED,
 
     INDEX `tasks_case_id_idx`(`case_id`),
     INDEX `tasks_parent_task_id_idx`(`parent_task_id`),
     INDEX `tasks_completed_at_idx`(`completed_at`),
     INDEX `tasks_deleted_at_idx`(`deleted_at`),
     INDEX `tasks_development_stage_id_idx`(`development_stage_id`),
-    UNIQUE INDEX `tasks_source_template_id_scheduled_date_key`(`source_template_id`, `scheduled_date`),
+    UNIQUE INDEX `tasks_template_case_date_active_key_key`(`template_case_date_active_key`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -58,11 +85,8 @@ CREATE TABLE `recurring_task_templates` (
     `id` VARCHAR(191) NOT NULL,
     `title` VARCHAR(191) NOT NULL,
     `priority` ENUM('high', 'medium', 'low') NOT NULL,
-    `kind` ENUM('fixed_interval', 'case_relative') NOT NULL,
-    `interval_unit` ENUM('day', 'week', 'month') NULL,
-    `interval_value` INTEGER NULL,
-    `bound_case_id` VARCHAR(191) NULL,
-    `case_offset_days` INTEGER NULL,
+    `case_anchor` ENUM('case_start', 'case_end', 'period_month_start', 'period_month_end') NOT NULL,
+    `case_offset_days` INTEGER NOT NULL,
     `default_memo` TEXT NULL,
     `non_business_day_policy` ENUM('as_is', 'skip', 'next_business_day', 'previous_business_day') NOT NULL,
     `is_active` BOOLEAN NOT NULL DEFAULT true,
@@ -112,7 +136,11 @@ CREATE TABLE `development_stages` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey
-ALTER TABLE `tasks` ADD CONSTRAINT `tasks_case_id_fkey` FOREIGN KEY (`case_id`) REFERENCES `cases`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+-- MySQL forbids ON DELETE / ON UPDATE referential actions on columns that appear
+-- in a STORED GENERATED COLUMN expression (`template_case_date_active_key` uses
+-- case_id and source_template_id). Use plain FKs (RESTRICT) for those two;
+-- other task FKs keep Prisma's default SET NULL / CASCADE.
+ALTER TABLE `tasks` ADD CONSTRAINT `tasks_case_id_fkey` FOREIGN KEY (`case_id`) REFERENCES `cases`(`id`);
 
 -- AddForeignKey
 ALTER TABLE `tasks` ADD CONSTRAINT `tasks_parent_task_id_fkey` FOREIGN KEY (`parent_task_id`) REFERENCES `tasks`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
@@ -121,10 +149,7 @@ ALTER TABLE `tasks` ADD CONSTRAINT `tasks_parent_task_id_fkey` FOREIGN KEY (`par
 ALTER TABLE `tasks` ADD CONSTRAINT `tasks_assignee_user_id_fkey` FOREIGN KEY (`assignee_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `tasks` ADD CONSTRAINT `tasks_source_template_id_fkey` FOREIGN KEY (`source_template_id`) REFERENCES `recurring_task_templates`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `tasks` ADD CONSTRAINT `tasks_source_template_id_fkey` FOREIGN KEY (`source_template_id`) REFERENCES `recurring_task_templates`(`id`);
 
 -- AddForeignKey
 ALTER TABLE `tasks` ADD CONSTRAINT `tasks_development_stage_id_fkey` FOREIGN KEY (`development_stage_id`) REFERENCES `development_stages`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `recurring_task_templates` ADD CONSTRAINT `recurring_task_templates_bound_case_id_fkey` FOREIGN KEY (`bound_case_id`) REFERENCES `cases`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;

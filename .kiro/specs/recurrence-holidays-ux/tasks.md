@@ -7,8 +7,9 @@
 - `templateOperations`: 省略=フル候補、`[]`=適用なし、非部分集合=400
 - UI は research.md の Claude Design 確定に従う
 - `product.md` / `tech.md`(rrule削除)の更新は本スペック範囲(Req 10 / design Boundary)
+- MySQL は STORED GENERATED の基列に ON DELETE/UPDATE を付けられないため、`tasks.case_id` / `source_template_id` の FK は RESTRICT(手編集 migration コメント参照)
 
-- [ ] 1. Foundation: スキーマとマイグレーション
+- [x] 1. Foundation: スキーマとマイグレーション
 - [x] 1.1 RecurringTaskTemplate / Task スキーマを案件連動のみへ更新する
   - `CaseRelativeAnchor` を追加し、テンプレートに `caseAnchor`・非負の `caseOffsetDays` を必須化する
   - `kind` / `intervalUnit` / `intervalValue` / `boundCaseId` と `RecurrenceKind` / `IntervalUnit` を削除する
@@ -16,7 +17,7 @@
   - 観測可能な完了状態: `prisma validate` が通り、生成 Client に `caseAnchor` / `sourceAnchor` / `CaseRelativeAnchor` が現れ、fixed_interval 関連型が消える
   - _Requirements: 1.1, 1.2, 2.1, 2.2, 5.3_
 
-- [ ] 1.2 単一 init マイグレーションを再生成し、生成列を手編集して DB に適用する
+- [x] 1.2 単一 init マイグレーションを再生成し、生成列を手編集して DB に適用する
   - 既存 migrations を整理し init を再生成する。Task 活性一意キーと `date_active_key` を SQL 手編集で入れる
   - `migrate reset` で開発 DB に適用する
   - 観測可能な完了状態: 活性 Task の同一 (template, case, scheduledDate) は拒否され、論理削除後の同キー再作成は成功する統合テストまたは手動検証ができる

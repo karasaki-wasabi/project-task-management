@@ -61,26 +61,44 @@ describe("recurrence schema shape (task 1.1)", () => {
   });
 });
 
-describe("physical schema (pre-1.2 DB)", () => {
-  // Task.source_anchor / template_case_date_active_key and RecurringTaskTemplate
-  // case_anchor land in MySQL at task 1.2 (migrate reset). Until then Prisma
-  // Task/RecurringTaskTemplate writes fail against the old DB; keep DB checks
-  // on tables that remain compatible.
-
-  it("round-trips user, case, and non_business_day", async () => {
+describe("physical schema (task 1.2)", () => {
+  it("round-trips user, case, template, task, and non_business_day", async () => {
     const user = await prisma.user.create({ data: { name: `user-${randomUUID()}` } });
     const caseEntity = await prisma.case.create({
       data: { name: `case-${randomUUID()}`, endDate: new Date("2026-08-01") },
     });
+    const template = await prisma.recurringTaskTemplate.create({
+      data: {
+        title: `tpl-${randomUUID()}`,
+        priority: "medium",
+        caseAnchor: CaseRelativeAnchor.case_start,
+        caseOffsetDays: 0,
+        nonBusinessDayPolicy: "as_is",
+      },
+    });
+    const task = await prisma.task.create({
+      data: {
+        title: `task-${randomUUID()}`,
+        priority: "medium",
+        caseId: caseEntity.id,
+        sourceTemplateId: template.id,
+        sourceAnchor: CaseRelativeAnchor.case_start,
+        scheduledDate: new Date("2026-08-10"),
+      },
+    });
     const holiday = await prisma.nonBusinessDay.create({
-      data: { date: new Date(`2030-01-0${1}`), label: "test-holiday", source: "manual" },
+      data: { date: new Date("2030-01-01"), label: "test-holiday", source: "manual" },
     });
 
     expect(user.id).toBeTruthy();
     expect(caseEntity.id).toBeTruthy();
+    expect(template.caseAnchor).toBe(CaseRelativeAnchor.case_start);
+    expect(task.sourceAnchor).toBe(CaseRelativeAnchor.case_start);
     expect(holiday.source).toBe("manual");
 
+    await prisma.task.delete({ where: { id: task.id } });
     await prisma.nonBusinessDay.delete({ where: { id: holiday.id } });
+    await prisma.recurringTaskTemplate.delete({ where: { id: template.id } });
     await prisma.case.delete({ where: { id: caseEntity.id } });
     await prisma.user.delete({ where: { id: user.id } });
   });
@@ -115,14 +133,62 @@ describe("physical schema (pre-1.2 DB)", () => {
     await prisma.$executeRaw`DELETE FROM non_business_days WHERE id IN (${first.id}, ${second.id})`;
   });
 
-  it("round-trips a development stage (task 13.1; task link deferred to 1.2)", async () => {
-    const stage = await prisma.developmentStage.create({ data: { name: `stage-${randomUUID()}`, order: 0 } });
+  it("rejects two active template tasks on the same (template, case, scheduledDate), but allows recreate after soft delete", async () => {
+    const caseEntity = await prisma.case.create({
+      data: { name: `case-uniq-${randomUUID()}`, endDate: new Date("2026-09-01") },
+    });
+    const template = await prisma.recurringTaskTemplate.create({
+      data: {
+        title: `tpl-uniq-${randomUUID()}`,
+        priority: "high",
+        caseAnchor: CaseRelativeAnchor.case_end,
+        caseOffsetDays: 1,
+        nonBusinessDayPolicy: "skip",
+      },
+    });
+    const scheduledDate = new Date("2026-09-15");
+    const baseTask = {
+      title: "generated",
+      priority: "high" as const,
+      caseId: caseEntity.id,
+      sourceTemplateId: template.id,
+      sourceAnchor: CaseRelativeAnchor.case_end,
+      scheduledDate,
+    };
+
+    const first = await prisma.task.create({ data: baseTask });
+
+    await expect(prisma.task.create({ data: { ...baseTask, title: "duplicate" } })).rejects.toThrow();
+
+    await prisma.$executeRaw`UPDATE tasks SET deleted_at = NOW() WHERE id = ${first.id}`;
+
+    const second = await prisma.task.create({ data: { ...baseTask, title: "recreated" } });
+    expect(second.id).not.toBe(first.id);
+
+    await prisma.$executeRaw`DELETE FROM tasks WHERE id IN (${first.id}, ${second.id})`;
+    await prisma.recurringTaskTemplate.delete({ where: { id: template.id } });
+    await prisma.case.delete({ where: { id: caseEntity.id } });
+  });
+
+  it("round-trips a development stage linked from a task", async () => {
+    const stage = await prisma.developmentStage.create({
+      data: { name: `stage-${randomUUID()}`, order: 0 },
+    });
+    const task = await prisma.task.create({
+      data: {
+        title: `stage-task-${randomUUID()}`,
+        priority: "low",
+        developmentStageId: stage.id,
+      },
+    });
 
     expect(stage.id).toBeTruthy();
+    expect(task.developmentStageId).toBe(stage.id);
     expect(stage.createdAt).toBeInstanceOf(Date);
     expect(stage.updatedAt).toBeInstanceOf(Date);
     expect(stage.deletedAt).toBeNull();
 
+    await prisma.task.delete({ where: { id: task.id } });
     await prisma.developmentStage.delete({ where: { id: stage.id } });
   });
 });

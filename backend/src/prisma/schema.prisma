@@ -7,10 +7,11 @@
 // - `non_business_days.date_active_key`: active-date uniqueness for holidays
 // - `tasks.template_case_date_active_key`: active-row uniqueness for
 //   template-generated tasks on (source_template_id, case_id, scheduled_date).
-//   Conceptual expression:
-//   IF(deleted_at IS NULL AND source_template_id IS NOT NULL,
-//      CONCAT(source_template_id, ':', case_id, ':', scheduled_date), NULL)
-//   Exact SQL is fixed in migration hand-edit (task 1.2).
+//   Conceptual expression (exact SQL in migration hand-edit):
+//   IF(deleted_at IS NULL AND source_template_id IS NOT NULL
+//        AND case_id IS NOT NULL AND scheduled_date IS NOT NULL,
+//      CONCAT(source_template_id, ':', case_id, ':',
+//             DATE_FORMAT(scheduled_date, '%Y-%m-%d')), NULL)
 
 generator client {
   provider = "prisma-client-js"
