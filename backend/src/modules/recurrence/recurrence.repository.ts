@@ -1,20 +1,9 @@
-// Persistence for RecurringTaskTemplates (task 9.1 template CRUD, design.md
-// "Backend/recurrence"). Soft-delete / audit-column behavior and the
-// default `deletedAt: null` filter come from the shared `db` client
-// (task 1.4).
-//
-// Creating a generated Task instance is deliberately NOT a method here:
-// that goes through TasksService.create (see recurrence.service.ts's
-// `tryCreateInstance`) — design.md's general architecture principle is
-// that cross-module communication happens via a module's Service
-// interface, not by one module's repository reaching into another
-// module's tables directly. `findIncompleteInstance`/
-// `updateInstanceScheduledDate` below are read/reschedule operations on
-// instances this module already owns by `sourceTemplateId`, not a second
-// creation path.
+// Persistence for RecurringTaskTemplates (task 2.1 template CRUD, design.md
+// "RecurrenceService"). Soft-delete / audit-column behavior and the
+// default `deletedAt: null` filter come from the shared `db` client.
 import { Prisma } from "@prisma/client";
 import { db } from "../../shared/db.js";
-import type { RecurringTaskTemplate, RegisterTemplateInput, Task } from "./recurrence.types.js";
+import type { RecurringTaskTemplate, RegisterTemplateInput } from "./recurrence.types.js";
 
 export function isUniqueConstraintViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
@@ -26,10 +15,7 @@ export const recurrenceRepository = {
       data: {
         title: input.title,
         priority: input.priority,
-        kind: input.kind,
-        intervalUnit: input.intervalUnit,
-        intervalValue: input.intervalValue,
-        boundCaseId: input.boundCaseId,
+        caseAnchor: input.caseAnchor,
         caseOffsetDays: input.caseOffsetDays,
         defaultMemo: input.defaultMemo,
         nonBusinessDayPolicy: input.nonBusinessDayPolicy,
@@ -42,11 +28,15 @@ export const recurrenceRepository = {
   },
 
   // `stop` (isActive=false) and `delete` (soft-delete via deletedAt) are
-  // distinct business operations (design.md Postconditions) — stop keeps
-  // the template visible/listed but excluded from future generation;
-  // delete removes it from listings entirely.
+  // distinct business operations — stop keeps the template visible/listed
+  // but excluded from future generation; delete removes it from listings.
   stop(id: string): Promise<RecurringTaskTemplate> {
     return db.recurringTaskTemplate.update({ where: { id }, data: { isActive: false } });
+  },
+
+  // Requirement 2.7: resume flips isActive only — no case scan / backfill.
+  resume(id: string): Promise<RecurringTaskTemplate> {
+    return db.recurringTaskTemplate.update({ where: { id }, data: { isActive: true } });
   },
 
   remove(id: string): Promise<RecurringTaskTemplate> {
@@ -57,20 +47,8 @@ export const recurrenceRepository = {
     return db.recurringTaskTemplate.findMany({ orderBy: { createdAt: "asc" } });
   },
 
-  listActiveByKind(kind: RecurringTaskTemplate["kind"]): Promise<RecurringTaskTemplate[]> {
-    return db.recurringTaskTemplate.findMany({ where: { kind, isActive: true } });
-  },
-
-  // The one not-yet-completed instance a case_relative template has
-  // generated for a given case, if any (used by onCaseEndDateChanged
-  // to recompute its scheduled date rather than create a duplicate).
-  findIncompleteInstance(templateId: string, caseId: string): Promise<Task | null> {
-    return db.task.findFirst({
-      where: { sourceTemplateId: templateId, caseId, status: { not: "done" } },
-    });
-  },
-
-  updateInstanceScheduledDate(taskId: string, scheduledDate: Date): Promise<Task> {
-    return db.task.update({ where: { id: taskId }, data: { scheduledDate } });
+  // Active templates eligible for future generation (task 2.2+).
+  listActive(): Promise<RecurringTaskTemplate[]> {
+    return db.recurringTaskTemplate.findMany({ where: { isActive: true } });
   },
 };

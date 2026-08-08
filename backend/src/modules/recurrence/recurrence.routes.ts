@@ -1,32 +1,24 @@
-// HTTP routes for RecurrenceService template management (task 9.1) + manual
-// generation trigger (task 9.3, design.md "Backend/recurrence" API
-// Contract, plus GET /api/recurring-templates — see
-// recurrence.routes.test.ts header comment for why this list endpoint was
-// added despite not being in design.md's API Contract table). Registered
-// into the shared app in task 10.3; standalone Fastify plugin here so this
-// module stays testable in isolation.
+// HTTP routes for RecurrenceService template management (task 2.1,
+// design.md API table). Registered into the shared app elsewhere;
+// standalone Fastify plugin here so this module stays testable in isolation.
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
 import { recurrenceService } from "./recurrence.service.js";
 
 const priority = z.enum(["high", "medium", "low"]);
-const intervalUnit = z.enum(["day", "week", "month"]);
+const caseAnchor = z.enum(["case_start", "case_end", "period_month_start", "period_month_end"]);
 const nonBusinessDayPolicy = z.enum(["as_is", "skip", "next_business_day", "previous_business_day"]);
 
 const registerTemplateBodySchema = z.object({
   title: z.string(),
   priority,
-  kind: z.enum(["fixed_interval", "case_relative"]),
-  intervalUnit: intervalUnit.optional(),
-  intervalValue: z.number().optional(),
-  boundCaseId: z.string().optional(),
-  caseOffsetDays: z.number().optional(),
+  caseAnchor,
+  caseOffsetDays: z.number().int().nonnegative(),
   defaultMemo: z.string().optional(),
   nonBusinessDayPolicy,
 });
 const templateIdParamsSchema = z.object({ id: z.string() });
-const generateDueBodySchema = z.object({ asOf: z.coerce.date().optional() });
 
 function parseOrBadRequest<T>(schema: z.ZodType<T>, data: unknown): T {
   const result = schema.safeParse(data);
@@ -49,6 +41,12 @@ export async function recurrenceRoutes(app: FastifyInstance): Promise<void> {
     reply.status(204).send();
   });
 
+  app.post("/api/recurring-templates/:id/resume", async (request, reply) => {
+    const params = parseOrBadRequest(templateIdParamsSchema, request.params);
+    await recurrenceService.resumeTemplate(params.id);
+    reply.status(204).send();
+  });
+
   app.delete("/api/recurring-templates/:id", async (request, reply) => {
     const params = parseOrBadRequest(templateIdParamsSchema, request.params);
     await recurrenceService.deleteTemplate(params.id, request.id);
@@ -57,10 +55,5 @@ export async function recurrenceRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/recurring-templates", async () => {
     return recurrenceService.list();
-  });
-
-  app.post("/api/recurring-templates/generate-due", async (request) => {
-    const body = parseOrBadRequest(generateDueBodySchema, request.body ?? {});
-    return recurrenceService.generateDueInstances(body.asOf ?? new Date(), request.id);
   });
 }

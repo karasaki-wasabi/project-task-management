@@ -1,22 +1,8 @@
-// RED: recurrenceRoutes does not exist yet (task 9.1). Registration into the
-// main app.ts happens in task 10.3; this test mounts the plugin on a
-// throwaway Fastify instance.
-//
-// Note: design.md's API Contract table for RecurrenceService lists only
-// POST /api/recurring-templates, POST /:id/stop, DELETE /:id, and
-// POST /generate-due — it omits a GET/list endpoint. But task 9.1 itself
-// explicitly requires "登録したテンプレートが一覧から取得できることを確認
-// できる状態にする" (registered templates must be retrievable from a
-// list), and every other module in this codebase exposes GET <collection>.
-// This is the same kind of design.md documentation gap as task 4.1's
-// Postconditions/Data-Models contradiction: resolved here by adding
-// GET /api/recurring-templates, consistent with the established per-module
-// pattern and the task's own explicit acceptance bullet.
+// HTTP routes for RecurrenceService template management (task 2.1).
+// Mounts the plugin on a throwaway Fastify instance.
 //
 // Cleanup policy: every `it()` deletes its own rows in a `finally` block —
-// see recurrence.service.test.ts's header comment for why a skipped cleanup
-// here is worse than a normal flaky test (it self-perpetuates into every
-// later generate-due call, this file's and other test files' alike).
+// see recurrence.service.test.ts's header comment.
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { afterAll, describe, expect, it } from "vitest";
@@ -31,71 +17,64 @@ async function hardDeleteTemplates(ids: string[]): Promise<void> {
   );
 }
 
-async function hardDeleteTasksByTemplate(templateId: string): Promise<void> {
-  await db.$executeRawUnsafe("DELETE FROM tasks WHERE source_template_id = ?", templateId);
-}
-
 async function buildTestApp() {
   const app = Fastify({ logger: false });
   await app.register(recurrenceRoutes);
   return app;
 }
 
+const validPayload = {
+  title: "route template",
+  priority: "medium" as const,
+  caseAnchor: "case_end" as const,
+  caseOffsetDays: 2,
+  defaultMemo: "default note",
+  nonBusinessDayPolicy: "as_is" as const,
+};
+
 afterAll(async () => {
   await db.$disconnect();
 });
 
-describe("recurrenceRoutes (task 9.1)", () => {
-  it("POST /api/recurring-templates registers a template and returns 201", async () => {
+describe("recurrenceRoutes (task 2.1)", () => {
+  it("POST /api/recurring-templates registers a case-relative template and returns 201", async () => {
     const app = await buildTestApp();
     const templateIds: string[] = [];
     try {
       const response = await app.inject({
         method: "POST",
         url: "/api/recurring-templates",
-        payload: {
-          title: "route template",
-          priority: "medium",
-          kind: "fixed_interval",
-          intervalUnit: "week",
-          intervalValue: 1,
-          nonBusinessDayPolicy: "as_is",
-        },
+        payload: validPayload,
       });
       if (response.statusCode === 201) templateIds.push(response.json().id);
 
       expect(response.statusCode).toBe(201);
       expect(response.json().title).toBe("route template");
+      expect(response.json().caseAnchor).toBe("case_end");
+      expect(response.json().caseOffsetDays).toBe(2);
+      expect(response.json().defaultMemo).toBe("default note");
+      expect(response.json()).not.toHaveProperty("kind");
     } finally {
       await hardDeleteTemplates(templateIds);
       await app.close();
     }
   });
 
-  it("POST /api/recurring-templates returns 400 for an invalid combination", async () => {
+  it("POST /api/recurring-templates returns 400 for invalid input (negative offset / missing fields)", async () => {
     const app = await buildTestApp();
     try {
-      const response = await app.inject({
+      const negative = await app.inject({
         method: "POST",
         url: "/api/recurring-templates",
-        payload: { title: "bad", priority: "low", kind: "fixed_interval", nonBusinessDayPolicy: "as_is" },
+        payload: { ...validPayload, caseOffsetDays: -1 },
       });
+      expect(negative.statusCode).toBe(400);
 
-      expect(response.statusCode).toBe(400);
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("POST /api/recurring-templates/:id/stop deactivates a template, returns 404 for unknown id", async () => {
-    const app = await buildTestApp();
-    const templateIds: string[] = [];
-    try {
-      const created = await app.inject({
+      const fixedIntervalShape = await app.inject({
         method: "POST",
         url: "/api/recurring-templates",
         payload: {
-          title: "stoppable",
+          title: "legacy",
           priority: "low",
           kind: "fixed_interval",
           intervalUnit: "day",
@@ -103,17 +82,46 @@ describe("recurrenceRoutes (task 9.1)", () => {
           nonBusinessDayPolicy: "as_is",
         },
       });
+      expect(fixedIntervalShape.statusCode).toBe(400);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("POST /api/recurring-templates/:id/stop and /resume deactivate and reactivate a template", async () => {
+    const app = await buildTestApp();
+    const templateIds: string[] = [];
+    try {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/recurring-templates",
+        payload: { ...validPayload, title: "stoppable" },
+      });
+      expect(created.statusCode).toBe(201);
       const { id } = created.json();
       templateIds.push(id);
 
       const stopResponse = await app.inject({ method: "POST", url: `/api/recurring-templates/${id}/stop` });
       expect(stopResponse.statusCode).toBe(204);
 
-      const missingResponse = await app.inject({
+      const resumeResponse = await app.inject({ method: "POST", url: `/api/recurring-templates/${id}/resume` });
+      expect(resumeResponse.statusCode).toBe(204);
+
+      const listResponse = await app.inject({ method: "GET", url: "/api/recurring-templates" });
+      const found = listResponse.json().find((t: { id: string; isActive: boolean }) => t.id === id);
+      expect(found?.isActive).toBe(true);
+
+      const missingStop = await app.inject({
         method: "POST",
         url: `/api/recurring-templates/${randomUUID()}/stop`,
       });
-      expect(missingResponse.statusCode).toBe(404);
+      expect(missingStop.statusCode).toBe(404);
+
+      const missingResume = await app.inject({
+        method: "POST",
+        url: `/api/recurring-templates/${randomUUID()}/resume`,
+      });
+      expect(missingResume.statusCode).toBe(404);
     } finally {
       await hardDeleteTemplates(templateIds);
       await app.close();
@@ -127,15 +135,9 @@ describe("recurrenceRoutes (task 9.1)", () => {
       const created = await app.inject({
         method: "POST",
         url: "/api/recurring-templates",
-        payload: {
-          title: "listable",
-          priority: "low",
-          kind: "fixed_interval",
-          intervalUnit: "month",
-          intervalValue: 1,
-          nonBusinessDayPolicy: "skip",
-        },
+        payload: { ...validPayload, title: "listable", nonBusinessDayPolicy: "skip" },
       });
+      expect(created.statusCode).toBe(201);
       const { id } = created.json();
       templateIds.push(id);
 
@@ -154,109 +156,21 @@ describe("recurrenceRoutes (task 9.1)", () => {
     const app = await buildTestApp();
     try {
       const response = await app.inject({ method: "DELETE", url: `/api/recurring-templates/${randomUUID()}` });
-
       expect(response.statusCode).toBe(404);
     } finally {
       await app.close();
     }
   });
-});
 
-// RED: POST /api/recurring-templates/generate-due does not exist yet
-// (task 9.3, Requirements 5.1, 5.5, 5.6).
-describe("recurrenceRoutes generate-due (task 9.3)", () => {
-  it("generates due instances for fixed_interval templates up to the given asOf and returns them", async () => {
+  it("POST /api/recurring-templates/generate-due is removed (Requirement 1.2)", async () => {
     const app = await buildTestApp();
-    const templateIds: string[] = [];
     try {
-      const created = await app.inject({
-        method: "POST",
-        url: "/api/recurring-templates",
-        payload: {
-          title: "generate-due route template",
-          priority: "low",
-          kind: "fixed_interval",
-          intervalUnit: "day",
-          intervalValue: 1,
-          nonBusinessDayPolicy: "as_is",
-        },
-      });
-      const { id } = created.json();
-      templateIds.push(id);
-      await db.$executeRawUnsafe("UPDATE recurring_task_templates SET created_at = ? WHERE id = ?", new Date("2035-01-01T00:00:00.000Z"), id);
-
       const response = await app.inject({
         method: "POST",
         url: "/api/recurring-templates/generate-due",
         payload: { asOf: "2035-01-03T00:00:00.000Z" },
       });
-
-      expect(response.statusCode).toBe(200);
-      const body = response.json() as Array<{ id: string; sourceTemplateId: string }>;
-      const mine = body.filter((t) => t.sourceTemplateId === id);
-      expect(mine).toHaveLength(3);
-    } finally {
-      for (const id of templateIds) await hardDeleteTasksByTemplate(id);
-      await hardDeleteTemplates(templateIds);
-      await app.close();
-    }
-  });
-
-  it("is idempotent when called twice with the same asOf", async () => {
-    const app = await buildTestApp();
-    const templateIds: string[] = [];
-    try {
-      const created = await app.inject({
-        method: "POST",
-        url: "/api/recurring-templates",
-        payload: {
-          title: "idempotent route template",
-          priority: "low",
-          kind: "fixed_interval",
-          intervalUnit: "day",
-          intervalValue: 1,
-          nonBusinessDayPolicy: "as_is",
-        },
-      });
-      const { id } = created.json();
-      templateIds.push(id);
-      await db.$executeRawUnsafe("UPDATE recurring_task_templates SET created_at = ? WHERE id = ?", new Date("2035-02-01T00:00:00.000Z"), id);
-      const payload = { asOf: "2035-02-02T00:00:00.000Z" };
-
-      await app.inject({ method: "POST", url: "/api/recurring-templates/generate-due", payload });
-      await app.inject({ method: "POST", url: "/api/recurring-templates/generate-due", payload });
-
-      const all = await db.task.findMany({ where: { sourceTemplateId: id } });
-      expect(all).toHaveLength(2);
-    } finally {
-      for (const id of templateIds) await hardDeleteTasksByTemplate(id);
-      await hardDeleteTemplates(templateIds);
-      await app.close();
-    }
-  });
-
-  it("defaults asOf to the current time when omitted", async () => {
-    const app = await buildTestApp();
-    try {
-      const response = await app.inject({ method: "POST", url: "/api/recurring-templates/generate-due", payload: {} });
-
-      expect(response.statusCode).toBe(200);
-      expect(Array.isArray(response.json())).toBe(true);
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("returns 400 for an invalid asOf", async () => {
-    const app = await buildTestApp();
-    try {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/recurring-templates/generate-due",
-        payload: { asOf: "not-a-date" },
-      });
-
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(404);
     } finally {
       await app.close();
     }

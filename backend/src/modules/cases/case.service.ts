@@ -7,9 +7,11 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
-import { recurrenceService } from "../recurrence/recurrence.service.js";
 import { caseRepository } from "./case.repository.js";
 import type { Case, CaseProgress, CreateCaseInput, UpdateCaseInput } from "./case.types.js";
+// Task 2.1: removed unconfirmed RecurrenceService.onCaseCreated /
+// onCaseEndDateChanged call sites. Explicit applyToCase via
+// templateOperations lands in task 4.
 
 function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
@@ -40,20 +42,8 @@ export const caseService = {
     const caseEntity = await caseRepository.create({ name, startDate: input.startDate, endDate: input.endDate });
     // Requirement 10.2: case creation is a broad-impact operation.
     businessEventLogger.logBusinessEvent("case.created", { requestId, entityId: caseEntity.id });
-    // design.md CaseService Dependencies: synchronous call, no try/catch —
-    // if RecurrenceService throws, the Case row remains created and create()
-    // as a whole ends in that exception, preserving delivery.service.ts's
-    // existing implicit behavior (not "improved" here). Task 13.4: endDate
-    // is now optional (task 13.1) — per the Boundary Context, a
-    // case_relative template must not generate anything until the case has
-    // an endDate at all, so skip the call entirely when it's still unset.
-    // The `!== null` check also lets TS narrow caseEntity.endDate to Date
-    // for this call, without touching RecurrenceService's own Date (not
-    // Date | null) parameter typing.
-    if (caseEntity.endDate !== null) {
-      const endDate = caseEntity.endDate;
-      await recurrenceService.onCaseCreated({ ...caseEntity, endDate }, requestId);
-    }
+    // Task 2.1 stub: no unconfirmed template apply here. Task 4 wires
+    // recurrenceService.applyToCase(templateOperations) in the same TX.
     return caseEntity;
   },
 
@@ -94,31 +84,8 @@ export const caseService = {
       throw error;
     }
 
-    // Task 13.4 (Requirement 5.4, design.md CaseService Dependencies): with
-    // endDate now optional, the "recompute on endDate change" call from
-    // before task 13.1 is really a 4-way state transition. Only look at
-    // this at all when endDate was actually part of this update's input —
-    // same synchronous-await, no try/catch pattern as create().
-    if (input.endDate !== undefined) {
-      if (updated.endDate === null) {
-        // 「値あり→未設定」(or 未設定→未設定, which can't reach here since
-        // that would mean current.endDate was already null and stayed
-        // null — not a "change" needing any call either way): no
-        // generation, no recalculation.
-      } else if (current.endDate === null) {
-        // 「未設定→値あり」: first-time generation, via the very same
-        // function create() uses (RecurrenceService Implementation Notes:
-        // onCaseCreated is intentionally reused for this case). TS narrows
-        // updated.endDate to Date in this branch from the outer check.
-        const endDate = updated.endDate;
-        await recurrenceService.onCaseCreated({ ...updated, endDate }, undefined);
-      } else if (current.endDate.getTime() !== updated.endDate.getTime()) {
-        // 「値あり→別の値」: existing recalculation behavior.
-        const endDate = updated.endDate;
-        await recurrenceService.onCaseEndDateChanged({ ...updated, endDate });
-      }
-      // else: unchanged value — no call.
-    }
+    // Task 2.1 stub: no unconfirmed onCaseEndDateChanged / onCaseCreated.
+    // Task 4 wires applyToCase(templateOperations) in the same TX.
 
     return updated;
   },
