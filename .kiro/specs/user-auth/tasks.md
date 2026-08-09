@@ -33,7 +33,7 @@
   - _Depends: 1.1_
 
 - [ ] 2. Core: auth モジュール
-- [ ] 2.1 Auth repository / service を実装し単体テストする
+- [x] 2.1 Auth repository / service を実装し単体テストする
   - email の trim・小文字正規化、argon2 ハッシュ、register / login / getPublicUser を実装する
   - ロールを持たない。PublicUser に passwordHash を含めない
   - 単体テスト: 成功登録、email 重複、短いパスワード、空白表示名、ログイン失敗の固定文言、未知 email と誤りパスワードが同一文言
