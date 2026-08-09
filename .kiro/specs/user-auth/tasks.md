@@ -10,7 +10,7 @@
 - 未ログイン業務 URL はゲート専用ページを作らず `/login?redirect=` へリダイレクト
 - steering 更新は Req 7（本スペック Boundary）
 
-- [ ] 1. Foundation: 依存・環境変数・スキーマ・テストヘルパ
+- [x] 1. Foundation: 依存・環境変数・スキーマ・テストヘルパ
 - [x] 1.1 認証用バックエンド依存と環境変数を追加する
   - `@fastify/cookie`・`@fastify/secure-session`・`@fastify/csrf-protection`・`@node-rs/argon2` を追加する
   - `SESSION_SECRET`・`CORS_ORIGIN`・`COOKIE_SECURE` を env 検証と docker-compose に追加する
@@ -32,7 +32,7 @@
   - _Requirements: 3.3, 6.1_
   - _Depends: 1.1_
 
-- [ ] 2. Core: auth モジュール
+- [x] 2. Core: auth モジュール
 - [x] 2.1 Auth repository / service を実装し単体テストする
   - email の trim・小文字正規化、argon2 ハッシュ、register / login / getPublicUser を実装する
   - ロールを持たない。PublicUser に passwordHash を含めない
@@ -83,7 +83,7 @@
   - _Requirements: 1.3, 1.7, 2.1, 2.2, 2.4, 3.3, 3.4, 4.1, 4.2, 6.1, 6.2_
   - _Depends: 3, 4_
 
-- [ ] 6. Core: フロントエンド認証
+- [x] 6. Core: フロントエンド認証
 - [x] 6.1 (P) useApiClient に credentials・auth API・CSRF を入れる
   - `credentials: 'include'`、register/login/logout/me/csrf、createUser/deleteUser 削除
   - 初期化時およびログイン／登録成功直後に csrf を取得し、変更系へヘッダ付与する
@@ -116,7 +116,7 @@
   - _Boundary: app.vue, app.helpers_
   - _Depends: 6.2, 6.3_
 
-- [ ] 7. E2E を認証前提へ更新する
+- [x] 7. E2E を認証前提へ更新する
 - [x] 7.1 名前登録の代わりに登録＋ログインする共有 fixture へ置き換える
   - `/users` で名前だけ作っていた E2E を新ヘルパへ切り替える
   - 観測可能な完了状態: 旧 `/users` 名登録手順に依存する E2E が残っていない
