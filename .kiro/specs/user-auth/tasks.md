@@ -77,7 +77,7 @@
   - _Boundary: UsersList_
   - _Depends: 3_
 
-- [ ] 5. 認証まわりの統合テストを追加する
+- [x] 5. 認証まわりの統合テストを追加する
   - 登録・ログイン・me・logout、未ログイン業務 API 401、CSRF ルール、users 縮退を検証する
   - 観測可能な完了状態: 該当統合テストが CI 相当コマンドで green
   - _Requirements: 1.3, 1.7, 2.1, 2.2, 2.4, 3.3, 3.4, 4.1, 4.2, 6.1, 6.2_
@@ -144,3 +144,4 @@
 - 1.2: アカウント列追加 migration は `DELETE FROM users` を ALTER 前に置く（TRUNCATE 不可。`tasks.assignee_user_id` は ON DELETE SET NULL）。旧 POST /api/users の email/passwordHash 補完は task 4 廃止までの暫定。
 - 1.3: inject ヘルパは Cookie 名 `session`、CSRF ヘッダ `csrf-token`（プラグイン既定）。タスク3で同名を維持すること。
 - 実装中に別ブランチへ checkout されると auth ファイルが消えたように見える。user-auth ブランチで続行すること。
+- CSRF トークン取得後は Set-Cookie で session が更新される。inject/E2E では最新 Cookie を使うこと。
