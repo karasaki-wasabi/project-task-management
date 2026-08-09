@@ -20,6 +20,10 @@ function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
+function isForeignKeyConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
+}
+
 function assertNonEmptyName(name: string): string {
   const trimmed = name.trim();
   if (trimmed.length === 0) {
@@ -194,6 +198,9 @@ export const workspaceService = {
     } catch (error) {
       if (isUniqueConstraintError(error)) {
         throw badRequest("User is already a member of this workspace");
+      }
+      if (isForeignKeyConstraintError(error)) {
+        throw notFound(`User not found: ${targetUserId}`);
       }
       throw error;
     }

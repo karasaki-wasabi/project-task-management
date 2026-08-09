@@ -1,5 +1,5 @@
-// RED: workspaceRoutes does not exist yet (task 4.1, design.md
-// "Backend/workspaces" API Contract; Requirements 1.1, 1.2, 2.4, 6.1–6.5,
+// workspaceRoutes inject tests (tasks 4.1–4.2, design.md "Backend/workspaces"
+// API Contract; Requirements 1.1, 1.2, 2.4, 3.1, 3.2, 4.1–4.5, 6.1–6.5,
 // 7.1–7.4). Uses buildApp so requireUser / CSRF from user-auth apply.
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
@@ -418,6 +418,404 @@ describe("workspaceRoutes CRUD (task 4.1)", () => {
     expect(missing.statusCode).toBe(404);
 
     await cleanupWorkspace(id, [creator.id, member.id, outsider.id]);
+    await app.close();
+  });
+});
+
+describe("workspaceRoutes members (task 4.2)", () => {
+  it("GET /api/workspaces/:id/members returns member summaries for a member", async () => {
+    const app = buildApp(env);
+    const { user: owner, cookie: ownerCookie } = await registerUser(app, "メンバ一覧オーナー");
+    const peer = await db.user.create({ data: createUserData(`ws-route-mem-peer-${randomUUID()}`) });
+    const ownerCsrf = await csrfToken(app, ownerCookie);
+
+    const created = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          { method: "POST", url: "/api/workspaces", payload: { name: `members-${randomUUID()}` } },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+    const { id } = created.json();
+    await workspaceRepository.createMember({ workspaceId: id, userId: peer.id });
+
+    const response = await app.inject(
+      withSessionCookie({ method: "GET", url: `/api/workspaces/${id}/members` }, ownerCsrf.cookie),
+    );
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as Array<{ userId: string; name: string; email: string }>;
+    expect(body).toEqual(
+      expect.arrayContaining([
+        { userId: owner.id, name: owner.name, email: owner.email },
+        { userId: peer.id, name: peer.name, email: peer.email },
+      ]),
+    );
+    expect(body).toHaveLength(2);
+
+    await cleanupWorkspace(id, [owner.id, peer.id]);
+    await app.close();
+  });
+
+  it("GET /api/workspaces/:id/members returns 403 for a non-member and 404 for unknown id", async () => {
+    const app = buildApp(env);
+    const { user: owner, cookie: ownerCookie } = await registerUser(app, "メンバ一覧拒否オーナー");
+    const { user: outsider, cookie: outsiderCookie } = await registerUser(app, "メンバ一覧部外者");
+    const ownerCsrf = await csrfToken(app, ownerCookie);
+    const outsiderCsrf = await csrfToken(app, outsiderCookie);
+
+    const created = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          {
+            method: "POST",
+            url: "/api/workspaces",
+            payload: { name: `members-auth-${randomUUID()}` },
+          },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+    const { id } = created.json();
+
+    const forbidden = await app.inject(
+      withSessionCookie(
+        { method: "GET", url: `/api/workspaces/${id}/members` },
+        outsiderCsrf.cookie,
+      ),
+    );
+    expect(forbidden.statusCode).toBe(403);
+
+    const missing = await app.inject(
+      withSessionCookie(
+        { method: "GET", url: `/api/workspaces/${randomUUID()}/members` },
+        ownerCsrf.cookie,
+      ),
+    );
+    expect(missing.statusCode).toBe(404);
+
+    await cleanupWorkspace(id, [owner.id, outsider.id]);
+    await app.close();
+  });
+
+  it("GET /api/workspaces/:id/searchable-users returns matches excluding existing members", async () => {
+    const app = buildApp(env);
+    const marker = randomUUID().slice(0, 8);
+    const { user: owner, cookie: ownerCookie } = await registerUser(app, `検索オーナー${marker}`);
+    const member = await db.user.create({
+      data: createUserData(`既存メンバ${marker}`),
+    });
+    const addable = await db.user.create({
+      data: createUserData(`追加候補${marker}`),
+    });
+    const ownerCsrf = await csrfToken(app, ownerCookie);
+
+    const created = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          {
+            method: "POST",
+            url: "/api/workspaces",
+            payload: { name: `search-${randomUUID()}` },
+          },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+    const { id } = created.json();
+    await workspaceRepository.createMember({ workspaceId: id, userId: member.id });
+
+    const response = await app.inject(
+      withSessionCookie(
+        { method: "GET", url: `/api/workspaces/${id}/searchable-users?q=${encodeURIComponent(marker)}` },
+        ownerCsrf.cookie,
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as Array<{ userId: string; name: string; email: string }>;
+    const ids = body.map((u) => u.userId);
+    expect(ids).toContain(addable.id);
+    expect(ids).not.toContain(owner.id);
+    expect(ids).not.toContain(member.id);
+    expect(body.find((u) => u.userId === addable.id)).toEqual({
+      userId: addable.id,
+      name: addable.name,
+      email: addable.email,
+    });
+
+    await cleanupWorkspace(id, [owner.id, member.id, addable.id]);
+    await app.close();
+  });
+
+  it("GET /api/workspaces/:id/searchable-users returns [] when q is empty or omitted", async () => {
+    const app = buildApp(env);
+    const { user, cookie } = await registerUser(app);
+    const csrf = await csrfToken(app, cookie);
+    const created = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          {
+            method: "POST",
+            url: "/api/workspaces",
+            payload: { name: `search-empty-${randomUUID()}` },
+          },
+          csrf.cookie,
+        ),
+        csrf.token,
+      ),
+    );
+    const { id } = created.json();
+
+    const omitted = await app.inject(
+      withSessionCookie(
+        { method: "GET", url: `/api/workspaces/${id}/searchable-users` },
+        csrf.cookie,
+      ),
+    );
+    expect(omitted.statusCode).toBe(200);
+    expect(omitted.json()).toEqual([]);
+
+    const blank = await app.inject(
+      withSessionCookie(
+        { method: "GET", url: `/api/workspaces/${id}/searchable-users?q=` },
+        csrf.cookie,
+      ),
+    );
+    expect(blank.statusCode).toBe(200);
+    expect(blank.json()).toEqual([]);
+
+    await cleanupWorkspace(id, [user.id]);
+    await app.close();
+  });
+
+  it("GET /api/workspaces/:id/searchable-users returns 403 for a non-member and 404 for unknown id", async () => {
+    const app = buildApp(env);
+    const { user: owner, cookie: ownerCookie } = await registerUser(app, "検索拒否オーナー");
+    const { user: outsider, cookie: outsiderCookie } = await registerUser(app, "検索部外者");
+    const ownerCsrf = await csrfToken(app, ownerCookie);
+    const outsiderCsrf = await csrfToken(app, outsiderCookie);
+
+    const created = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          {
+            method: "POST",
+            url: "/api/workspaces",
+            payload: { name: `search-auth-${randomUUID()}` },
+          },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+    const { id } = created.json();
+
+    const forbidden = await app.inject(
+      withSessionCookie(
+        { method: "GET", url: `/api/workspaces/${id}/searchable-users?q=x` },
+        outsiderCsrf.cookie,
+      ),
+    );
+    expect(forbidden.statusCode).toBe(403);
+
+    const missing = await app.inject(
+      withSessionCookie(
+        {
+          method: "GET",
+          url: `/api/workspaces/${randomUUID()}/searchable-users?q=x`,
+        },
+        ownerCsrf.cookie,
+      ),
+    );
+    expect(missing.statusCode).toBe(404);
+
+    await cleanupWorkspace(id, [owner.id, outsider.id]);
+    await app.close();
+  });
+
+  it("POST /api/workspaces/:id/members adds a user and returns 201", async () => {
+    const app = buildApp(env);
+    const { user: owner, cookie: ownerCookie } = await registerUser(app, "追加オーナー");
+    const target = await db.user.create({ data: createUserData(`ws-route-add-t-${randomUUID()}`) });
+    const ownerCsrf = await csrfToken(app, ownerCookie);
+
+    const created = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          { method: "POST", url: "/api/workspaces", payload: { name: `add-${randomUUID()}` } },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+    const { id } = created.json();
+
+    const response = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          {
+            method: "POST",
+            url: `/api/workspaces/${id}/members`,
+            payload: { userId: target.id },
+          },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({
+      userId: target.id,
+      name: target.name,
+      email: target.email,
+    });
+    expect(await workspaceRepository.isMember(id, target.id)).toBe(true);
+
+    await cleanupWorkspace(id, [owner.id, target.id]);
+    await app.close();
+  });
+
+  it("POST /api/workspaces/:id/members returns 400 for missing userId or duplicate membership", async () => {
+    const app = buildApp(env);
+    const { user: owner, cookie: ownerCookie } = await registerUser(app, "追加400オーナー");
+    const target = await db.user.create({ data: createUserData(`ws-route-add-bad-${randomUUID()}`) });
+    const ownerCsrf = await csrfToken(app, ownerCookie);
+
+    const created = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          {
+            method: "POST",
+            url: "/api/workspaces",
+            payload: { name: `add-bad-${randomUUID()}` },
+          },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+    const { id } = created.json();
+
+    const missingBody = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          { method: "POST", url: `/api/workspaces/${id}/members`, payload: {} },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+    expect(missingBody.statusCode).toBe(400);
+
+    const firstAdd = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          {
+            method: "POST",
+            url: `/api/workspaces/${id}/members`,
+            payload: { userId: target.id },
+          },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+    expect(firstAdd.statusCode).toBe(201);
+
+    const duplicate = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          {
+            method: "POST",
+            url: `/api/workspaces/${id}/members`,
+            payload: { userId: target.id },
+          },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+    expect(duplicate.statusCode).toBe(400);
+
+    await cleanupWorkspace(id, [owner.id, target.id]);
+    await app.close();
+  });
+
+  it("POST /api/workspaces/:id/members returns 403 for a non-member and 404 for unknown workspace or user", async () => {
+    const app = buildApp(env);
+    const { user: owner, cookie: ownerCookie } = await registerUser(app, "追加拒否オーナー");
+    const { user: outsider, cookie: outsiderCookie } = await registerUser(app, "追加部外者");
+    const target = await db.user.create({ data: createUserData(`ws-route-add-auth-t-${randomUUID()}`) });
+    const ownerCsrf = await csrfToken(app, ownerCookie);
+    const outsiderCsrf = await csrfToken(app, outsiderCookie);
+
+    const created = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          {
+            method: "POST",
+            url: "/api/workspaces",
+            payload: { name: `add-auth-${randomUUID()}` },
+          },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+    const { id } = created.json();
+
+    const forbidden = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          {
+            method: "POST",
+            url: `/api/workspaces/${id}/members`,
+            payload: { userId: target.id },
+          },
+          outsiderCsrf.cookie,
+        ),
+        outsiderCsrf.token,
+      ),
+    );
+    expect(forbidden.statusCode).toBe(403);
+
+    const missingWorkspace = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          {
+            method: "POST",
+            url: `/api/workspaces/${randomUUID()}/members`,
+            payload: { userId: target.id },
+          },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+    expect(missingWorkspace.statusCode).toBe(404);
+
+    const missingUser = await app.inject(
+      withCsrfToken(
+        withSessionCookie(
+          {
+            method: "POST",
+            url: `/api/workspaces/${id}/members`,
+            payload: { userId: randomUUID() },
+          },
+          ownerCsrf.cookie,
+        ),
+        ownerCsrf.token,
+      ),
+    );
+    expect(missingUser.statusCode).toBe(404);
+
+    await cleanupWorkspace(id, [owner.id, outsider.id, target.id]);
     await app.close();
   });
 });

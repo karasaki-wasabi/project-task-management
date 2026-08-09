@@ -1,7 +1,8 @@
-// HTTP routes for Workspaces CRUD (task 4.1, design.md "Backend/workspaces"
-// API Contract; Requirements 1.1, 1.2, 2.4, 6.1–6.5, 7.1–7.4). Auth is applied
-// globally by user-auth's requireUser in app.ts; this plugin reads
-// request.currentUser and does not register its own guard.
+// HTTP routes for Workspaces CRUD + members (tasks 4.1–4.2, design.md
+// "Backend/workspaces" API Contract; Requirements 1.1, 1.2, 2.4, 3.1, 3.2,
+// 4.1–4.5, 6.1–6.5, 7.1–7.4). Auth is applied globally by user-auth's
+// requireUser in app.ts; this plugin reads request.currentUser and does not
+// register its own guard.
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
@@ -18,6 +19,14 @@ const updateWorkspaceBodySchema = z.object({
 });
 
 const workspaceIdParamsSchema = z.object({ id: z.string() });
+
+const searchableUsersQuerySchema = z.object({
+  q: z.string().optional(),
+});
+
+const addMemberBodySchema = z.object({
+  userId: z.string(),
+});
 
 function parseOrBadRequest<T>(schema: z.ZodType<T>, data: unknown): T {
   const result = schema.safeParse(data);
@@ -57,5 +66,32 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const params = parseOrBadRequest(workspaceIdParamsSchema, request.params);
     await workspaceService.delete(params.id, request.currentUser!.id, request.id);
     reply.status(204).send();
+  });
+
+  app.get("/api/workspaces/:id/members", async (request) => {
+    const params = parseOrBadRequest(workspaceIdParamsSchema, request.params);
+    return workspaceService.listMembers(params.id, request.currentUser!.id);
+  });
+
+  app.get("/api/workspaces/:id/searchable-users", async (request) => {
+    const params = parseOrBadRequest(workspaceIdParamsSchema, request.params);
+    const query = parseOrBadRequest(searchableUsersQuerySchema, request.query);
+    return workspaceService.searchAddableUsers(
+      params.id,
+      query.q ?? "",
+      request.currentUser!.id,
+    );
+  });
+
+  app.post("/api/workspaces/:id/members", async (request, reply) => {
+    const params = parseOrBadRequest(workspaceIdParamsSchema, request.params);
+    const body = parseOrBadRequest(addMemberBodySchema, request.body);
+    const member = await workspaceService.addMember(
+      params.id,
+      body.userId,
+      request.currentUser!.id,
+      request.id,
+    );
+    reply.status(201).send(member);
   });
 }
