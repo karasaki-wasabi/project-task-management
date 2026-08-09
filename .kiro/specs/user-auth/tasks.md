@@ -51,7 +51,7 @@
   - _Boundary: AuthRoutes_
   - _Depends: 2.1_
 
-- [ ] 2.3 requireUser ガードを実装する
+- [x] 2.3 requireUser ガードを実装する
   - 有効セッションの userId から PublicUser を付与し、セッション欠落・無効・ユーザー不在は 401 とする（本仕様では User 削除経路を作らない）
   - 観測可能な完了状態: ガード単体テストで付与成功と 401 を確認できる
   - _Requirements: 3.3, 3.4_
@@ -143,3 +143,4 @@
 - 1.1: `SESSION_SECRET`（64桁hex）・`CORS_ORIGIN`・`COOKIE_SECURE` は必須。ローカル `.env` 未設定だと Compose が空文字を渡し起動時検証で落ちる。CI は `.github/workflows/ci.yml` に配線済み。
 - 1.2: アカウント列追加 migration は `DELETE FROM users` を ALTER 前に置く（TRUNCATE 不可。`tasks.assignee_user_id` は ON DELETE SET NULL）。旧 POST /api/users の email/passwordHash 補完は task 4 廃止までの暫定。
 - 1.3: inject ヘルパは Cookie 名 `session`、CSRF ヘッダ `csrf-token`（プラグイン既定）。タスク3で同名を維持すること。
+- 実装中に別ブランチへ checkout されると auth ファイルが消えたように見える。user-auth ブランチで続行すること。
