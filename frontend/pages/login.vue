@@ -25,7 +25,7 @@ function errorMessage(cause: unknown): string {
     return cause.data.message;
   }
 
-  return cause instanceof Error ? cause.message : "ログインに失敗しました。";
+  return "メールアドレスまたはパスワードが正しくありません。";
 }
 
 function redirectPath(): string {
