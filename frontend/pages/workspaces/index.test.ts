@@ -1,5 +1,5 @@
-// Mount tests for WorkspacesPage (task 6.3): empty state + member list.
-// Requirements 2.3, 3.1, 3.2.
+// Mount tests for WorkspacesPage (tasks 6.3–6.4): empty state, member list,
+// and inline member-search add panel. Requirements 2.3, 3.1, 3.2, 4.1–4.5.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -12,6 +12,8 @@ const currentId = ref<string | null>(null);
 const workspaces = ref<Workspace[]>([]);
 
 const listWorkspaceMembers = vi.fn();
+const searchAddableWorkspaceUsers = vi.fn();
+const addWorkspaceMember = vi.fn();
 
 vi.mock("../../composables/useCurrentWorkspace", () => ({
   useCurrentWorkspace: () => ({
@@ -28,6 +30,8 @@ vi.mock("../../composables/useApiClient", async (importOriginal) => {
     ...actual,
     useApiClient: () => ({
       listWorkspaceMembers,
+      searchAddableWorkspaceUsers,
+      addWorkspaceMember,
     }),
   };
 });
@@ -95,10 +99,14 @@ describe("WorkspacesPage (task 6.3)", () => {
     refresh.mockReset();
     select.mockReset();
     listWorkspaceMembers.mockReset();
+    searchAddableWorkspaceUsers.mockReset();
+    addWorkspaceMember.mockReset();
     currentId.value = null;
     workspaces.value = [];
     refresh.mockResolvedValue(undefined);
     listWorkspaceMembers.mockResolvedValue([]);
+    searchAddableWorkspaceUsers.mockResolvedValue([]);
+    addWorkspaceMember.mockResolvedValue(makeMember());
   });
 
   afterEach(() => {
@@ -191,5 +199,128 @@ describe("WorkspacesPage (task 6.3)", () => {
     await wrapper.get('[data-testid="modal-close"]').trigger("click");
     await nextTick();
     expect(wrapper.find('[data-testid="workspace-create-modal"]').exists()).toBe(false);
+  });
+});
+
+describe("WorkspacesPage member search add panel (task 6.4)", () => {
+  beforeEach(() => {
+    refresh.mockReset();
+    select.mockReset();
+    listWorkspaceMembers.mockReset();
+    searchAddableWorkspaceUsers.mockReset();
+    addWorkspaceMember.mockReset();
+    const ws = makeWorkspace();
+    currentId.value = ws.id;
+    workspaces.value = [ws];
+    refresh.mockResolvedValue(undefined);
+    listWorkspaceMembers.mockResolvedValue([makeMember()]);
+    searchAddableWorkspaceUsers.mockResolvedValue([]);
+    addWorkspaceMember.mockResolvedValue(
+      makeMember({ userId: "u-new", name: "鈴木一郎", email: "suzuki@example.com" }),
+    );
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("「メンバーを追加」でインライン検索パネルを展開する（Req 4.1）", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="member-search-panel"]').exists()).toBe(false);
+
+    await buttonByText(wrapper, "メンバーを追加").trigger("click");
+    await nextTick();
+
+    const panel = wrapper.get('[data-testid="member-search-panel"]');
+    expect(panel.exists()).toBe(true);
+    expect(panel.text()).toMatch(/既存メンバー/);
+    const input = wrapper.get('[data-testid="member-search-input"]');
+    expect(input.attributes("placeholder") ?? "").toContain("表示名またはメールアドレスで検索");
+  });
+
+  it("検索すると API 結果を一覧表示し、0件時は空表示する（Req 4.1, 4.2）", async () => {
+    searchAddableWorkspaceUsers.mockResolvedValue([
+      makeMember({ userId: "u-2", name: "佐藤花子", email: "sato@example.com" }),
+    ]);
+
+    const wrapper = mountPage();
+    await flushPromises();
+    await buttonByText(wrapper, "メンバーを追加").trigger("click");
+    await nextTick();
+
+    const input = wrapper.get('[data-testid="member-search-input"]');
+    await input.setValue("佐藤");
+    await input.trigger("input");
+    await flushPromises();
+
+    expect(searchAddableWorkspaceUsers).toHaveBeenCalledWith("ws-1", "佐藤");
+    expect(wrapper.findAll('[data-testid="search-result-name"]').map((n) => n.text())).toEqual([
+      "佐藤花子",
+    ]);
+    expect(wrapper.findAll('[data-testid="search-result-email"]').map((n) => n.text())).toEqual([
+      "sato@example.com",
+    ]);
+    expect(wrapper.find('[data-testid="member-search-empty"]').exists()).toBe(false);
+
+    searchAddableWorkspaceUsers.mockResolvedValue([]);
+    await input.setValue("nobody");
+    await input.trigger("input");
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="member-search-empty"]').text()).toContain(
+      "該当するユーザーがいません。",
+    );
+    expect(wrapper.findAll('[data-testid="search-result-name"]')).toHaveLength(0);
+  });
+
+  it("行内の追加でメンバー一覧に即時反映し、再検索では追加済みが除外される（Req 4.2, 4.3）", async () => {
+    const candidate = makeMember({
+      userId: "u-2",
+      name: "佐藤花子",
+      email: "sato@example.com",
+    });
+    searchAddableWorkspaceUsers
+      .mockResolvedValueOnce([candidate])
+      .mockResolvedValueOnce([]);
+
+    listWorkspaceMembers
+      .mockResolvedValueOnce([makeMember()])
+      .mockResolvedValueOnce([
+        makeMember(),
+        makeMember({ userId: "u-2", name: "佐藤花子", email: "sato@example.com" }),
+      ]);
+
+    addWorkspaceMember.mockResolvedValue(candidate);
+
+    const wrapper = mountPage();
+    await flushPromises();
+    expect(listWorkspaceMembers).toHaveBeenCalledTimes(1);
+
+    await buttonByText(wrapper, "メンバーを追加").trigger("click");
+    await nextTick();
+
+    const input = wrapper.get('[data-testid="member-search-input"]');
+    await input.setValue("佐藤");
+    await input.trigger("input");
+    await flushPromises();
+
+    expect(wrapper.findAll('[data-testid="search-result-name"]')).toHaveLength(1);
+
+    await wrapper.get('[data-testid="add-member-button"]').trigger("click");
+    await flushPromises();
+
+    expect(addWorkspaceMember).toHaveBeenCalledWith("ws-1", "u-2");
+    expect(listWorkspaceMembers).toHaveBeenCalledTimes(2);
+
+    const names = wrapper.findAll('[data-testid="member-name"]').map((n) => n.text());
+    expect(names).toEqual(["山田太郎", "佐藤花子"]);
+    expect(wrapper.text()).toContain("メンバー 2人");
+
+    // Same query re-run (or retained query re-search) excludes the added member.
+    expect(searchAddableWorkspaceUsers).toHaveBeenCalledTimes(2);
+    expect(searchAddableWorkspaceUsers).toHaveBeenLastCalledWith("ws-1", "佐藤");
+    expect(wrapper.findAll('[data-testid="search-result-name"]')).toHaveLength(0);
   });
 });

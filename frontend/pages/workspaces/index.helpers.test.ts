@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Workspace } from "../../composables/useApiClient";
-import { findCurrentWorkspace, formatMemberCount, resolvePageView } from "./index.helpers";
+import {
+  findCurrentWorkspace,
+  formatMemberCount,
+  normalizeMemberSearchQuery,
+  resolvePageView,
+  shouldRunMemberSearch,
+  shouldShowMemberSearchEmpty,
+} from "./index.helpers";
 
 function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
@@ -47,5 +54,34 @@ describe("formatMemberCount", () => {
   it("formats the member count label as メンバー N人", () => {
     expect(formatMemberCount(0)).toBe("メンバー 0人");
     expect(formatMemberCount(3)).toBe("メンバー 3人");
+  });
+});
+
+describe("normalizeMemberSearchQuery / shouldRunMemberSearch (Requirement 4.1)", () => {
+  it("trims whitespace from the search query", () => {
+    expect(normalizeMemberSearchQuery("  alice  ")).toBe("alice");
+  });
+
+  it("does not run search for blank queries (no full-list search)", () => {
+    expect(shouldRunMemberSearch("")).toBe(false);
+    expect(shouldRunMemberSearch("   ")).toBe(false);
+    expect(shouldRunMemberSearch("alice")).toBe(true);
+  });
+});
+
+describe("shouldShowMemberSearchEmpty (Requirement 4.1)", () => {
+  it("shows empty message only after a completed search with zero results", () => {
+    expect(shouldShowMemberSearchEmpty({ searched: false, loading: false, resultCount: 0 })).toBe(
+      false,
+    );
+    expect(shouldShowMemberSearchEmpty({ searched: true, loading: true, resultCount: 0 })).toBe(
+      false,
+    );
+    expect(shouldShowMemberSearchEmpty({ searched: true, loading: false, resultCount: 1 })).toBe(
+      false,
+    );
+    expect(shouldShowMemberSearchEmpty({ searched: true, loading: false, resultCount: 0 })).toBe(
+      true,
+    );
   });
 });
