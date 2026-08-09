@@ -2,7 +2,7 @@
 // (task 12.1, Requirements 1.2, 1.4). Requires the backend (+MySQL) and
 // frontend to already be running (`docker compose up`); see
 // playwright.config.ts.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("task list shows status/priority at a glance, and an on_hold task stays in the list (Requirements 1.2, 1.4)", async ({
   page,

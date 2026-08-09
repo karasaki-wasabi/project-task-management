@@ -22,11 +22,12 @@
 // events, so neither `locator.dragTo()` nor manually dispatching
 // dragstart/dragover/drop events (this file's earlier approach) exercises
 // the real interaction anymore.
-import { expect, test } from "@playwright/test";
+import { expect, registerUser, test } from "./fixtures";
 import { dragCardTo } from "./drag";
 
 test("expanding the unassigned backlog reveals search/sort, and dragging an expanded row onto a stage prompts for an assignee before moving (Requirements 3.2, 3.3, 3.4, 3.5)", async ({
   page,
+  request,
 }) => {
   const suffix = Date.now();
   const stageName = `e2e-backlog-stage-${suffix}`;
@@ -55,10 +56,7 @@ test("expanding the unassigned backlog reveals search/sort, and dragging an expa
   await expect(page.locator(".stage-list", { hasText: stageName })).toBeVisible();
 
   // 3. Create a user for the assignee-picker step later.
-  await page.goto("/users");
-  await page.getByPlaceholder("ユーザー名").fill(userName);
-  await page.getByRole("button", { name: "登録" }).click();
-  await expect(page.locator("tr", { hasText: userName })).toBeVisible();
+  await registerUser(request, userName);
 
   // 4. Create three tasks with distinct titles and priorities, left without
   // a development stage and without an assignee, so they land in the

@@ -8,6 +8,7 @@
 - **機能横断の統合検証**: `backend/src/validation.integration.test.ts` のように、単一モジュールに属さないテストは `backend/src/` 直下に置く。実HTTP経路(`buildApp` + `app.inject`)を通して検証し、サービス層を直接呼ぶ既存のユニット/統合テストでは見えない結合面の不備を検出する。
 - **フロントエンドユニットテスト**: `frontend/composables/*.test.ts` などコロケーション。Vitest。
 - **E2E**: `frontend/e2e/*.spec.ts`。Playwright(design.md/research.mdに指定がなかったため実装時に導入。Nuxt/Vueでの標準的選択として妥当と判断)。
+- **認証済み E2E fixture**: `frontend/e2e/fixtures.ts`。各シナリオは公開自己登録＋ログイン後の状態から始める。旧 `/users` の名前だけ登録手順には依存しない。
 
 ### 重要: VitestとPlaywrightの分離
 `frontend/vitest.config.ts` で `test.exclude: ["**/e2e/**"]` を必ず設定すること。設定を忘れると `npm run test`(Vitest)がPlaywrightの `test()` を誤って収集し、ロードエラーで失敗する。新しいE2Eディレクトリを追加する場合は同様の除外設定を確認すること。
@@ -35,6 +36,25 @@
 ## Playwright E2Eの実行
 
 `frontend/playwright.config.ts` の `baseURL` は環境変数 `E2E_BASE_URL` で上書き可能。Docker Composeで起動した実際のbackend/frontendに対して実行する(モックサーバーは使わない)。ブラウザバイナリがDockerコンテナ間で永続化されない問題は [[local-dev-pitfalls]] を参照。
+
+### 認証前提と Origin の揃え方
+
+業務画面の E2E はログイン済み状態が前提である。新規シナリオでは `frontend/e2e/fixtures.ts` の共有 fixture を使い、名前だけのユーザー作成 UI を再導入しない。
+
+実行前に次を同じ Origin に揃える。
+- `E2E_BASE_URL`
+  - Playwright が開くフロント URL
+- `CORS_ORIGIN`
+  - バックエンドが許可する Origin
+
+例: フロント公開が `http://localhost:3401` のとき
+
+```bash
+# .env の CORS_ORIGIN も同じ値にしたうえで backend を再起動してから
+E2E_BASE_URL=http://localhost:3401 npm --prefix frontend run test:e2e -- auth.spec.ts
+```
+
+`CORS_ORIGIN` だけが `http://localhost:3001` のままだと、登録・ログインの preflight が失敗し、認証クリティカルパスが落ちる。
 
 ### 開発DBがE2E実行間でリセットされない
 

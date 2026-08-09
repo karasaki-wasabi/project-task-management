@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   CaseTemplateApplyOperation,
   CreateCaseInput,
+  CreateTaskInput,
   RegisterTemplateInput,
   RecurringTaskTemplate,
   UpdateCaseInput,
@@ -41,6 +42,69 @@ describe("joinApiUrl (task 1.6)", () => {
 
   it("normalizes both a trailing slash and a leading slash at once", () => {
     expect(joinApiUrl("http://backend:3000/", "/api/tasks")).toBe("http://backend:3000/api/tasks");
+  });
+});
+
+describe("useApiClient auth and CSRF contract (task 6.1)", () => {
+  it("initializes CSRF with credentials and exposes typed auth methods without legacy user mutations", async () => {
+    fetchMock.mockResolvedValueOnce({ token: "initial-csrf-token" });
+
+    const api = useApiClient();
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledWith("http://backend:3000/api/auth/csrf", {
+      credentials: "include",
+    });
+    expect(typeof api.register).toBe("function");
+    expect(typeof api.login).toBe("function");
+    expect(typeof api.logout).toBe("function");
+    expect(typeof api.me).toBe("function");
+    expect(typeof api.csrf).toBe("function");
+    expect(api).not.toHaveProperty("createUser");
+    expect(api).not.toHaveProperty("deleteUser");
+  });
+
+  it("attaches the initialized CSRF token and credentials to mutating requests", async () => {
+    fetchMock.mockResolvedValueOnce({ token: "csrf-token" });
+    fetchMock.mockResolvedValueOnce({ id: "task-1" });
+    const api = useApiClient();
+    const input: CreateTaskInput = { title: "CSRF protected task", priority: "medium" };
+
+    await api.createTask(input);
+
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/tasks", {
+      method: "POST",
+      body: input,
+      credentials: "include",
+      headers: { "csrf-token": "csrf-token" },
+    });
+  });
+
+  it("refreshes CSRF after successful registration and login", async () => {
+    const user = {
+      id: "user-1",
+      email: "member@example.com",
+      name: "利用者",
+      createdAt: "2026-08-09T00:00:00.000Z",
+      updatedAt: "2026-08-09T00:00:00.000Z",
+    };
+    fetchMock
+      .mockResolvedValueOnce({ token: "initial-token" })
+      .mockResolvedValueOnce(user)
+      .mockResolvedValueOnce({ token: "after-register-token" })
+      .mockResolvedValueOnce(user)
+      .mockResolvedValueOnce({ token: "after-login-token" });
+    const api = useApiClient();
+
+    await api.register({ email: user.email, name: user.name, password: "password123" });
+    await api.login({ email: user.email, password: "password123" });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://backend:3000/api/auth/csrf", {
+      credentials: "include",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(5, "http://backend:3000/api/auth/csrf", {
+      credentials: "include",
+    });
   });
 });
 
@@ -97,9 +161,9 @@ describe("useApiClient recurrence + case templateOperations contract (task 5.1)"
     };
     await api.registerRecurringTemplate(input);
 
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenLastCalledWith(
       "http://backend:3000/api/recurring-templates",
-      { method: "POST", body: input },
+      { method: "POST", body: input, credentials: "include" },
     );
   });
 
@@ -109,9 +173,9 @@ describe("useApiClient recurrence + case templateOperations contract (task 5.1)"
     expect(typeof api.resumeRecurringTemplate).toBe("function");
 
     await api.resumeRecurringTemplate("tmpl-1");
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenLastCalledWith(
       "http://backend:3000/api/recurring-templates/tmpl-1/resume",
-      { method: "POST" },
+      { method: "POST", credentials: "include" },
     );
   });
 
@@ -125,7 +189,7 @@ describe("useApiClient recurrence + case templateOperations contract (task 5.1)"
       endDate: "2026-04-30",
       templateOperations: ops,
     });
-    expect(fetchMock).toHaveBeenCalledWith("http://backend:3000/api/cases", {
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/cases", {
       method: "POST",
       body: {
         name: "案件A",
@@ -133,6 +197,7 @@ describe("useApiClient recurrence + case templateOperations contract (task 5.1)"
         endDate: "2026-04-30",
         templateOperations: ops,
       },
+      credentials: "include",
     });
 
     fetchMock.mockClear();
@@ -140,12 +205,13 @@ describe("useApiClient recurrence + case templateOperations contract (task 5.1)"
       endDate: "2026-05-31",
       templateOperations: [],
     });
-    expect(fetchMock).toHaveBeenCalledWith("http://backend:3000/api/cases/case-1", {
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/cases/case-1", {
       method: "PATCH",
       body: {
         endDate: "2026-05-31",
         templateOperations: [],
       },
+      credentials: "include",
     });
   });
 });

@@ -14,9 +14,13 @@
 // here is just wiring; `setErrorHandler` below already applies uniformly to
 // every registered route since it is a single Fastify instance.
 import cors from "@fastify/cors";
+import csrfProtection from "@fastify/csrf-protection";
+import secureSession from "@fastify/secure-session";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { loadEnv, type Env } from "./config/env.js";
 import { createLogger, type AppLogger } from "./shared/logger.js";
+import { requireUser } from "./modules/auth/auth.guard.js";
+import { authRoutes } from "./modules/auth/auth.routes.js";
 import { userRoutes } from "./modules/users/user.routes.js";
 import { taskRoutes } from "./modules/tasks/task.routes.js";
 import { caseRoutes } from "./modules/cases/case.routes.js";
@@ -29,17 +33,24 @@ import { developmentStageRoutes } from "./modules/development-stages/development
 export function buildApp(env: Env = loadEnv(), logger: AppLogger = createLogger(env.LOG_LEVEL)): FastifyInstance {
   const app = Fastify({ logger: false });
 
-  // The SPA (ssr: false, task 1.6) calls this API directly from the
-  // browser, and frontend/backend run on different origins even in local
-  // dev (separate docker-compose services/ports) — found missing during
-  // task 11.x's real browser verification (curl/app.inject same-origin
-  // calls never exercise this). This is a lightweight, no-auth internal
-  // tool (product.md), so reflecting the request's own Origin rather than
-  // maintaining an allowlist is an acceptable, low-risk default.
   app.register(cors, {
-    origin: true,
+    origin: env.CORS_ORIGIN,
+    credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   });
+  app.register(secureSession, {
+    cookieName: "session",
+    key: Buffer.from(env.SESSION_SECRET, "hex"),
+    expiry: 7 * 24 * 60 * 60,
+    cookie: {
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60,
+      path: "/",
+      sameSite: "lax",
+      secure: env.COOKIE_SECURE,
+    },
+  });
+  app.register(csrfProtection, { sessionPlugin: "@fastify/secure-session" });
 
   app.get("/health", async () => {
     return { status: "ok" };
@@ -57,6 +68,34 @@ export function buildApp(env: Env = loadEnv(), logger: AppLogger = createLogger(
     });
   });
 
+  app.addHook("onRequest", (request, reply, done) => {
+    const path = request.routeOptions.url ?? "";
+    const isCsrfExempt =
+      path === "/health" ||
+      path === "/api/auth/register" ||
+      path === "/api/auth/login" ||
+      path === "/api/auth/csrf";
+    if (isCsrfExempt || !["POST", "PATCH", "DELETE"].includes(request.method)) {
+      done();
+      return;
+    }
+    app.csrfProtection(request, reply, done);
+  });
+
+  app.addHook("preHandler", async (request) => {
+    const path = request.routeOptions.url ?? "";
+    const isRequireUserExempt =
+      path === "/health" ||
+      path === "/api/auth/register" ||
+      path === "/api/auth/login" ||
+      path === "/api/auth/csrf" ||
+      path === "/api/client-errors";
+    if (path.startsWith("/api/") && !isRequireUserExempt) {
+      await requireUser(request);
+    }
+  });
+
+  app.register(authRoutes);
   app.register(userRoutes);
   app.register(taskRoutes);
   app.register(caseRoutes);

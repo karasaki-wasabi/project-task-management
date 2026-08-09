@@ -14,20 +14,18 @@
 // whichever column had last been hovered permanently highlighted
 // (Impeccable fourth critique P1, fixed by emitting whenever there's a
 // taskId, matching UnassignedBacklogPanel's identical handler).
-import { expect, test } from "@playwright/test";
+import { expect, registerUser, test } from "./fixtures";
 
 test("dragging a card out of the focus tray and back into itself leaves it there with no stuck highlight (regression)", async ({
   page,
+  request,
 }) => {
   const suffix = Date.now();
   const userName = `e2e-traycancel-user-${suffix}`;
   const stageName = `e2e-traycancel-stage-${suffix}`;
   const taskTitle = `e2e-traycancel-task-${suffix}`;
 
-  await page.goto("/users");
-  await page.getByPlaceholder("ユーザー名").fill(userName);
-  await page.getByRole("button", { name: "登録" }).click();
-  await expect(page.locator("tr", { hasText: userName })).toBeVisible();
+  await registerUser(request, userName);
 
   await page.goto("/kanban/stages");
   await page.getByPlaceholder("段階名(例: 仕様未確定)").fill(stageName);

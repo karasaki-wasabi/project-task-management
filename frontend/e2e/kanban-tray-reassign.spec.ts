@@ -14,10 +14,10 @@
 //
 // Same manual-mouse-events rationale as ./drag.ts's `dragCardTo` — Sortable
 // (`forceFallback` mode) doesn't use native HTML5 drag events.
-import { expect, test } from "@playwright/test";
+import { expect, registerUser, test } from "./fixtures";
 import { dragCardTo } from "./drag";
 
-test("dragging an already-assigned task into a different assignee's focus tray reassigns it (Requirement 9)", async ({ page }) => {
+test("dragging an already-assigned task into a different assignee's focus tray reassigns it (Requirement 9)", async ({ page, request }) => {
   const suffix = Date.now();
   const userAName = `e2e-reassign-user-a-${suffix}`;
   const userBName = `e2e-reassign-user-b-${suffix}`;
@@ -25,13 +25,8 @@ test("dragging an already-assigned task into a different assignee's focus tray r
   const taskTitle = `e2e-reassign-task-${suffix}`;
   const userATaskTitle = `e2e-reassign-task-a-${suffix}`;
 
-  await page.goto("/users");
-  await page.getByPlaceholder("ユーザー名").fill(userAName);
-  await page.getByRole("button", { name: "登録" }).click();
-  await expect(page.locator("tr", { hasText: userAName })).toBeVisible();
-  await page.getByPlaceholder("ユーザー名").fill(userBName);
-  await page.getByRole("button", { name: "登録" }).click();
-  await expect(page.locator("tr", { hasText: userBName })).toBeVisible();
+  await registerUser(request, userAName);
+  await registerUser(request, userBName);
 
   await page.goto("/kanban/stages");
   await page.getByPlaceholder("段階名(例: 仕様未確定)").fill(stageName);

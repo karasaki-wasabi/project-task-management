@@ -11,7 +11,7 @@
 // task created without a caseId query param is unassigned by construction
 // (tasks/index.vue's createTask() only sets caseId when the page's own
 // caseId ref is populated from the route query).
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // Drives shared/DatePicker.vue (task 11.2/14.1) to an exact date via its
 // real UI (month nav + day-cell click + 決定) — no bypassing the picker.

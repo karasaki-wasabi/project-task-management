@@ -55,11 +55,13 @@ enum NonBusinessDaySource {
 }
 
 model User {
-  id        String    @id @default(uuid())
-  name      String
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  passwordHash String    @map("password_hash")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
 
   tasks Task[]
 

@@ -14,6 +14,5 @@ export const navLinks: NavLink[] = [
   { to: "/calendar", label: "カレンダー" },
   { to: "/recurrence", label: "繰り返し設定" },
   { to: "/throughput", label: "消化数" },
-  { to: "/users", label: "ユーザー" },
   { to: "/holidays", label: "休日マスタ" },
 ];
