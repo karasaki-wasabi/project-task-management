@@ -16,7 +16,7 @@
   - 観測可能な完了状態: マイグレーション適用後、DBに`workspaces`／`workspace_members`テーブルが存在し、同一`(workspace_id, user_id)`の重複挿入がDB制約で拒否される
   - _Requirements: 1.1, 3.1, 4.3_
 
-- [ ] 1.2 非メンバー・非作成者操作を拒否するための403エラーヘルパーを追加する
+- [x] 1.2 非メンバー・非作成者操作を拒否するための403エラーヘルパーを追加する
   - `shared/http-errors.ts`に`forbidden`ファクトリを追加する
   - 観測可能な完了状態: `forbidden(...)`を呼ぶとstatusCode 403の`HttpError`が返る単体テストがgreen
   - _Requirements: 3.2, 4.5, 6.5, 7.2, 7.3_
