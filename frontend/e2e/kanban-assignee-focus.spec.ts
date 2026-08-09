@@ -15,11 +15,12 @@
 // kanban/index.vue only prompts when task.assigneeUserId is unset), keeping
 // this test focused purely on assignee-filter behavior rather than the
 // move-with-assignee-prompt flow already covered by kanban.spec.ts.
-import { expect, test } from "@playwright/test";
+import { expect, registerUser, test } from "./fixtures";
 import { dragCardTo } from "./drag";
 
 test("selecting an assignee in the kanban filter links the focus tray and stage board to that assignee, and clearing it hides the tray again (Requirements 1.1, 1.2, 4.2, 4.3)", async ({
   page,
+  request,
 }) => {
   const suffix = Date.now();
   const userAName = `e2e-focus-user-a-${suffix}`;
@@ -28,14 +29,9 @@ test("selecting an assignee in the kanban filter links the focus tray and stage 
   const taskATitle = `e2e-focus-task-a-${suffix}`;
   const taskBTitle = `e2e-focus-task-b-${suffix}`;
 
-  // 1. Create two distinct users.
-  await page.goto("/users");
-  await page.getByPlaceholder("ユーザー名").fill(userAName);
-  await page.getByRole("button", { name: "登録" }).click();
-  await expect(page.locator("tr", { hasText: userAName })).toBeVisible();
-  await page.getByPlaceholder("ユーザー名").fill(userBName);
-  await page.getByRole("button", { name: "登録" }).click();
-  await expect(page.locator("tr", { hasText: userBName })).toBeVisible();
+  // 1. Create two distinct accounts for the assignee fixtures.
+  await registerUser(request, userAName);
+  await registerUser(request, userBName);
 
   // 2. Create a development stage.
   await page.goto("/kanban/stages");

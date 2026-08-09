@@ -13,7 +13,7 @@
 // resync-strategy fix targeted this exact dialog), the CANCEL button itself
 // had no dedicated E2E coverage — every existing picker test
 // (kanban.spec.ts, kanban-backlog.spec.ts) only exercises "確定" (confirm).
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { dragCardTo } from "./drag";
 
 test("canceling the assignee-picker leaves the dropped task back in the backlog, not stranded in the target column (regression)", async ({

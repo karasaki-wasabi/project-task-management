@@ -31,7 +31,7 @@
 //     (CaseFormModal's `created` payload is exactly this response body)
 //     and drills down by navigating directly to `/tasks?caseId=<id>`,
 //     rather than clicking a same-row dashboard link.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // Drives shared/DatePicker.vue (task 11.2/14.1) to an exact date via its
 // real UI (month nav + day-cell click + 決定) — same helper as
