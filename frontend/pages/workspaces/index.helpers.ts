@@ -1,7 +1,7 @@
-// Pure derived-data logic for the workspaces index page (tasks 6.3–6.4,
-// design.md pages/workspaces, Requirements 2.3, 3.1, 3.2, 4.1). Extracted so
-// view-state resolution can be unit-tested without mounting the SFC —
-// same pattern as frontend/pages/cases/index.helpers.ts.
+// Pure derived-data logic for the workspaces index page (tasks 6.3–6.6,
+// design.md pages/workspaces, Requirements 2.3, 3.1, 3.2, 4.1, 7.1–7.2).
+// Extracted so view-state resolution can be unit-tested without mounting
+// the SFC — same pattern as frontend/pages/cases/index.helpers.ts.
 import type { Workspace } from "../../composables/useApiClient";
 
 export type WorkspacesPageView = "empty" | "members";
@@ -18,6 +18,15 @@ export function findCurrentWorkspace(
 ): Workspace | null {
   if (currentId === null) return null;
   return workspaces.find((workspace) => workspace.id === currentId) ?? null;
+}
+
+// Requirement 7.1 / 7.2: delete control is creator-only.
+export function isWorkspaceCreator(
+  workspace: Workspace | null,
+  userId: string | null | undefined,
+): boolean {
+  if (workspace === null || userId == null || userId === "") return false;
+  return workspace.createdByUserId === userId;
 }
 
 // research.md メンバー一覧: 下部に「メンバー N人」

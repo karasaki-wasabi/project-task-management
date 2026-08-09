@@ -1,9 +1,9 @@
 <!--
-  Workspaces / member management page (tasks 6.3–6.5, design.md pages/workspaces,
-  Requirements 2.3, 3.1, 3.2, 4.1–4.5, 6.1–6.3). Empty state when no current
-  workspace (create CTA → WorkspaceCreateModal); otherwise color-dot heading +
-  member list + inline expandable search panel for adding members + settings
-  modal. Delete shell remains for later task 6.6.
+  Workspaces / member management page (tasks 6.3–6.6, design.md pages/workspaces,
+  Requirements 2.3, 3.1, 3.2, 4.1–4.5, 6.1–6.3, 7.1–7.4). Empty state when no
+  current workspace (create CTA → WorkspaceCreateModal); otherwise color-dot
+  heading + member list + inline expandable search panel + settings modal +
+  creator-only delete with Modal confirmation.
 
   Explicit Vue / composable imports so vitest can mount without Nuxt
   auto-import runtime (same approach as WorkspaceCreateModal.vue).
@@ -11,10 +11,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useApiClient, type WorkspaceUserSummary } from "../../composables/useApiClient";
+import { useAuth } from "../../composables/useAuth";
 import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
 import {
   findCurrentWorkspace,
   formatMemberCount,
+  isWorkspaceCreator,
   normalizeMemberSearchQuery,
   resolvePageView,
   shouldRunMemberSearch,
@@ -22,6 +24,7 @@ import {
 } from "./index.helpers";
 
 const api = useApiClient();
+const { user } = useAuth();
 const { workspaces, currentId, refresh } = useCurrentWorkspace();
 
 const members = ref<WorkspaceUserSummary[]>([]);
@@ -29,6 +32,9 @@ const loaded = ref(false);
 const error = ref<string | null>(null);
 const createOpen = ref(false);
 const settingsOpen = ref(false);
+const deleteConfirmOpen = ref(false);
+const deleting = ref(false);
+const deleteError = ref<string | null>(null);
 let loadSeq = 0;
 
 const addPanelOpen = ref(false);
@@ -43,6 +49,9 @@ let searchSeq = 0;
 const pageView = computed(() => resolvePageView(currentId.value));
 const currentWorkspace = computed(() => findCurrentWorkspace(workspaces.value, currentId.value));
 const memberCountLabel = computed(() => formatMemberCount(members.value.length));
+const showDeleteButton = computed(() =>
+  isWorkspaceCreator(currentWorkspace.value, user.value?.id),
+);
 const showSearchEmpty = computed(() =>
   shouldShowMemberSearchEmpty({
     searched: searchSearched.value,
@@ -130,6 +139,8 @@ watch(
   (id) => {
     addPanelOpen.value = false;
     resetSearchPanel();
+    deleteConfirmOpen.value = false;
+    deleteError.value = null;
     if (id === null) {
       members.value = [];
       loaded.value = true;
@@ -194,6 +205,41 @@ async function onAddMember(userId: string) {
     searchError.value = e instanceof Error ? e.message : String(e);
   } finally {
     addingUserId.value = null;
+  }
+}
+
+function openDeleteConfirm() {
+  if (!showDeleteButton.value) return;
+  deleteError.value = null;
+  deleteConfirmOpen.value = true;
+}
+
+function closeDeleteConfirm() {
+  if (deleting.value) return;
+  deleteConfirmOpen.value = false;
+  deleteError.value = null;
+}
+
+async function confirmDelete() {
+  const workspace = currentWorkspace.value;
+  if (workspace === null || deleting.value || !showDeleteButton.value) return;
+
+  deleting.value = true;
+  deleteError.value = null;
+  try {
+    const deletedId = workspace.id;
+    await api.deleteWorkspace(deletedId);
+    // Requirement 7.4 / design.md: clear current selection (and localStorage) when matched.
+    if (currentId.value === deletedId) {
+      currentId.value = null;
+      localStorage.removeItem("currentWorkspaceId");
+    }
+    await refresh();
+    deleteConfirmOpen.value = false;
+  } catch (e) {
+    deleteError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    deleting.value = false;
   }
 }
 </script>
@@ -275,16 +321,16 @@ async function onAddMember(userId: string) {
 
         <ul v-if="searchResults.length > 0" class="mt-3 divide-y divide-slate-100" role="list">
           <li
-            v-for="user in searchResults"
-            :key="user.userId"
+            v-for="candidate in searchResults"
+            :key="candidate.userId"
             class="flex flex-wrap items-center justify-between gap-2 py-2"
           >
             <div class="min-w-0">
               <p data-testid="search-result-name" class="text-sm font-medium text-slate-900">
-                {{ user.name }}
+                {{ candidate.name }}
               </p>
               <p data-testid="search-result-email" class="text-xs text-slate-600">
-                {{ user.email }}
+                {{ candidate.email }}
               </p>
             </div>
             <button
@@ -292,7 +338,7 @@ async function onAddMember(userId: string) {
               data-testid="add-member-button"
               class="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="addingUserId !== null"
-              @click="onAddMember(user.userId)"
+              @click="onAddMember(candidate.userId)"
             >
               追加
             </button>
@@ -337,6 +383,18 @@ async function onAddMember(userId: string) {
           {{ memberCountLabel }}
         </p>
       </div>
+
+      <div v-if="showDeleteButton" class="space-y-2 pt-2">
+        <p class="text-sm text-slate-600">ワークスペースを削除できるのは作成者のみです。</p>
+        <button
+          type="button"
+          data-testid="workspace-delete-button"
+          class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+          @click="openDeleteConfirm"
+        >
+          ワークスペースを削除
+        </button>
+      </div>
     </template>
 
     <WorkspaceCreateModal :open="createOpen" @close="closeCreate" @created="onCreated" />
@@ -346,5 +404,40 @@ async function onAddMember(userId: string) {
       @close="closeSettings"
       @saved="onSettingsSaved"
     />
+
+    <Modal
+      :open="deleteConfirmOpen"
+      aria-label="ワークスペースの削除確認"
+      @close="closeDeleteConfirm"
+    >
+      <template #title>ワークスペースを削除</template>
+
+      <ErrorAlert v-if="deleteError" :message="deleteError" />
+
+      <p class="text-sm text-slate-700">このワークスペースを削除しますか？</p>
+      <p class="text-sm text-slate-600">{{ memberCountLabel }}が所属しています。</p>
+
+      <template #actions>
+        <div class="flex w-full flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="deleting"
+            @click="closeDeleteConfirm"
+          >
+            キャンセル
+          </button>
+          <button
+            type="button"
+            data-testid="workspace-delete-confirm"
+            class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="deleting"
+            @click="confirmDelete"
+          >
+            削除する
+          </button>
+        </div>
+      </template>
+    </Modal>
   </div>
 </template>

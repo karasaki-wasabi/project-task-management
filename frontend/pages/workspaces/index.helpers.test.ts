@@ -3,6 +3,7 @@ import type { Workspace } from "../../composables/useApiClient";
 import {
   findCurrentWorkspace,
   formatMemberCount,
+  isWorkspaceCreator,
   normalizeMemberSearchQuery,
   resolvePageView,
   shouldRunMemberSearch,
@@ -54,6 +55,21 @@ describe("formatMemberCount", () => {
   it("formats the member count label as メンバー N人", () => {
     expect(formatMemberCount(0)).toBe("メンバー 0人");
     expect(formatMemberCount(3)).toBe("メンバー 3人");
+  });
+});
+
+describe("isWorkspaceCreator (Requirements 7.1, 7.2)", () => {
+  it("returns true only when the user id matches createdByUserId", () => {
+    const ws = makeWorkspace({ createdByUserId: "user-1" });
+    expect(isWorkspaceCreator(ws, "user-1")).toBe(true);
+    expect(isWorkspaceCreator(ws, "user-2")).toBe(false);
+  });
+
+  it("returns false when workspace or user id is missing", () => {
+    expect(isWorkspaceCreator(null, "user-1")).toBe(false);
+    expect(isWorkspaceCreator(makeWorkspace(), null)).toBe(false);
+    expect(isWorkspaceCreator(makeWorkspace(), undefined)).toBe(false);
+    expect(isWorkspaceCreator(makeWorkspace(), "")).toBe(false);
   });
 });
 

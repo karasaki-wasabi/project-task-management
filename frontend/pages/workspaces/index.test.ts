@@ -1,10 +1,12 @@
-// Mount tests for WorkspacesPage (tasks 6.3–6.4): empty state, member list,
-// and inline member-search add panel. Requirements 2.3, 3.1, 3.2, 4.1–4.5.
+// Mount tests for WorkspacesPage (tasks 6.3–6.6): empty state, member list,
+// inline member-search add panel, settings, and creator-only delete.
+// Requirements 2.3, 3.1, 3.2, 4.1–4.5, 6.1, 7.1–7.4.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import {
   WORKSPACE_COLORS,
+  type PublicUser,
   type Workspace,
   type WorkspaceUserSummary,
 } from "../../composables/useApiClient";
@@ -14,10 +16,12 @@ const refresh = vi.fn();
 const select = vi.fn();
 const currentId = ref<string | null>(null);
 const workspaces = ref<Workspace[]>([]);
+const authUser = ref<PublicUser | null>(null);
 
 const listWorkspaceMembers = vi.fn();
 const searchAddableWorkspaceUsers = vi.fn();
 const addWorkspaceMember = vi.fn();
+const deleteWorkspace = vi.fn();
 
 vi.mock("../../composables/useCurrentWorkspace", () => ({
   useCurrentWorkspace: () => ({
@@ -28,6 +32,10 @@ vi.mock("../../composables/useCurrentWorkspace", () => ({
   }),
 }));
 
+vi.mock("../../composables/useAuth", () => ({
+  useAuth: () => ({ user: authUser }),
+}));
+
 vi.mock("../../composables/useApiClient", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../composables/useApiClient")>();
   return {
@@ -36,6 +44,7 @@ vi.mock("../../composables/useApiClient", async (importOriginal) => {
       listWorkspaceMembers,
       searchAddableWorkspaceUsers,
       addWorkspaceMember,
+      deleteWorkspace,
     }),
   };
 });
@@ -78,6 +87,34 @@ const ErrorAlertStub = defineComponent({
   template: `<div data-testid="error-alert">{{ message }}</div>`,
 });
 
+const ModalStub = defineComponent({
+  name: "Modal",
+  props: {
+    open: { type: Boolean, required: true },
+    ariaLabel: { type: String, required: false },
+  },
+  emits: ["close"],
+  template: `
+    <div v-if="open" data-testid="workspace-delete-modal" role="dialog">
+      <div data-testid="modal-title"><slot name="title" /></div>
+      <div data-testid="modal-body"><slot /></div>
+      <div data-testid="modal-actions"><slot name="actions" /></div>
+      <button type="button" aria-label="閉じる" @click="$emit('close')">×</button>
+    </div>
+  `,
+});
+
+function makeUser(overrides: Partial<PublicUser> = {}): PublicUser {
+  return {
+    id: "user-1",
+    name: "作成者",
+    email: "creator@example.com",
+    createdAt: "2026-08-09T00:00:00.000Z",
+    updatedAt: "2026-08-09T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
     id: "ws-1",
@@ -115,6 +152,7 @@ function mountPage() {
         WorkspaceCreateModal: WorkspaceCreateModalStub,
         WorkspaceSettingsModal: WorkspaceSettingsModalStub,
         ErrorAlert: ErrorAlertStub,
+        Modal: ModalStub,
       },
     },
   });
@@ -127,12 +165,15 @@ describe("WorkspacesPage (task 6.3)", () => {
     listWorkspaceMembers.mockReset();
     searchAddableWorkspaceUsers.mockReset();
     addWorkspaceMember.mockReset();
+    deleteWorkspace.mockReset();
     currentId.value = null;
     workspaces.value = [];
+    authUser.value = makeUser();
     refresh.mockResolvedValue(undefined);
     listWorkspaceMembers.mockResolvedValue([]);
     searchAddableWorkspaceUsers.mockResolvedValue([]);
     addWorkspaceMember.mockResolvedValue(makeMember());
+    deleteWorkspace.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -235,13 +276,16 @@ describe("WorkspacesPage settings modal (task 6.5)", () => {
     listWorkspaceMembers.mockReset();
     searchAddableWorkspaceUsers.mockReset();
     addWorkspaceMember.mockReset();
+    deleteWorkspace.mockReset();
     const ws = makeWorkspace();
     currentId.value = ws.id;
     workspaces.value = [ws];
+    authUser.value = makeUser();
     refresh.mockResolvedValue(undefined);
     listWorkspaceMembers.mockResolvedValue([makeMember()]);
     searchAddableWorkspaceUsers.mockResolvedValue([]);
     addWorkspaceMember.mockResolvedValue(makeMember());
+    deleteWorkspace.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -299,15 +343,18 @@ describe("WorkspacesPage member search add panel (task 6.4)", () => {
     listWorkspaceMembers.mockReset();
     searchAddableWorkspaceUsers.mockReset();
     addWorkspaceMember.mockReset();
+    deleteWorkspace.mockReset();
     const ws = makeWorkspace();
     currentId.value = ws.id;
     workspaces.value = [ws];
+    authUser.value = makeUser();
     refresh.mockResolvedValue(undefined);
     listWorkspaceMembers.mockResolvedValue([makeMember()]);
     searchAddableWorkspaceUsers.mockResolvedValue([]);
     addWorkspaceMember.mockResolvedValue(
       makeMember({ userId: "u-new", name: "鈴木一郎", email: "suzuki@example.com" }),
     );
+    deleteWorkspace.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -412,5 +459,95 @@ describe("WorkspacesPage member search add panel (task 6.4)", () => {
     expect(searchAddableWorkspaceUsers).toHaveBeenCalledTimes(2);
     expect(searchAddableWorkspaceUsers).toHaveBeenLastCalledWith("ws-1", "佐藤");
     expect(wrapper.findAll('[data-testid="search-result-name"]')).toHaveLength(0);
+  });
+});
+
+describe("WorkspacesPage creator-only delete (task 6.6)", () => {
+  beforeEach(() => {
+    refresh.mockReset();
+    select.mockReset();
+    listWorkspaceMembers.mockReset();
+    searchAddableWorkspaceUsers.mockReset();
+    addWorkspaceMember.mockReset();
+    deleteWorkspace.mockReset();
+    const ws = makeWorkspace({ createdByUserId: "user-1" });
+    currentId.value = ws.id;
+    workspaces.value = [ws];
+    authUser.value = makeUser({ id: "user-1" });
+    refresh.mockResolvedValue(undefined);
+    listWorkspaceMembers.mockResolvedValue([
+      makeMember(),
+      makeMember({ userId: "u-2", name: "佐藤花子", email: "sato@example.com" }),
+    ]);
+    searchAddableWorkspaceUsers.mockResolvedValue([]);
+    addWorkspaceMember.mockResolvedValue(makeMember());
+    deleteWorkspace.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("作成者にのみ削除ボタンを表示する（Req 7.1, 7.2）", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="workspace-delete-button"]').exists()).toBe(true);
+    expect(buttonByText(wrapper, "ワークスペースを削除").exists()).toBe(true);
+
+    authUser.value = makeUser({ id: "user-2", name: "メンバー", email: "member@example.com" });
+    await nextTick();
+
+    expect(wrapper.find('[data-testid="workspace-delete-button"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("ワークスペースを削除");
+  });
+
+  it("削除確認モーダルを経て削除し、現在選択を解除して空状態に戻る（Req 7.1, 7.4）", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    // After delete succeeds, subsequent refresh empties the membership list.
+    refresh.mockImplementation(async () => {
+      workspaces.value = [];
+      if (currentId.value !== null && !workspaces.value.some((w) => w.id === currentId.value)) {
+        currentId.value = null;
+      }
+    });
+
+    await wrapper.get('[data-testid="workspace-delete-button"]').trigger("click");
+    await nextTick();
+
+    const modal = wrapper.get('[data-testid="workspace-delete-modal"]');
+    expect(modal.exists()).toBe(true);
+    expect(modal.text()).toContain("このワークスペースを削除しますか？");
+    expect(modal.text()).toMatch(/メンバー\s*2人/);
+    expect(modal.text()).not.toMatch(/案件/);
+
+    expect(deleteWorkspace).not.toHaveBeenCalled();
+
+    await buttonByText(wrapper, /^削除する$/).trigger("click");
+    await flushPromises();
+
+    expect(deleteWorkspace).toHaveBeenCalledWith("ws-1");
+    expect(refresh).toHaveBeenCalled();
+    expect(currentId.value).toBeNull();
+    expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="workspace-delete-modal"]').exists()).toBe(false);
+  });
+
+  it("確認モーダルをキャンセルすると削除しない", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="workspace-delete-button"]').trigger("click");
+    await nextTick();
+    expect(wrapper.find('[data-testid="workspace-delete-modal"]').exists()).toBe(true);
+
+    await buttonByText(wrapper, "キャンセル").trigger("click");
+    await nextTick();
+
+    expect(deleteWorkspace).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="workspace-delete-modal"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(false);
   });
 });
