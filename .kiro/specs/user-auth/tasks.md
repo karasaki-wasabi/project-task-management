@@ -18,7 +18,7 @@
   - _Requirements: 2.3, 3.3, 7.1_
   - _Boundary: env, package.json_
 
-- [ ] 1.2 User をアカウント用スキーマへ拡張し migrate する
+- [x] 1.2 User をアカウント用スキーマへ拡張し migrate する
   - `email`（一意）・`passwordHash` を追加し、`name` を表示名として維持する
   - 開発 DB に破壊的適用してよい
   - 観測可能な完了状態: `prisma validate` が通り、DB 上に email / password_hash 列がある
@@ -137,3 +137,8 @@
   - _Requirements: 7.1, 7.2_
   - _Boundary: steering_
   - _Depends: 3_
+
+## Implementation Notes
+
+- 1.1: `SESSION_SECRET`（64桁hex）・`CORS_ORIGIN`・`COOKIE_SECURE` は必須。ローカル `.env` 未設定だと Compose が空文字を渡し起動時検証で落ちる。CI は `.github/workflows/ci.yml` に配線済み。
+- 1.2: アカウント列追加 migration は `DELETE FROM users` を ALTER 前に置く（TRUNCATE 不可。`tasks.assignee_user_id` は ON DELETE SET NULL）。旧 POST /api/users の email/passwordHash 補完は task 4 廃止までの暫定。

@@ -5,8 +5,8 @@ import { db } from "../../shared/db.js";
 import type { User } from "./user.types.js";
 
 export const userRepository = {
-  create(name: string): Promise<User> {
-    return db.user.create({ data: { name } });
+  create(name: string, email: string, passwordHash: string): Promise<User> {
+    return db.user.create({ data: { name, email, passwordHash } });
   },
 
   list(): Promise<User[]> {

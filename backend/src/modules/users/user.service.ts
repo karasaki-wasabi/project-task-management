@@ -19,7 +19,12 @@ export const usersService = {
     if (trimmed.length === 0) {
       throw badRequest("name is required");
     }
-    return userRepository.create(trimmed);
+    const legacyAccountId = randomUUID();
+    return userRepository.create(
+      trimmed,
+      `legacy-user-${legacyAccountId}@example.invalid`,
+      `legacy-user-create-path-${legacyAccountId}`,
+    );
   },
 
   list(): Promise<User[]> {

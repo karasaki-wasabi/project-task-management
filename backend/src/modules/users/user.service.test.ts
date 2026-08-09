@@ -23,6 +23,8 @@ describe("usersService (task 2.1)", () => {
     const user = await usersService.create(name);
 
     expect(user.name).toBe(name);
+    expect(user.email).toMatch(/^legacy-user-[\w-]+@example\.invalid$/);
+    expect(user.passwordHash).toMatch(/^legacy-user-create-path-/);
     expect(user.createdAt).toBeInstanceOf(Date);
     expect(user.updatedAt).toBeInstanceOf(Date);
     expect(user.deletedAt).toBeNull();

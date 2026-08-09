@@ -62,8 +62,36 @@ describe("recurrence schema shape (task 1.1)", () => {
 });
 
 describe("physical schema (task 1.2)", () => {
+  it("provides email and password_hash columns and enforces unique email", async () => {
+    const columns = await prisma.$queryRaw<Array<{ Field: string }>>`SHOW COLUMNS FROM users`;
+    const columnNames = columns.map((column) => column.Field);
+
+    expect(columnNames).toEqual(expect.arrayContaining(["email", "password_hash"]));
+
+    const userId = randomUUID();
+    const email = `unique-${userId}@example.test`;
+    const user = await prisma.user.create({
+      data: { email, name: `unique-${userId}`, passwordHash: "test-password-hash" },
+    });
+
+    await expect(
+      prisma.user.create({
+        data: { email, name: `duplicate-${userId}`, passwordHash: "test-password-hash" },
+      }),
+    ).rejects.toThrow();
+
+    await prisma.user.delete({ where: { id: user.id } });
+  });
+
   it("round-trips user, case, template, task, and non_business_day", async () => {
-    const user = await prisma.user.create({ data: { name: `user-${randomUUID()}` } });
+    const userId = randomUUID();
+    const user = await prisma.user.create({
+      data: {
+        email: `user-${userId}@example.test`,
+        name: `user-${userId}`,
+        passwordHash: "test-password-hash",
+      },
+    });
     const caseEntity = await prisma.case.create({
       data: { name: `case-${randomUUID()}`, endDate: new Date("2026-08-01") },
     });
@@ -104,7 +132,14 @@ describe("physical schema (task 1.2)", () => {
   });
 
   it("enforces created_at/updated_at/deleted_at on every table", async () => {
-    const user = await prisma.user.create({ data: { name: `audit-${randomUUID()}` } });
+    const userId = randomUUID();
+    const user = await prisma.user.create({
+      data: {
+        email: `audit-${userId}@example.test`,
+        name: `audit-${userId}`,
+        passwordHash: "test-password-hash",
+      },
+    });
     expect(user.createdAt).toBeInstanceOf(Date);
     expect(user.updatedAt).toBeInstanceOf(Date);
     expect(user.deletedAt).toBeNull();

@@ -12,6 +12,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { setBusinessEventLoggerForTests } from "./business-event-logger.js";
 import { createLogger } from "./logger.js";
 import { db } from "./db.js";
+import { createUserData } from "../test/user.fixture.js";
 import { usersService } from "../modules/users/user.service.js";
 import { tasksService } from "../modules/tasks/task.service.js";
 import { caseService } from "../modules/cases/case.service.js";
@@ -116,7 +117,7 @@ describe("business event logging (task 10.2)", () => {
   it("logs user.deleted with the deleted user's id", async () => {
     let userId: string | undefined;
     try {
-      const user = await db.user.create({ data: { name: `u-${randomUUID()}` } });
+      const user = await db.user.create({ data: createUserData(`u-${randomUUID()}`) });
       userId = user.id;
 
       await usersService.delete(user.id, "req-user-delete");

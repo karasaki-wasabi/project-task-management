@@ -6,6 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
+import { createUserData } from "../test/user.fixture.js";
 import { withSoftDelete } from "./soft-delete.repository.js";
 
 const rawPrisma = new PrismaClient();
@@ -17,7 +18,7 @@ afterAll(async () => {
 
 describe("withSoftDelete (task 1.4)", () => {
   it("bumps updated_at on update()", async () => {
-    const user = await db.user.create({ data: { name: `u-${randomUUID()}` } });
+    const user = await db.user.create({ data: createUserData(`u-${randomUUID()}`) });
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     const updated = await db.user.update({ where: { id: user.id }, data: { name: "renamed" } });
@@ -28,7 +29,7 @@ describe("withSoftDelete (task 1.4)", () => {
   });
 
   it("bumps updated_at on updateMany(), which Prisma's own @updatedAt does not cover", async () => {
-    const user = await db.user.create({ data: { name: `u-${randomUUID()}` } });
+    const user = await db.user.create({ data: createUserData(`u-${randomUUID()}`) });
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     await db.user.updateMany({ where: { id: user.id }, data: { name: "renamed-many" } });
@@ -40,7 +41,7 @@ describe("withSoftDelete (task 1.4)", () => {
   });
 
   it("delete() issues a soft delete (UPDATE deleted_at) instead of a physical DELETE", async () => {
-    const user = await db.user.create({ data: { name: `u-${randomUUID()}` } });
+    const user = await db.user.create({ data: createUserData(`u-${randomUUID()}`) });
 
     const result = await db.user.delete({ where: { id: user.id } });
 
@@ -55,8 +56,8 @@ describe("withSoftDelete (task 1.4)", () => {
 
   it("deleteMany() issues soft deletes for every matching row", async () => {
     const marker = `batch-${randomUUID()}`;
-    const a = await db.user.create({ data: { name: marker } });
-    const b = await db.user.create({ data: { name: marker } });
+    const a = await db.user.create({ data: createUserData(marker) });
+    const b = await db.user.create({ data: createUserData(marker) });
 
     const result = await db.user.deleteMany({ where: { name: marker } });
 
@@ -70,8 +71,8 @@ describe("withSoftDelete (task 1.4)", () => {
 
   it("excludes soft-deleted rows from findMany/findFirst/count by default", async () => {
     const marker = `find-${randomUUID()}`;
-    const kept = await db.user.create({ data: { name: marker } });
-    const removed = await db.user.create({ data: { name: marker } });
+    const kept = await db.user.create({ data: createUserData(marker) });
+    const removed = await db.user.create({ data: createUserData(marker) });
     await db.user.delete({ where: { id: removed.id } });
 
     const list = await db.user.findMany({ where: { name: marker } });
@@ -86,7 +87,7 @@ describe("withSoftDelete (task 1.4)", () => {
   });
 
   it("excludes soft-deleted rows from findUnique/findUniqueOrThrow by default", async () => {
-    const user = await db.user.create({ data: { name: `unique-${randomUUID()}` } });
+    const user = await db.user.create({ data: createUserData(`unique-${randomUUID()}`) });
     await db.user.delete({ where: { id: user.id } });
 
     const found = await db.user.findUnique({ where: { id: user.id } });
@@ -98,7 +99,7 @@ describe("withSoftDelete (task 1.4)", () => {
   });
 
   it("still lets callers explicitly query soft-deleted rows when they ask for deletedAt: { not: null }", async () => {
-    const user = await db.user.create({ data: { name: `explicit-${randomUUID()}` } });
+    const user = await db.user.create({ data: createUserData(`explicit-${randomUUID()}`) });
     await db.user.delete({ where: { id: user.id } });
 
     const found = await db.user.findFirst({ where: { id: user.id, deletedAt: { not: null } } });
