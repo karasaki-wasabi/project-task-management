@@ -84,7 +84,7 @@
   - _Depends: 3, 4_
 
 - [ ] 6. Core: フロントエンド認証
-- [ ] 6.1 (P) useApiClient に credentials・auth API・CSRF を入れる
+- [x] 6.1 (P) useApiClient に credentials・auth API・CSRF を入れる
   - `credentials: 'include'`、register/login/logout/me/csrf、createUser/deleteUser 削除
   - 初期化時およびログイン／登録成功直後に csrf を取得し、変更系へヘッダ付与する
   - 観測可能な完了状態: 型上 auth メソッドが使え、旧 createUser/deleteUser 参照がクライアントから消える

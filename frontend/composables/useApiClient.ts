@@ -75,6 +75,21 @@ export interface User {
   deletedAt?: string | null;
 }
 
+export interface PublicUser extends User {
+  email: string;
+}
+
+export interface RegisterInput {
+  email: string;
+  name: string;
+  password: string;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
 export type NonBusinessDayPolicy = "as_is" | "skip" | "next_business_day" | "previous_business_day";
 
 /** design.md CaseRelativeAnchor — template schedule origin relative to a case. */
@@ -164,18 +179,55 @@ export interface DevelopmentStage {
 
 export function useApiClient() {
   const config = useRuntimeConfig();
+  let csrfToken: string | undefined;
+  let csrfInitialization: Promise<void> | undefined;
 
-  function request<T>(path: string, options?: Parameters<typeof $fetch>[1]): Promise<T> {
-    return $fetch<T>(joinApiUrl(config.public.apiBaseUrl, path), options);
+  async function request<T>(path: string, options?: Parameters<typeof $fetch>[1]): Promise<T> {
+    const method = options?.method?.toUpperCase();
+    const isMutating = method === "POST" || method === "PATCH" || method === "DELETE";
+    if (isMutating && csrfInitialization) {
+      await csrfInitialization;
+    }
+
+    const headers = csrfToken && isMutating
+      ? { ...(options?.headers as Record<string, string> | undefined), "csrf-token": csrfToken }
+      : options?.headers;
+
+    return $fetch<T>(joinApiUrl(config.public.apiBaseUrl, path), {
+      ...options,
+      credentials: "include",
+      ...(headers ? { headers } : {}),
+    });
   }
+
+  async function csrf(): Promise<string> {
+    const { token } = await request<{ token: string }>("/api/auth/csrf");
+    csrfToken = token;
+    return token;
+  }
+
+  csrfInitialization = csrf().then(() => undefined).catch(() => undefined);
 
   return {
     request,
 
     // Users (design.md "Backend/users" API Contract)
     listUsers: () => request<User[]>("/api/users"),
-    createUser: (name: string) => request<User>("/api/users", { method: "POST", body: { name } }),
-    deleteUser: (id: string) => request<void>(`/api/users/${id}`, { method: "DELETE" }),
+
+    // Auth (user-auth design.md API Contract)
+    register: async (input: RegisterInput) => {
+      const user = await request<PublicUser>("/api/auth/register", { method: "POST", body: input });
+      await csrf();
+      return user;
+    },
+    login: async (input: LoginInput) => {
+      const user = await request<PublicUser>("/api/auth/login", { method: "POST", body: input });
+      await csrf();
+      return user;
+    },
+    logout: () => request<void>("/api/auth/logout", { method: "POST" }),
+    me: () => request<PublicUser>("/api/auth/me"),
+    csrf,
 
     // Tasks (design.md "Backend/tasks" API Contract)
     listTasks: (filter: { caseId?: string; assigneeUserId?: string; unassignedCase?: boolean } = {}) =>
