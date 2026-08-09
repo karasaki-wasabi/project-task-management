@@ -42,7 +42,7 @@
   - _Boundary: AuthService_
   - _Depends: 1.2_
 
-- [ ] 2.2 Auth HTTP ルートを実装する
+- [x] 2.2 Auth HTTP ルートを実装する
   - `POST register` / `POST login` / `POST logout` / `GET me` / `GET csrf` を design 契約どおり公開する
   - register / login 成功時に session へ userId を書き込み、logout で破棄する（Cookie 属性のプラグイン設定はタスク 3）
   - 登録成功は自動ログイン状態（セッション確立）になる
