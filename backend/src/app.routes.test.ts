@@ -168,7 +168,7 @@ describe("app.ts route registration (task 10.3)", () => {
   it("the global error handler applies uniformly: a business HttpError from any module route returns its statusCode as JSON, not a raw 500", async () => {
     const { app } = buildTestApp();
 
-    const response = await app.inject({ method: "DELETE", url: `/api/users/${randomUUID()}` });
+    const response = await app.inject({ method: "DELETE", url: `/api/cases/${randomUUID()}` });
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toHaveProperty("error");
@@ -200,10 +200,10 @@ describe("app.ts route registration (task 10.3)", () => {
   it("a full failure flow (thrown HttpError -> global error handler) correlates access log + error log under the same requestId (Requirements 10.1, 10.3, 10.5)", async () => {
     const { app, lines } = buildTestApp();
 
-    const response = await app.inject({ method: "DELETE", url: `/api/users/${randomUUID()}` });
+    const response = await app.inject({ method: "DELETE", url: `/api/cases/${randomUUID()}` });
 
     expect(response.statusCode).toBe(404);
-    const accessLine = lines.find((l) => l.path?.toString().startsWith("/api/users/") && l.statusCode === 404);
+    const accessLine = lines.find((l) => l.path?.toString().startsWith("/api/cases/") && l.statusCode === 404);
     const errorLine = lines.find((l) => l.err !== undefined);
     expect(accessLine).toBeTruthy();
     expect(errorLine).toBeTruthy();

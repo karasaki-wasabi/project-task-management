@@ -16,6 +16,7 @@ import { db } from "./shared/db.js";
 import { createLogger } from "./shared/logger.js";
 import { setBusinessEventLoggerForTests } from "./shared/business-event-logger.js";
 import { setClientErrorLoggerForTests } from "./modules/client-errors/client-error.service.js";
+import { createUserData } from "./test/user.fixture.js";
 
 function collectingStream() {
   const lines: Record<string, unknown>[] = [];
@@ -602,9 +603,7 @@ describe("18.2: 開発段階更新時の担当者自動設定ルールの統合�
     const stageIds: string[] = [];
     const userIds: string[] = [];
     try {
-      const user = await app
-        .inject({ method: "POST", url: "/api/users", payload: { name: `e2e user ${randomUUID()}` } })
-        .then((r) => r.json());
+      const user = await db.user.create({ data: createUserData(`e2e user ${randomUUID()}`) });
       userIds.push(user.id);
       const stage = await app
         .inject({ method: "POST", url: "/api/development-stages", payload: { name: `e2e stage ${randomUUID()}` } })
@@ -638,13 +637,9 @@ describe("18.2: 開発段階更新時の担当者自動設定ルールの統合�
     const stageIds: string[] = [];
     const userIds: string[] = [];
     try {
-      const originalAssignee = await app
-        .inject({ method: "POST", url: "/api/users", payload: { name: `e2e original ${randomUUID()}` } })
-        .then((r) => r.json());
+      const originalAssignee = await db.user.create({ data: createUserData(`e2e original ${randomUUID()}`) });
       userIds.push(originalAssignee.id);
-      const otherUser = await app
-        .inject({ method: "POST", url: "/api/users", payload: { name: `e2e other ${randomUUID()}` } })
-        .then((r) => r.json());
+      const otherUser = await db.user.create({ data: createUserData(`e2e other ${randomUUID()}`) });
       userIds.push(otherUser.id);
       const stage = await app
         .inject({ method: "POST", url: "/api/development-stages", payload: { name: `e2e stage ${randomUUID()}` } })

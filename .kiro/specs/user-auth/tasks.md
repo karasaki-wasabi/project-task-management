@@ -69,7 +69,7 @@
   - _Boundary: app.ts_
   - _Depends: 2.2, 2.3, 1.3_
 
-- [ ] 4. (P) users を一覧のみへ縮退する
+- [x] 4. (P) users を一覧のみへ縮退する
   - `POST /api/users` と `DELETE /api/users/:id` を削除する
   - `GET /api/users` は要ログインで PublicUser 一覧（表示名）を返す
   - 観測可能な完了状態: create/delete ルートが存在せず、ログイン済み list が 200 になる

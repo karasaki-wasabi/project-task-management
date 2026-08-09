@@ -1,79 +1,113 @@
-// RED: userRoutes does not exist yet (task 2.1). Route registration into the
-// main app.ts happens in task 10.3 (design.md "Integration"); this test
-// mounts the plugin on a throwaway Fastify instance to verify the module in
-// isolation, matching the pattern task 10.3 will reuse.
 import { randomUUID } from "node:crypto";
-import Fastify from "fastify";
 import { afterAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
-import { userRoutes } from "./user.routes.js";
+import { buildApp } from "../../app.js";
+import { createUserData } from "../../test/user.fixture.js";
 
 async function hardDelete(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   await db.$executeRawUnsafe(`DELETE FROM users WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
-async function buildTestApp() {
-  const app = Fastify({ logger: false });
-  await app.register(userRoutes);
-  return app;
+function buildTestApp() {
+  return buildApp({
+    DATABASE_URL: "mysql://user:pass@localhost:3306/db",
+    SESSION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    CORS_ORIGIN: "http://localhost:3001",
+    COOKIE_SECURE: false,
+    LOG_LEVEL: "error",
+    PORT: 3000,
+  });
 }
 
 afterAll(async () => {
   await db.$disconnect();
 });
 
-describe("userRoutes (task 2.1)", () => {
-  it("POST /api/users creates a user and returns 201", async () => {
+describe("userRoutes", () => {
+  it("requires login and lists accounts as PublicUser values", async () => {
     const app = await buildTestApp();
-    const name = `route-${randomUUID()}`;
+    const data = createUserData(`候補-${randomUUID()}`);
+    const candidate = await db.user.create({ data });
+    const registerResponse = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: {
+        email: `route-${randomUUID()}@example.test`,
+        name: "ログイン利用者",
+        password: "password-123",
+      },
+    });
+    const registered = registerResponse.json();
+    const setCookie = registerResponse.headers["set-cookie"];
+    const cookie = (Array.isArray(setCookie) ? setCookie : [setCookie])
+      .find((item) => item?.startsWith("session="))
+      ?.split(";")[0];
 
-    const response = await app.inject({ method: "POST", url: "/api/users", payload: { name } });
+    const unauthenticatedResponse = await app.inject({ method: "GET", url: "/api/users" });
+    expect(unauthenticatedResponse.statusCode).toBe(401);
 
-    expect(response.statusCode).toBe(201);
-    const body = response.json();
-    expect(body.name).toBe(name);
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/api/users",
+      headers: { cookie },
+    });
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json()).toContainEqual({
+      id: candidate.id,
+      email: data.email,
+      name: data.name,
+      createdAt: candidate.createdAt.toISOString(),
+      updatedAt: candidate.updatedAt.toISOString(),
+    });
+    expect(listResponse.json().find((user: { id: string }) => user.id === candidate.id)).not.toHaveProperty("passwordHash");
 
-    await hardDelete([body.id]);
+    await hardDelete([candidate.id, registered.id]);
     await app.close();
   });
 
-  it("POST /api/users returns 400 for an empty name", async () => {
+  it("does not register the legacy create and delete routes", async () => {
     const app = await buildTestApp();
+    const registerResponse = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: {
+        email: `removed-route-${randomUUID()}@example.test`,
+        name: "ルート確認利用者",
+        password: "password-123",
+      },
+    });
+    const registered = registerResponse.json();
+    const setCookie = registerResponse.headers["set-cookie"];
+    const cookie = (Array.isArray(setCookie) ? setCookie : [setCookie])
+      .find((item) => item?.startsWith("session="))
+      ?.split(";")[0];
+    const csrfResponse = await app.inject({
+      method: "GET",
+      url: "/api/auth/csrf",
+      headers: { cookie },
+    });
+    const csrfCookie = csrfResponse.headers["set-cookie"];
+    const authenticatedCookie =
+      (Array.isArray(csrfCookie) ? csrfCookie : [csrfCookie]).find((item) => item?.startsWith("session="))?.split(";")[0] ??
+      cookie;
+    const headers = { cookie: authenticatedCookie, "csrf-token": csrfResponse.json().token };
 
-    const response = await app.inject({ method: "POST", url: "/api/users", payload: { name: "" } });
-
-    expect(response.statusCode).toBe(400);
-    await app.close();
-  });
-
-  it("GET /api/users lists users and excludes deleted ones", async () => {
-    const app = await buildTestApp();
-    const created = await app.inject({
+    const createResponse = await app.inject({
       method: "POST",
       url: "/api/users",
-      payload: { name: `list-${randomUUID()}` },
+      payload: { name: `legacy-${randomUUID()}` },
+      headers,
     });
-    const { id } = created.json();
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/users/${randomUUID()}`,
+      headers,
+    });
 
-    const deleteResponse = await app.inject({ method: "DELETE", url: `/api/users/${id}` });
-    expect(deleteResponse.statusCode).toBe(204);
-
-    const listResponse = await app.inject({ method: "GET", url: "/api/users" });
-    expect(listResponse.statusCode).toBe(200);
-    const list = listResponse.json();
-    expect(list.some((u: { id: string }) => u.id === id)).toBe(false);
-
-    await hardDelete([id]);
-    await app.close();
-  });
-
-  it("DELETE /api/users/:id returns 404 for a non-existent user", async () => {
-    const app = await buildTestApp();
-
-    const response = await app.inject({ method: "DELETE", url: `/api/users/${randomUUID()}` });
-
-    expect(response.statusCode).toBe(404);
+    expect(createResponse.statusCode).toBe(404);
+    expect(deleteResponse.statusCode).toBe(404);
+    await hardDelete([registered.id]);
     await app.close();
   });
 });

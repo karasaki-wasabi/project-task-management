@@ -12,8 +12,6 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { setBusinessEventLoggerForTests } from "./business-event-logger.js";
 import { createLogger } from "./logger.js";
 import { db } from "./db.js";
-import { createUserData } from "../test/user.fixture.js";
-import { usersService } from "../modules/users/user.service.js";
 import { tasksService } from "../modules/tasks/task.service.js";
 import { caseService } from "../modules/cases/case.service.js";
 import { holidaysService } from "../modules/holidays/holiday.service.js";
@@ -111,22 +109,6 @@ describe("business event logging (task 10.2)", () => {
       if (caseId) await db.$executeRawUnsafe("DELETE FROM tasks WHERE case_id = ?", caseId);
       if (caseId) await db.$executeRawUnsafe("DELETE FROM cases WHERE id = ?", caseId);
       if (templateId) await db.$executeRawUnsafe("DELETE FROM recurring_task_templates WHERE id = ?", templateId);
-    }
-  });
-
-  it("logs user.deleted with the deleted user's id", async () => {
-    let userId: string | undefined;
-    try {
-      const user = await db.user.create({ data: createUserData(`u-${randomUUID()}`) });
-      userId = user.id;
-
-      await usersService.delete(user.id, "req-user-delete");
-
-      const logged = findEvent("user.deleted");
-      expect(logged?.entityId).toBe(user.id);
-      expect(logged?.requestId).toBe("req-user-delete");
-    } finally {
-      if (userId) await db.$executeRawUnsafe("DELETE FROM users WHERE id = ?", userId);
     }
   });
 
