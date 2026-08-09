@@ -1,9 +1,9 @@
 <!--
-  Workspaces / member management page (tasks 6.3–6.4, design.md pages/workspaces,
-  Requirements 2.3, 3.1, 3.2, 4.1–4.5). Empty state when no current workspace
-  (create CTA → WorkspaceCreateModal); otherwise color-dot heading + member list
-  + inline expandable search panel for adding members. Settings / delete shells
-  remain for later tasks 6.5–6.6.
+  Workspaces / member management page (tasks 6.3–6.5, design.md pages/workspaces,
+  Requirements 2.3, 3.1, 3.2, 4.1–4.5, 6.1–6.3). Empty state when no current
+  workspace (create CTA → WorkspaceCreateModal); otherwise color-dot heading +
+  member list + inline expandable search panel for adding members + settings
+  modal. Delete shell remains for later task 6.6.
 
   Explicit Vue / composable imports so vitest can mount without Nuxt
   auto-import runtime (same approach as WorkspaceCreateModal.vue).
@@ -28,6 +28,7 @@ const members = ref<WorkspaceUserSummary[]>([]);
 const loaded = ref(false);
 const error = ref<string | null>(null);
 const createOpen = ref(false);
+const settingsOpen = ref(false);
 let loadSeq = 0;
 
 const addPanelOpen = ref(false);
@@ -158,6 +159,19 @@ async function onCreated() {
   createOpen.value = false;
 }
 
+function openSettings() {
+  settingsOpen.value = true;
+}
+
+function closeSettings() {
+  settingsOpen.value = false;
+}
+
+function onSettingsSaved() {
+  // WorkspaceSettingsModal already updateWorkspace()+refresh(); heading reacts to workspaces.
+  settingsOpen.value = false;
+}
+
 function toggleAddPanel() {
   addPanelOpen.value = !addPanelOpen.value;
   if (!addPanelOpen.value) {
@@ -224,6 +238,7 @@ async function onAddMember(userId: string) {
           <button
             type="button"
             class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            @click="openSettings"
           >
             設定
           </button>
@@ -325,5 +340,11 @@ async function onAddMember(userId: string) {
     </template>
 
     <WorkspaceCreateModal :open="createOpen" @close="closeCreate" @created="onCreated" />
+    <WorkspaceSettingsModal
+      :open="settingsOpen"
+      :workspace="currentWorkspace"
+      @close="closeSettings"
+      @saved="onSettingsSaved"
+    />
   </div>
 </template>

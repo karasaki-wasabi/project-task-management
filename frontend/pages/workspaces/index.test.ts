@@ -3,7 +3,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
-import type { Workspace, WorkspaceUserSummary } from "../../composables/useApiClient";
+import {
+  WORKSPACE_COLORS,
+  type Workspace,
+  type WorkspaceUserSummary,
+} from "../../composables/useApiClient";
 import WorkspacesPage from "./index.vue";
 
 const refresh = vi.fn();
@@ -43,6 +47,27 @@ const WorkspaceCreateModalStub = defineComponent({
   template: `
     <div v-if="open" data-testid="workspace-create-modal">
       <button type="button" data-testid="modal-close" @click="$emit('close')">close</button>
+    </div>
+  `,
+});
+
+const WorkspaceSettingsModalStub = defineComponent({
+  name: "WorkspaceSettingsModal",
+  props: {
+    open: { type: Boolean, required: true },
+    workspace: { type: Object, required: false, default: null },
+  },
+  emits: ["close", "saved"],
+  template: `
+    <div v-if="open" data-testid="workspace-settings-modal">
+      <button type="button" data-testid="settings-modal-close" @click="$emit('close')">close</button>
+      <button
+        type="button"
+        data-testid="settings-modal-save"
+        @click="$emit('saved', workspace); $emit('close')"
+      >
+        save
+      </button>
     </div>
   `,
 });
@@ -88,6 +113,7 @@ function mountPage() {
     global: {
       stubs: {
         WorkspaceCreateModal: WorkspaceCreateModalStub,
+        WorkspaceSettingsModal: WorkspaceSettingsModalStub,
         ErrorAlert: ErrorAlertStub,
       },
     },
@@ -199,6 +225,70 @@ describe("WorkspacesPage (task 6.3)", () => {
     await wrapper.get('[data-testid="modal-close"]').trigger("click");
     await nextTick();
     expect(wrapper.find('[data-testid="workspace-create-modal"]').exists()).toBe(false);
+  });
+});
+
+describe("WorkspacesPage settings modal (task 6.5)", () => {
+  beforeEach(() => {
+    refresh.mockReset();
+    select.mockReset();
+    listWorkspaceMembers.mockReset();
+    searchAddableWorkspaceUsers.mockReset();
+    addWorkspaceMember.mockReset();
+    const ws = makeWorkspace();
+    currentId.value = ws.id;
+    workspaces.value = [ws];
+    refresh.mockResolvedValue(undefined);
+    listWorkspaceMembers.mockResolvedValue([makeMember()]);
+    searchAddableWorkspaceUsers.mockResolvedValue([]);
+    addWorkspaceMember.mockResolvedValue(makeMember());
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("「設定」で設定モーダルを開き閉じられる（Req 6.1）", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="workspace-settings-modal"]').exists()).toBe(false);
+
+    await buttonByText(wrapper, "設定").trigger("click");
+    await nextTick();
+
+    expect(wrapper.find('[data-testid="workspace-settings-modal"]').exists()).toBe(true);
+
+    await wrapper.get('[data-testid="settings-modal-close"]').trigger("click");
+    await nextTick();
+    expect(wrapper.find('[data-testid="workspace-settings-modal"]').exists()).toBe(false);
+  });
+
+  it("設定保存後に見出しの名前・色が更新される（Req 6.1, 6.3）", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="workspace-heading"]').text()).toContain("営業チーム");
+    expect(wrapper.get('[data-testid="workspace-color-dot"]').attributes("style") ?? "").toContain(
+      WORKSPACE_COLORS[0],
+    );
+
+    await buttonByText(wrapper, "設定").trigger("click");
+    await nextTick();
+
+    // Simulate WorkspaceSettingsModal save → refresh updating shared state.
+    workspaces.value = [
+      makeWorkspace({ name: "開発チーム", color: WORKSPACE_COLORS[1] }),
+    ];
+    await wrapper.get('[data-testid="settings-modal-save"]').trigger("click");
+    await nextTick();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="workspace-settings-modal"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="workspace-heading"]').text()).toContain("開発チーム");
+    expect(wrapper.get('[data-testid="workspace-color-dot"]').attributes("style") ?? "").toContain(
+      WORKSPACE_COLORS[1],
+    );
   });
 });
 
