@@ -129,7 +129,7 @@
   - _Requirements: 1.7, 2.1, 2.2, 2.4, 3.2, 3.4, 4.2, 4.4, 6.1, 6.2_
   - _Depends: 7.1_
 
-- [ ] 8. (P) steering を認証あり前提へ更新する
+- [x] 8. (P) steering を認証あり前提へ更新する
   - `product.md` / `tech.md` / `local-dev-pitfalls.md` から「認証なし・名前だけ User」前提を改め、アカウント登録と Cookie セッションがある前提にする
   - ワークスペース・RBAC・外部 IdP・機械用トークンは後続である旨を残す
   - CORS credentials と同一親ドメイン前提の注意を local-dev-pitfalls に追記する
@@ -145,3 +145,4 @@
 - 1.3: inject ヘルパは Cookie 名 `session`、CSRF ヘッダ `csrf-token`（プラグイン既定）。タスク3で同名を維持すること。
 - 実装中に別ブランチへ checkout されると auth ファイルが消えたように見える。user-auth ブランチで続行すること。
 - CSRF トークン取得後は Set-Cookie で session が更新される。inject/E2E では最新 Cookie を使うこと。
+- E2E は `E2E_BASE_URL` と `CORS_ORIGIN` を実際のフロント公開 URL（例: http://localhost:3401）に揃える。

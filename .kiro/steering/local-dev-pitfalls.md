@@ -9,28 +9,33 @@
 ## 既知の落とし穴と対処
 
 ### 1. CORS未設定
-SPAはブラウザから直接APIを呼ぶため、フロント/バックエンドが別オリジン(別ポート)である限りCORS設定が必須。未設定だと `net::ERR_FAILED`/`Failed to fetch` になるが、これは同一オリジンで動くcurl・`app.inject`・Vitestからは絶対に再現しない。
-→ `backend/src/app.ts` で `@fastify/cors` を `origin: true` で登録済み(認証なしの内部ツールという product.md の前提のもと、Originを許可リストではなく反映する方式)。新しいバックエンドを立てる場合も同様に必要。
+SPAはブラウザから直接 API を呼ぶため、フロント/バックエンドが別オリジン(別ポート)である限り CORS 設定が必須。Cookie セッションではさらに、ブラウザとサーバーの両方で資格情報を明示しなければ Cookie が送受信されない。未設定だと `net::ERR_FAILED`/`Failed to fetch`、またはログイン成功後も 401 になるが、これは同一オリジンで動く curl・`app.inject`・Vitestからは再現しない。
+→ `backend/src/app.ts` では `@fastify/cors` を `credentials: true`、`CORS_ORIGIN`で指定した許可 Origin として登録する。ワイルドカード(`*`)は credentials と併用できない。フロントエンドの API クライアントは `credentials: 'include'` を指定し、`CORS_ORIGIN`、`NUXT_PUBLIC_API_BASE_URL`、実際のフロント公開 URL を同じポートを含む Origin に揃えること。
 
-### 2. `docker-compose.yml` の環境変数配線漏れ
+### 2. Cookie セッションの親ドメインが分かれる
+ローカルでは `http://localhost:<frontend-port>` と `http://localhost:<backend-port>` のように、ポートが異なっても同じホスト名を使う。`SameSite=Lax`と `COOKIE_SECURE=false` で HTTP 開発環境の Cookie セッションを確認できる。片方だけを `127.0.0.1`、別の側を `localhost` にすると、同一サイトとして扱われず、CORS または Cookie の問題に見えるログイン状態の不整合が起きる。
+
+本番ではフロントエンドと API を同一親ドメイン配下に置く(例: `app.example.com` と `api.example.com`)。異なる eTLD+1 のドメイン間では Cookie の送信条件が不安定になり、CSRF 対策の前提も複雑になる。`COOKIE_SECURE=true`と HTTPS を必須にし、デプロイ先を決める際はこのドメイン構成を先に確認すること。
+
+### 3. `docker-compose.yml` の環境変数配線漏れ
 `docker-compose.yml` の各サービスの `environment:` に明示的に書かれていない環境変数は、たとえホスト側で `-e VAR=val docker compose up` としても**コンテナには一切渡らない**。フロントエンドが参照する `NUXT_PUBLIC_API_BASE_URL`(バックエンドの到達可能URL、`http://localhost:${BACKEND_PORT:-3000}` — SPAはブラウザから叩くのでdocker内部のサービス名ではなくホスト公開ポートを指す必要がある)がこれで一度配線漏れした。
 → 新しい環境変数をフロント/バックエンドに追加する際は、必ず `docker-compose.yml` の `environment:` ブロックに明示し、`docker compose exec <service> printenv | grep <VAR>` で実際に渡っているか確認すること。
 
-### 3. Nuxtのサブディレクトリコンポーネント自動登録プレフィックス
+### 4. Nuxtのサブディレクトリコンポーネント自動登録プレフィックス
 Nuxtはデフォルトで `components/tasks/TaskNode.vue` を `<TasksTaskNode>` という**ディレクトリ名プレフィックス付き**のタグ名で自動登録する。テンプレート内で `<TaskNode>` のように素の名前で参照すると、ビルド・型チェックのエラーにはならず、未知のネイティブ要素として無音でレンダリングされ(Vue devモードのコンソール警告のみ)、機能が完全に壊れる。
 → `frontend/nuxt.config.ts` に `components: [{ path: "~/components", pathPrefix: false }]` を設定済み。サブディレクトリにコンポーネントを追加する際は、この設定があるおかげでディレクトリ名を気にせず素の名前で参照してよい。
 
-### 4. vue-draggable-plus(Sortable.js)の`chosenClass`/`ghostClass`/`dragClass`に複数クラス文字列を渡す
+### 5. vue-draggable-plus(Sortable.js)の`chosenClass`/`ghostClass`/`dragClass`に複数クラス文字列を渡す
 Sortableはこれらのオプション値をそのまま`element.classList.add(value)`に渡す。Tailwindの複数ユーティリティクラスをスペース区切りの1文字列として渡すと(例: `"opacity-50 outline outline-2"`)、`classList.add()`はスペースを含む値で例外を投げる。ビルド・型チェックはすべて通過し、コンソールにもエラーが出ない場合がある一方、ドラッグ操作自体が完全に無反応になる(`chosen`/`ghost`状態が一切適用されないため、Sortableの内部初期化が失敗する)。実ブラウザで`page.on("pageerror", ...)`を仕込んで初めて例外が可視化された。
 → 各状態(`chosen`/`ghost`/`drag-clone`等)ごとに、複数のTailwindユーティリティをまとめた単一のカスタムCSSクラス(例: `.task-card-chosen { opacity: 0.5; ... }`)を`frontend/assets/css/main.css`に定義し、Sortableへは常に単一トークンのクラス名のみを渡すこと。
 
 同様の理由で、ドラッグ中に追従するフォールバック要素(`fallback-class`で指定)には`transition: transform`を含むクラスを付与しないこと。SortableはドラッグClone要素の位置を毎フレーム`transform: translate3d(...)`で直接更新するが、Tailwindの`transition`ユーティリティ(`transform`を含む)が付いていると、この更新がイージングされてカーソルに追従できなくなる(見た目には「ゆっくりずれてついてくる」程度の症状になり、不具合と気づきにくい)。
 
-### 5. Prismaマイグレーション再生成時、スキーマ言語で表現しきれないDB機能がdriftとしてDROPされる
+### 6. Prismaマイグレーション再生成時、スキーマ言語で表現しきれないDB機能がdriftとしてDROPされる
 MySQLの`STORED GENERATED COLUMN`+`UNIQUE INDEX`のように、Prismaスキーマ言語では`Unsupported("...")`としてしか表現できないDB機能を含むテーブルがある場合、そのテーブルに対して`prisma migrate dev`を再実行すると、Prismaは生成列や関連インデックスを「スキーマに存在しないdrift」と誤検知し、それらをDROPする追従マイグレーションを自動生成してしまう。`prisma validate`・型チェックのどちらでも検出できず、マイグレーション適用後に実DBを見て初めて「意図せずインデックスが消えた」形で発覚する。
 → スキーマ言語で完全に表現できないDB機能を含むマイグレーションを再生成・再適用する際は、`prisma migrate dev`(diffを取ってから適用)ではなく`prisma migrate deploy`(ハンドエディット済みのSQLファイルをdiffなしでそのまま適用)を使うこと。該当のマイグレーションSQLファイル自体にも、この経緯と`migrate dev`を使ってはいけない旨のコメントを残し、次にスキーマを変更する人が同じ罠を踏まないようにする。
 
-### 6. Vueの`<Transition>`は祖先の`v-if`では効かない
+### 7. Vueの`<Transition>`は祖先の`v-if`では効かない
 `<Transition>`でラップした要素の表示/非表示を、`Transition`自身ではなくその**祖先**(`<template v-if="...">`など、`Transition`コンポーネントごと存在するかどうかを切り替える箇所)の条件分岐で制御すると、条件が`false`になった瞬間に`Transition`コンポーネント自体が丸ごと破棄され、`leave`のトランジションクラスが一切適用されないまま要素が即座に消える。ビルド・型チェック・(DOM環境のない)ユニットテストのいずれでも検出できず、実ブラウザで実際に閉じる操作をして初めて「アニメーションが効いていない」と気づく。
 → `v-if`は`Transition`が直接ラップする要素**自身**に付けること(`<Transition><div v-if="open">...</div></Transition>`)。背景クリック用のオーバーレイなど、アニメーションが不要な兄弟要素は別に`v-if`を付けて構わない。
 
