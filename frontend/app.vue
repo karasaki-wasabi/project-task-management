@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen bg-slate-50 font-sans text-slate-900">
-    <header class="sticky top-0 z-10 border-b border-slate-200 bg-white">
+    <header v-if="!isAuthScreen" class="sticky top-0 z-10 border-b border-slate-200 bg-white">
       <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
         <strong class="text-sm font-semibold tracking-tight text-slate-900">Task Delivery Management</strong>
         <nav class="flex flex-wrap gap-x-1 gap-y-1 text-sm">
@@ -40,14 +40,20 @@
          flagged. Route-level page.meta.fullWidth now lets a page opt out of
          the cap on main itself instead — no viewport units anywhere, and
          every element on an opted-in page shares one width. -->
-    <main class="px-4 py-6 sm:px-6" :class="{ 'mx-auto max-w-6xl': !route.meta.fullWidth }">
+    <main
+      :class="isAuthScreen
+        ? 'p-0'
+        : ['px-4 py-6 sm:px-6', { 'mx-auto max-w-6xl': !route.meta.fullWidth }]"
+    >
       <NuxtPage />
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import { navLinks } from "./app.helpers";
 
 const route = useRoute();
+const isAuthScreen = computed(() => route.path === "/login" || route.path === "/register");
 </script>
