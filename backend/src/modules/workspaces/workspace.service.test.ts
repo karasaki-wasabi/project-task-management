@@ -373,3 +373,272 @@ describe("workspaceService.list (task 3.1)", () => {
     await hardDelete("users", [owner.id, outsider.id]);
   });
 });
+
+describe("workspaceService.isMember (task 3.2)", () => {
+  it("returns true for members and false for non-members", async () => {
+    const creator = await db.user.create({ data: createUserData(`ws-svc-im-c-${randomUUID()}`) });
+    const outsider = await db.user.create({ data: createUserData(`ws-svc-im-x-${randomUUID()}`) });
+    const workspace = await workspaceService.create({
+      name: `im-${randomUUID()}`,
+      createdByUserId: creator.id,
+    });
+
+    expect(await workspaceService.isMember(workspace.id, creator.id)).toBe(true);
+    expect(await workspaceService.isMember(workspace.id, outsider.id)).toBe(false);
+
+    const members = await db.workspaceMember.findMany({ where: { workspaceId: workspace.id } });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspace.id]);
+    await hardDelete("users", [creator.id, outsider.id]);
+  });
+});
+
+describe("workspaceService.listMembers (task 3.2)", () => {
+  it("returns all members for a requesting member (Requirement 3.1)", async () => {
+    const creator = await db.user.create({ data: createUserData(`ws-svc-lm-c-${randomUUID()}`) });
+    const teammate = await db.user.create({ data: createUserData(`ws-svc-lm-m-${randomUUID()}`) });
+    const workspace = await workspaceService.create({
+      name: `lm-${randomUUID()}`,
+      createdByUserId: creator.id,
+    });
+    await workspaceRepository.createMember({ workspaceId: workspace.id, userId: teammate.id });
+
+    const listed = await workspaceService.listMembers(workspace.id, creator.id);
+    expect(listed).toEqual(
+      expect.arrayContaining([
+        { userId: creator.id, name: creator.name, email: creator.email },
+        { userId: teammate.id, name: teammate.name, email: teammate.email },
+      ]),
+    );
+    expect(listed).toHaveLength(2);
+
+    const members = await db.workspaceMember.findMany({ where: { workspaceId: workspace.id } });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspace.id]);
+    await hardDelete("users", [creator.id, teammate.id]);
+  });
+
+  it("rejects a non-member with 403 (Requirement 3.2)", async () => {
+    const creator = await db.user.create({ data: createUserData(`ws-svc-lm-forb-${randomUUID()}`) });
+    const outsider = await db.user.create({ data: createUserData(`ws-svc-lm-out-${randomUUID()}`) });
+    const workspace = await workspaceService.create({
+      name: `lm-forb-${randomUUID()}`,
+      createdByUserId: creator.id,
+    });
+
+    await expect(workspaceService.listMembers(workspace.id, outsider.id)).rejects.toMatchObject({
+      statusCode: 403,
+    });
+
+    const members = await db.workspaceMember.findMany({ where: { workspaceId: workspace.id } });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspace.id]);
+    await hardDelete("users", [creator.id, outsider.id]);
+  });
+
+  it("returns 404 when the workspace does not exist", async () => {
+    const user = await db.user.create({ data: createUserData(`ws-svc-lm-404-${randomUUID()}`) });
+
+    await expect(workspaceService.listMembers(randomUUID(), user.id)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+
+    await hardDelete("users", [user.id]);
+  });
+});
+
+describe("workspaceService.searchAddableUsers (task 3.2)", () => {
+  it("excludes existing members from search results (Requirement 4.2)", async () => {
+    const marker = randomUUID().slice(0, 8);
+    const creator = await db.user.create({
+      data: createUserData(`ws-svc-search-c-${marker}`),
+    });
+    const member = await db.user.create({
+      data: {
+        ...createUserData(`ws-svc-search-m-${marker}`),
+        name: `MemberAlpha-${marker}`,
+        email: `member-alpha-${marker}@example.test`,
+      },
+    });
+    const candidate = await db.user.create({
+      data: {
+        ...createUserData(`ws-svc-search-cand-${marker}`),
+        name: `CandidateAlpha-${marker}`,
+        email: `candidate-alpha-${marker}@example.test`,
+      },
+    });
+    const workspace = await workspaceService.create({
+      name: `search-${marker}`,
+      createdByUserId: creator.id,
+    });
+    await workspaceRepository.createMember({ workspaceId: workspace.id, userId: member.id });
+
+    const results = await workspaceService.searchAddableUsers(
+      workspace.id,
+      `Alpha-${marker}`,
+      creator.id,
+    );
+
+    expect(results.some((u) => u.userId === member.id)).toBe(false);
+    expect(results).toContainEqual({
+      userId: candidate.id,
+      name: candidate.name,
+      email: candidate.email,
+    });
+
+    const members = await db.workspaceMember.findMany({ where: { workspaceId: workspace.id } });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspace.id]);
+    await hardDelete("users", [creator.id, member.id, candidate.id]);
+  });
+
+  it("returns an empty array for empty or whitespace-only query", async () => {
+    const creator = await db.user.create({ data: createUserData(`ws-svc-search-empty-${randomUUID()}`) });
+    const workspace = await workspaceService.create({
+      name: `search-empty-${randomUUID()}`,
+      createdByUserId: creator.id,
+    });
+
+    expect(await workspaceService.searchAddableUsers(workspace.id, "", creator.id)).toEqual([]);
+    expect(await workspaceService.searchAddableUsers(workspace.id, "   ", creator.id)).toEqual([]);
+
+    const members = await db.workspaceMember.findMany({ where: { workspaceId: workspace.id } });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspace.id]);
+    await hardDelete("users", [creator.id]);
+  });
+
+  it("rejects a non-member search with 403 (Requirement 4.5)", async () => {
+    const creator = await db.user.create({ data: createUserData(`ws-svc-search-forb-${randomUUID()}`) });
+    const outsider = await db.user.create({ data: createUserData(`ws-svc-search-out-${randomUUID()}`) });
+    const workspace = await workspaceService.create({
+      name: `search-forb-${randomUUID()}`,
+      createdByUserId: creator.id,
+    });
+
+    await expect(
+      workspaceService.searchAddableUsers(workspace.id, "anyone", outsider.id),
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    const members = await db.workspaceMember.findMany({ where: { workspaceId: workspace.id } });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspace.id]);
+    await hardDelete("users", [creator.id, outsider.id]);
+  });
+});
+
+describe("workspaceService.addMember (task 3.2)", () => {
+  it("adds a user as a member (Requirement 4.3, 4.4)", async () => {
+    const creator = await db.user.create({ data: createUserData(`ws-svc-add-c-${randomUUID()}`) });
+    const target = await db.user.create({ data: createUserData(`ws-svc-add-t-${randomUUID()}`) });
+    const workspace = await workspaceService.create({
+      name: `add-${randomUUID()}`,
+      createdByUserId: creator.id,
+    });
+
+    const added = await workspaceService.addMember(workspace.id, target.id, creator.id);
+
+    expect(added).toEqual({
+      userId: target.id,
+      name: target.name,
+      email: target.email,
+    });
+    expect(await workspaceService.isMember(workspace.id, target.id)).toBe(true);
+
+    const members = await db.workspaceMember.findMany({ where: { workspaceId: workspace.id } });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspace.id]);
+    await hardDelete("users", [creator.id, target.id]);
+  });
+
+  it("rejects duplicate membership with 400", async () => {
+    const creator = await db.user.create({ data: createUserData(`ws-svc-add-dup-${randomUUID()}`) });
+    const target = await db.user.create({ data: createUserData(`ws-svc-add-dup-t-${randomUUID()}`) });
+    const workspace = await workspaceService.create({
+      name: `add-dup-${randomUUID()}`,
+      createdByUserId: creator.id,
+    });
+    await workspaceService.addMember(workspace.id, target.id, creator.id);
+
+    await expect(
+      workspaceService.addMember(workspace.id, target.id, creator.id),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    const members = await db.workspaceMember.findMany({ where: { workspaceId: workspace.id } });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspace.id]);
+    await hardDelete("users", [creator.id, target.id]);
+  });
+
+  it("rejects a non-member add with 403 (Requirement 4.5)", async () => {
+    const creator = await db.user.create({ data: createUserData(`ws-svc-add-forb-${randomUUID()}`) });
+    const outsider = await db.user.create({ data: createUserData(`ws-svc-add-out-${randomUUID()}`) });
+    const target = await db.user.create({ data: createUserData(`ws-svc-add-tgt-${randomUUID()}`) });
+    const workspace = await workspaceService.create({
+      name: `add-forb-${randomUUID()}`,
+      createdByUserId: creator.id,
+    });
+
+    await expect(
+      workspaceService.addMember(workspace.id, target.id, outsider.id),
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    expect(await workspaceService.isMember(workspace.id, target.id)).toBe(false);
+
+    const members = await db.workspaceMember.findMany({ where: { workspaceId: workspace.id } });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspace.id]);
+    await hardDelete("users", [creator.id, outsider.id, target.id]);
+  });
+
+  it("logs workspace.member_added with requestId and entityId", async () => {
+    const creator = await db.user.create({ data: createUserData(`ws-svc-log-add-${randomUUID()}`) });
+    const target = await db.user.create({ data: createUserData(`ws-svc-log-add-t-${randomUUID()}`) });
+    const workspace = await workspaceService.create({
+      name: `log-add-${randomUUID()}`,
+      createdByUserId: creator.id,
+    });
+    const requestId = `req-ws-member-add-${randomUUID()}`;
+
+    await workspaceService.addMember(workspace.id, target.id, creator.id, requestId);
+
+    const logged = findEvent("workspace.member_added");
+    expect(logged?.entityId).toBe(workspace.id);
+    expect(logged?.requestId).toBe(requestId);
+
+    const members = await db.workspaceMember.findMany({ where: { workspaceId: workspace.id } });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspace.id]);
+    await hardDelete("users", [creator.id, target.id]);
+  });
+});

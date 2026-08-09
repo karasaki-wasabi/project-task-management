@@ -1,12 +1,24 @@
-// WorkspaceService: create / settings update / creator-only delete / list
-// (task 3.1, design.md "Backend/workspaces" WorkspaceService; Requirements
-// 1.1, 1.2, 5.1, 5.2, 6.1, 6.2, 6.3, 6.4, 6.5, 7.1, 7.2, 7.3).
+// WorkspaceService: create / settings update / creator-only delete / list /
+// member list / search-add / isMember (tasks 3.1–3.2, design.md
+// "Backend/workspaces" WorkspaceService; Requirements 1.1, 1.2, 3.1, 3.2,
+// 4.2–4.5, 5.1, 5.2, 6.1–6.5, 7.1–7.3).
 import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { db } from "../../shared/db.js";
 import { badRequest, forbidden, notFound } from "../../shared/http-errors.js";
+import { usersService } from "../users/user.service.js";
 import { workspaceRepository } from "./workspace.repository.js";
-import { WORKSPACE_COLORS, type Workspace, type WorkspaceColor } from "./workspace.types.js";
+import {
+  WORKSPACE_COLORS,
+  type Workspace,
+  type WorkspaceColor,
+  type WorkspaceUserSummary,
+} from "./workspace.types.js";
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
 
 function assertNonEmptyName(name: string): string {
   const trimmed = name.trim();
@@ -110,5 +122,92 @@ export const workspaceService = {
 
   list(userId: string): Promise<Workspace[]> {
     return workspaceRepository.listByUserId(userId);
+  },
+
+  isMember(id: string, userId: string): Promise<boolean> {
+    return workspaceRepository.isMember(id, userId);
+  },
+
+  async listMembers(id: string, requestingUserId: string): Promise<WorkspaceUserSummary[]> {
+    const current = await workspaceRepository.findById(id);
+    if (!current) {
+      throw notFound(`Workspace not found: ${id}`);
+    }
+
+    if (!(await workspaceRepository.isMember(id, requestingUserId))) {
+      throw forbidden("Only workspace members can list members");
+    }
+
+    return workspaceRepository.listMembers(id);
+  },
+
+  async searchAddableUsers(
+    id: string,
+    query: string,
+    requestingUserId: string,
+  ): Promise<WorkspaceUserSummary[]> {
+    const current = await workspaceRepository.findById(id);
+    if (!current) {
+      throw notFound(`Workspace not found: ${id}`);
+    }
+
+    if (!(await workspaceRepository.isMember(id, requestingUserId))) {
+      throw forbidden("Only workspace members can search addable users");
+    }
+
+    if (query.trim().length === 0) {
+      return [];
+    }
+
+    const [users, members] = await Promise.all([
+      usersService.search(query),
+      workspaceRepository.listMembers(id),
+    ]);
+    const memberIds = new Set(members.map((m) => m.userId));
+
+    return users
+      .filter((user) => !memberIds.has(user.id))
+      .map((user) => ({
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+      }));
+  },
+
+  async addMember(
+    id: string,
+    targetUserId: string,
+    requestingUserId: string,
+    requestId: string = randomUUID(),
+  ): Promise<WorkspaceUserSummary> {
+    const current = await workspaceRepository.findById(id);
+    if (!current) {
+      throw notFound(`Workspace not found: ${id}`);
+    }
+
+    if (!(await workspaceRepository.isMember(id, requestingUserId))) {
+      throw forbidden("Only workspace members can add members");
+    }
+
+    try {
+      await workspaceRepository.createMember({ workspaceId: id, userId: targetUserId });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw badRequest("User is already a member of this workspace");
+      }
+      throw error;
+    }
+
+    const members = await workspaceRepository.listMembers(id);
+    const added = members.find((m) => m.userId === targetUserId);
+    if (!added) {
+      throw notFound(`User not found: ${targetUserId}`);
+    }
+
+    businessEventLogger.logBusinessEvent("workspace.member_added", {
+      requestId,
+      entityId: id,
+    });
+    return added;
   },
 };
