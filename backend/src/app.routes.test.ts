@@ -122,6 +122,7 @@ describe("app.ts route registration (task 10.3)", () => {
     ["/api/throughput?periodType=week&rangeCount=1", "GET"],
     ["/api/recurring-templates", "GET"],
     ["/api/development-stages", "GET"],
+    ["/api/workspaces", "GET"],
   ] as const)("%s is registered and reachable (not 404)", async (url, method) => {
     const { app } = buildTestApp();
 
