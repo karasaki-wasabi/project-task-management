@@ -11,7 +11,7 @@
 - steering 更新は Req 7（本スペック Boundary）
 
 - [ ] 1. Foundation: 依存・環境変数・スキーマ・テストヘルパ
-- [ ] 1.1 認証用バックエンド依存と環境変数を追加する
+- [x] 1.1 認証用バックエンド依存と環境変数を追加する
   - `@fastify/cookie`・`@fastify/secure-session`・`@fastify/csrf-protection`・`@node-rs/argon2` を追加する
   - `SESSION_SECRET`・`CORS_ORIGIN`・`COOKIE_SECURE` を env 検証と docker-compose に追加する
   - 観測可能な完了状態: バックエンドが新環境変数なしでは起動時検証に失敗し、値ありでは依存を resolve して起動できる

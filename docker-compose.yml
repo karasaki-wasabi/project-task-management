@@ -26,6 +26,9 @@ services:
       NODE_ENV: development
       LOG_LEVEL: ${LOG_LEVEL:-debug}
       DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
+      SESSION_SECRET: ${SESSION_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      COOKIE_SECURE: ${COOKIE_SECURE}
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     volumes:

@@ -51,6 +51,9 @@ jobs:
     env:
       DATABASE_URL: mysql://app_user:ci_app_pw@127.0.0.1:3306/task_delivery_management
       LOG_LEVEL: info
+      SESSION_SECRET: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      CORS_ORIGIN: http://localhost:3001
+      COOKIE_SECURE: "false"
     defaults:
       run:
         working-directory: backend
