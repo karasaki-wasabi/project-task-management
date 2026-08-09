@@ -14,6 +14,11 @@ import WorkspacesPage from "./index.vue";
 
 const refresh = vi.fn();
 const select = vi.fn();
+const clearCurrentIf = vi.fn((id: string) => {
+  if (currentId.value === id) {
+    currentId.value = null;
+  }
+});
 const currentId = ref<string | null>(null);
 const workspaces = ref<Workspace[]>([]);
 const authUser = ref<PublicUser | null>(null);
@@ -29,6 +34,7 @@ vi.mock("../../composables/useCurrentWorkspace", () => ({
     currentId,
     refresh,
     select,
+    clearCurrentIf,
   }),
 }));
 
@@ -162,6 +168,7 @@ describe("WorkspacesPage (task 6.3)", () => {
   beforeEach(() => {
     refresh.mockReset();
     select.mockReset();
+    clearCurrentIf.mockClear();
     listWorkspaceMembers.mockReset();
     searchAddableWorkspaceUsers.mockReset();
     addWorkspaceMember.mockReset();
@@ -529,6 +536,7 @@ describe("WorkspacesPage creator-only delete (task 6.6)", () => {
     await flushPromises();
 
     expect(deleteWorkspace).toHaveBeenCalledWith("ws-1");
+    expect(clearCurrentIf).toHaveBeenCalledWith("ws-1");
     expect(refresh).toHaveBeenCalled();
     expect(currentId.value).toBeNull();
     expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(true);

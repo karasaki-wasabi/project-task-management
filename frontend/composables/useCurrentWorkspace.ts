@@ -43,10 +43,25 @@ export function useCurrentWorkspace() {
     persist(id);
   }
 
+  /** Clear the current selection and localStorage (Requirement 7.4). */
+  function clearCurrent(): void {
+    currentId.value = null;
+    persist(null);
+  }
+
+  /** Clear only when the deleted/stale workspace is the current selection. */
+  function clearCurrentIf(id: string): void {
+    if (currentId.value === id) {
+      clearCurrent();
+    }
+  }
+
   return {
     workspaces,
     currentId,
     refresh,
     select,
+    clearCurrent,
+    clearCurrentIf,
   };
 }

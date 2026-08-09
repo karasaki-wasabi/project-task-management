@@ -133,4 +133,34 @@ describe("useCurrentWorkspace (task 5.1)", () => {
 
     expect(second.currentId.value).toBe("ws-2");
   });
+
+  it("clearCurrent は選択と localStorage を解除する", async () => {
+    api.listWorkspaces.mockResolvedValue(workspaces);
+    const { useCurrentWorkspace } = await import("./useCurrentWorkspace");
+    const current = useCurrentWorkspace();
+    await current.refresh();
+    current.select("ws-2");
+
+    current.clearCurrent();
+
+    expect(current.currentId.value).toBeNull();
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith("currentWorkspaceId");
+  });
+
+  it("clearCurrentIf は一致する ID のときだけ解除する", async () => {
+    api.listWorkspaces.mockResolvedValue(workspaces);
+    const { useCurrentWorkspace } = await import("./useCurrentWorkspace");
+    const current = useCurrentWorkspace();
+    await current.refresh();
+    current.select("ws-2");
+    localStorageMock.removeItem.mockClear();
+
+    current.clearCurrentIf("ws-1");
+    expect(current.currentId.value).toBe("ws-2");
+    expect(localStorageMock.removeItem).not.toHaveBeenCalled();
+
+    current.clearCurrentIf("ws-2");
+    expect(current.currentId.value).toBeNull();
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith("currentWorkspaceId");
+  });
 });

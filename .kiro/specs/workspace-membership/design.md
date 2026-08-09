@@ -48,7 +48,7 @@
 ### Revalidation Triggers
 - `WorkspaceService.isMember` / `Workspace` / `WorkspaceMember`の型・シグネチャ変更 → `workspace-resource-scope`が再利用前提を置いているため要再検証
 - `user-auth`の`requireUser` / `request.currentUser`の形状変更 → 本仕様の全ルートが影響を受ける
-- `GET /api/users`への`q`パラメータ追加は、`user-auth`のdesign.mdが明記する Revalidation Trigger「`User`が担当者以外の意味をさらに持つ変更」に該当する → `user-auth`は`implementation-complete`済み。検索追加の実装着手時に`user-auth`側の再検証要否を確認し、必要なら依頼する
+- `GET /api/users`への`q`パラメータ追加は、`user-auth`のdesign.mdが明記する Revalidation Trigger「`User`が担当者以外の意味をさらに持つ変更」に該当する → 実装済み（`PublicUser[]`維持・`q`なし後方互換）。`user-auth` design.md にも後続拡張として追記済み
 - 現在ワークスペースの永続化方式をクライアント側からサーバー側に変更する場合 → API契約・データモデルの追加が発生するため設計再検討
 
 ## Architecture
@@ -197,7 +197,7 @@ sequenceDiagram
     WS->>DB: トランザクション: WorkspaceMember一括削除 → Workspace削除（いずれもsoft-delete拡張経由）
     WS-->>API: 204
   end
-  U->>U: 現在ワークスペース選択がidと一致していればlocalStorageから解除（Requirement 2の空状態へ）
+  U->>U: 現在ワークスペース選択がidと一致していればclearCurrentIf → refresh（残存があれば先頭へ再選択、0件なら空状態）
 ```
 
 ## Requirements Traceability
@@ -341,12 +341,13 @@ export interface WorkspaceService {
 **Responsibilities & Constraints**
 - 初期化時に`listWorkspaces()`を呼び、`localStorage`の`currentWorkspaceId`が所属一覧に含まれるか検証する。含まれなければ（未設定・削除済み・非所属）先頭のワークスペースに自動選択、所属が0件なら空状態として扱う
 - `select(id)`は所属一覧に含まれるIDのみ受け付け、`localStorage`へ書き込み後リアクティブ状態を更新する
+- `clearCurrent()` / `clearCurrentIf(id)`で現在選択と`localStorage`を解除する。ページやコンポーネントが`localStorage`キーを直接操作しない。Requirement 7.4 では削除直後に`clearCurrentIf`したうえで`refresh()`する。残存所属があれば先頭へ再選択、0件なら空状態のまま
 - サーバー側には「現在ワークスペース」を表す概念を一切持たない。Requirement 2.4（非所属ワークスペースを現在ワークスペースとして指定できない）は、本compasableが所属一覧外のIDを拒否することに加え、`/api/workspaces/:id/...`系エンドポイントが呼び出しごとに`isMember`を検証することで二重に担保される（クライアント側の選択表示のみに依存しない）
 
 **Contracts**: State [x]
 
 ##### State Management
-- State model: `{ workspaces: Workspace[]; currentId: string | null }`（`ref`/`reactive`。既存ページの「local ref + `useApiClient`直呼び」パターンを踏襲し、専用の状態管理ライブラリは追加しない）
+- State model: `{ workspaces: Workspace[]; currentId: string | null }`（Nuxtの`useState`でヘッダー`WorkspaceSwitcher`と`/workspaces`ページが同一状態を共有する。専用の状態管理ライブラリは追加しない）
 - Persistence & consistency: `localStorage['currentWorkspaceId']`。同一ブラウザ内のタブ間でのみ有効、複数デバイス間の同期は行わない（Non-Goal）
 - Concurrency strategy: 単純な最終書き込み優先。同時編集の高度な整合性は対象外（個人〜小規模チーム利用が前提）
 
@@ -355,13 +356,14 @@ export interface WorkspaceService {
 - Presentational + `useCurrentWorkspace`/`useApiClient`の呼び出しのみで新規の状態境界を持たないため summary row + 実装ノートに留める
 - `WorkspaceSwitcher`: ヘッダーに表示。`useCurrentWorkspace`が空状態の場合は淡色の「ワークスペース未選択」表示（モック02準拠）。ドロップダウンから作成モーダル・`/workspaces`への遷移を提供
 - `WorkspaceCreateModal`: `createWorkspace()`成功後、返された新規`Workspace.id`で`useCurrentWorkspace().select(id)`を呼び、作成直後にそのワークスペースを現在ワークスペースへ切り替える（Requirement 1.3）。呼び出し元（`WorkspaceSwitcher`のドロップダウン／`/workspaces`の空状態CTA）によらずこの処理を行う
-- `pages/workspaces/index.vue`: `useCurrentWorkspace().currentId`が`null`なら空状態カード（モック02の「ワークスペースがありません」相当、案件一覧ページではなく本ページに実装）を表示。存在すればメンバー一覧・検索追加パネル（モック05、インライン展開）・設定/削除操作（作成者のみ削除ボタン表示）を表示
+- `pages/workspaces/index.vue`: `useCurrentWorkspace().currentId`が`null`なら空状態カード（モック02の「ワークスペースがありません」相当、案件一覧ページではなく本ページに実装）を表示。空状態の説明文は本仕様のスコープ（メンバーシップと現在選択）に留め、案件・タスク共有への言及はしない（それらは`workspace-resource-scope`）。存在すればメンバー一覧・検索追加パネル（モック05、インライン展開）・設定/削除操作（作成者のみ削除ボタン表示）を表示
 
 ## Data Models
 
 ### Domain Model
 - Aggregate: `Workspace`（ルート）。`WorkspaceMember`は`Workspace`の子エンティティで、`Workspace`削除時にライフサイクルが連動する
 - Invariants: `WorkspaceMember`は`(workspaceId, userId)`一意。`Workspace.color`は固定6値のいずれか。ロール属性を持たない
+- 一意制約とsoft-delete: `@@unique([workspaceId, userId])`は論理削除行も対象に含む。本仕様はメンバー個別削除をNon-Goalとするため実害はないが、将来「脱退／再追加」を論理削除のまま実装すると、再追加がDB一意制約違反（P2002）で失敗する。後続でメンバー削除を入れる場合は、部分一意（active行のみ）や再追加時の復元方針を別途決めること
 
 ### Physical Data Model
 
@@ -413,10 +415,11 @@ workspaceMemberships WorkspaceMember[]
 
 ### Error Strategy
 - 入力検証エラー（空名・不正な色）: 400
-- 対象ワークスペースの非メンバーによるアクセス: 403（新設`forbidden`）
-- 削除操作を作成者以外が実行: 403
-- 存在しない・削除済みのワークスペースID: 404
+- 対象ワークスペースの非メンバーによる閲覧・検索・追加・設定変更: 403（`forbidden`）
+- 削除を作成者以外のメンバーが実行: 403
+- 削除を非所属が実行、または存在しない／削除済みのワークスペースID: 404
 - メンバー追加時の一意制約違反（競合）: 400
+- メンバー追加で存在しない`userId`を指定: 404（Prisma FK `P2003`を変換）
 
 ### Error Categories and Responses
 | 状況 | status | 内容 |
@@ -424,9 +427,10 @@ workspaceMemberships WorkspaceMember[]
 | ワークスペース名が空 | 400 | `name is required` |
 | 識別色が固定6色に含まれない | 400 | `color must be one of the allowed values` |
 | 対象ワークスペースのメンバーでない（閲覧・検索・追加・設定変更） | 403 | `forbidden` |
-| 削除を作成者以外が実行 | 403 | `forbidden` |
-| ワークスペースが存在しない／削除済み | 404 | `notFound` |
+| 削除を作成者以外のメンバーが実行 | 403 | `forbidden` |
+| ワークスペースが存在しない／削除済み、または削除を非所属が実行 | 404 | `notFound` |
 | 既にメンバーのユーザーを追加しようとした（競合） | 400 | `badRequest` |
+| 存在しないユーザーをメンバー追加しようとした | 404 | `User not found` |
 
 ### Monitoring
 - `workspace.created` / `workspace.updated` / `workspace.deleted` / `workspace.member_added`を`businessEventLogger`経由で記録する（既存`cases`/`users`モジュールと同じ粒度）
@@ -442,7 +446,7 @@ workspaceMemberships WorkspaceMember[]
 
 ### Integration Tests
 - `POST /api/workspaces` → `GET /api/workspaces/:id/members`で作成者が含まれることを確認
-- 各ワークスペーススコープAPI（members/searchable-users/members POST/PATCH/DELETE）を非メンバーで呼ぶと403になること
+- メンバー一覧・検索・追加・設定更新を非メンバーで呼ぶと403、削除を非所属で呼ぶと404、削除を非作成者メンバーで呼ぶと403になること（Error Handlingどおり。一律403ではない）
 - ワークスペース削除後、`GET /api/workspaces`にその後もう含まれないこと（soft-delete）
 - `GET /api/users`が`q`なしでは従来どおり全件を返すこと（後方互換）
 

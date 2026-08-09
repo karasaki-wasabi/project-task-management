@@ -133,8 +133,8 @@ backend/src/
 │   ├── auth.guard.ts               # requireUser preHandler
 │   └── auth.*.test.ts
 └── modules/users/
-    ├── user.routes.ts              # GET /api/users のみ（要ログイン）
-    ├── user.service.ts             # list のみ。create/delete 削除
+    ├── user.routes.ts              # GET /api/users（要ログイン。任意 q は後続 workspace-membership が追加）
+    ├── user.service.ts             # list のみ（本仕様時点）。create/delete 削除
     └── user.types.ts               # PublicUser
 
 frontend/
@@ -333,6 +333,7 @@ interface AuthService {
 | Requirements | 4.2, 4.4 |
 
 - `GET /api/users` → `PublicUser[]`（password なし）。要ログイン
+- 本仕様時点の契約はクエリなしの全件一覧。後続の`workspace-membership`が任意の`q`（表示名・メールの部分一致検索）を追加する。`q`未指定時は従来どおり全件を返し後方互換を維持する（Revalidation Trigger「User が担当者以外の意味をさらに持つ変更」に該当）
 - `POST /api/users` と `DELETE /api/users/:id` は削除する
 - User の削除 API は本仕様で設けない。共有 soft-delete 拡張の既定により `deletedAt` 非 null 行は一覧に出ない（通常は削除経路がないため該当行は発生しない）
 
@@ -424,7 +425,7 @@ model User {
 - logout 後 401
 - CSRF なしの変更系が拒否されること（設定した例外を除く）
 - `POST /api/users` / `DELETE /api/users/:id` が存在しないこと
-- `GET /api/users` は要ログインで一覧を返す
+- `GET /api/users` は要ログインで一覧を返す（後続で任意`q`が付いても、未指定時の全件返却は維持すること）
 
 ### E2E / UI Tests
 

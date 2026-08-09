@@ -25,7 +25,7 @@ import {
 
 const api = useApiClient();
 const { user } = useAuth();
-const { workspaces, currentId, refresh } = useCurrentWorkspace();
+const { workspaces, currentId, refresh, clearCurrentIf } = useCurrentWorkspace();
 
 const members = ref<WorkspaceUserSummary[]>([]);
 const loaded = ref(false);
@@ -229,11 +229,8 @@ async function confirmDelete() {
   try {
     const deletedId = workspace.id;
     await api.deleteWorkspace(deletedId);
-    // Requirement 7.4 / design.md: clear current selection (and localStorage) when matched.
-    if (currentId.value === deletedId) {
-      currentId.value = null;
-      localStorage.removeItem("currentWorkspaceId");
-    }
+    // Requirement 7.4: clear via useCurrentWorkspace so localStorage stays behind the composable boundary.
+    clearCurrentIf(deletedId);
     await refresh();
     deleteConfirmOpen.value = false;
   } catch (e) {
@@ -253,7 +250,7 @@ async function confirmDelete() {
     >
       <h1 class="text-xl font-semibold tracking-tight text-slate-900">ワークスペースがありません</h1>
       <p class="mt-2 text-sm text-slate-600">
-        最初のワークスペースを作成すると、メンバーを招待して案件やタスクを共有できます。
+        最初のワークスペースを作成すると、メンバーを追加して共有の可視境界を持てます。
       </p>
       <button
         type="button"

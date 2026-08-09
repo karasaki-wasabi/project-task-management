@@ -84,4 +84,4 @@
 1. When ワークスペースの作成者がワークスペース削除を実行した場合、the Workspace Service shall 当該ワークスペースおよびそのメンバーシップを削除する
 2. If 作成者以外のメンバーがワークスペース削除を試みた場合、the Workspace Service shall 拒否する
 3. If ログインユーザーが自身の所属していないワークスペースの削除を試みた場合、the Workspace Service shall 拒否する
-4. When 操作者の現在ワークスペースが削除された場合、the Workspace Service shall 現在ワークスペースの選択を解除する
+4. When 操作者の現在ワークスペースが削除された場合、the Workspace Service shall 当該ワークスペースの選択を解除する。所属が他に残っていれば先頭の所属ワークスペースへ再選択し、所属が0件なら空状態とする
