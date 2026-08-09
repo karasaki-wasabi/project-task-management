@@ -92,7 +92,7 @@
   - _Boundary: useApiClient_
   - _Depends: 3_
 
-- [ ] 6.2 (P) useAuth と auth.global middleware を実装する
+- [x] 6.2 (P) useAuth と auth.global middleware を実装する
   - 公開は `/login` `/register`。他は me 成功必須、失敗時は描画せず `/login?redirect=`
   - ログイン済みで login/register に来たら `/` へ
   - 観測可能な完了状態: 未ログインで `/tasks` がログインへ飛び、ログイン後に業務画面へ入れる
