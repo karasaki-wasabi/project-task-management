@@ -8,12 +8,8 @@ describe("navLinks (task 7.2, Requirement 7.4)", () => {
     expect(targets).toContain("/holidays");
   });
 
-  it("places 休日マスタ after ユーザー (research.md / claude design)", () => {
-    const usersIndex = navLinks.findIndex((link) => link.to === "/users");
-    const holidaysIndex = navLinks.findIndex((link) => link.to === "/holidays");
-    expect(usersIndex).toBeGreaterThanOrEqual(0);
-    expect(holidaysIndex).toBe(usersIndex + 1);
-    expect(navLinks[holidaysIndex]?.label).toBe("休日マスタ");
+  it("廃止した /users をナビゲーションに含めない", () => {
+    expect(navLinks.map((link) => link.to)).not.toContain("/users");
   });
 
   it("keeps 繰り返し設定 labeled and pointed at /recurrence", () => {

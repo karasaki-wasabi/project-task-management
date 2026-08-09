@@ -32,7 +32,14 @@ describe("global error handling + access logging (task 1.5)", () => {
     const { stream, lines } = collectingStream();
     const logger = createLogger("debug", stream);
     const app = buildApp(
-      { DATABASE_URL: "mysql://user:pass@localhost:3306/db", LOG_LEVEL: "debug", PORT: 3000 },
+      {
+        DATABASE_URL: "mysql://user:pass@localhost:3306/db",
+        SESSION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        CORS_ORIGIN: "http://localhost:3001",
+        COOKIE_SECURE: false,
+        LOG_LEVEL: "debug",
+        PORT: 3000,
+      },
       logger,
     );
     app.get("/boom", async () => {
@@ -59,7 +66,14 @@ describe("global error handling + access logging (task 1.5)", () => {
     const { stream, lines } = collectingStream();
     const logger = createLogger("debug", stream);
     const app = buildApp(
-      { DATABASE_URL: "mysql://user:pass@localhost:3306/db", LOG_LEVEL: "debug", PORT: 3000 },
+      {
+        DATABASE_URL: "mysql://user:pass@localhost:3306/db",
+        SESSION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        CORS_ORIGIN: "http://localhost:3001",
+        COOKIE_SECURE: false,
+        LOG_LEVEL: "debug",
+        PORT: 3000,
+      },
       logger,
     );
 

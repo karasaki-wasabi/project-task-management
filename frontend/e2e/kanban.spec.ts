@@ -6,11 +6,12 @@
 // cursor-follow/reflow animation (user feedback round 2), which drives
 // real mouse events rather than native HTML5 drag events, so
 // `locator.dragTo()` no longer exercises the real interaction.
-import { expect, test } from "@playwright/test";
+import { expect, registerUser, test } from "./fixtures";
 import { dragCardTo } from "./drag";
 
 test("moving an unassigned task's card between kanban columns prompts for an assignee, then moves without prompting again (Requirements 12.1, 12.6, 12.7)", async ({
   page,
+  request,
 }) => {
   const suffix = Date.now();
   const stageAName = `e2e-stage-a-${suffix}`;
@@ -18,10 +19,7 @@ test("moving an unassigned task's card between kanban columns prompts for an ass
   const userName = `e2e-kanban-user-${suffix}`;
   const taskTitle = `e2e-kanban-task-${suffix}`;
 
-  await page.goto("/users");
-  await page.getByPlaceholder("ユーザー名").fill(userName);
-  await page.getByRole("button", { name: "登録" }).click();
-  await expect(page.locator("tr", { hasText: userName })).toBeVisible();
+  await registerUser(request, userName);
 
   await page.goto("/tasks");
   await page.getByPlaceholder("タスク名").fill(taskTitle);

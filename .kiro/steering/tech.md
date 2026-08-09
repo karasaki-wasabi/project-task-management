@@ -4,7 +4,7 @@
 
 Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロントエンド + Fastify 5バックエンドAPI + MySQL。ローカル開発はDocker Compose(`mysql`/`backend`/`frontend`の3サービス)、本番はAWSへ段階的にデプロイする前提(下記「Key Technical Decisions」参照)。
 
-フロントエンドはブラウザから直接バックエンドAPIへリクエストする構成のため、CORSやポートの環境変数配線が必須([[local-dev-pitfalls]]参照)。
+フロントエンドはブラウザから直接バックエンドAPIへ Cookie を伴うリクエストを送る構成のため、CORS credentials、許可 Origin、ポートの環境変数配線が必須([[local-dev-pitfalls]]参照)。
 
 ## Core Technologies
 
@@ -17,7 +17,7 @@ Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロント
 
 - **Prisma**: スキーマは`backend/src/prisma/schema.prisma`。共通のソフトデリート/監査カラム規約はPrisma Client Extension(`shared/soft-delete.repository.ts`)で一律適用する(各Serviceが個別に気にする必要がない設計)
 - **pino** + **pino-pretty**: 構造化ログ。開発時のみpretty-print、テスト/本番はJSON行出力
-- **@fastify/cors**: SPAからのクロスオリジンAPI呼び出しを許可(`origin: true`で反映、認証なし内部ツールという前提での判断)
+- **@fastify/cors**: SPAからの Cookie 付きクロスオリジン API 呼び出しを許可。`credentials: true`と`CORS_ORIGIN`で指定する許可 Origin を組み合わせ、`*`は使用しない
 - **@playwright/test**: E2Eテスト。design.md/research.mdに指定がなく実装時に導入した判断(Nuxt/Vueでの標準的選択)
 - **vue-draggable-plus**(Sortable.jsラッパー): カンバンボードのドラッグ&ドロップ(持ち上げ・カーソル追従・ドロップ先レーンのハイライト)に使用。ブラウザ標準HTML5 Drag and Drop APIではこの種のアニメーションが実現できず、kanban-ux-redesignスペックの実装後改訂として導入([[local-dev-pitfalls]]に、ハマりやすい落とし穴を記録)
 
@@ -58,7 +58,8 @@ Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロント
   1. S3 + CloudFront(フロント)、App Runner または Elastic Beanstalk(バックエンド)
   2. RDS導入、環境分離(dev/prod)
   3. ECS Fargate + Terraform/CDK による IaC 化、GitHub ActionsからのCD
-- 認証機能は現時点でOut of Boundary。`User`は名前のみの軽量レコードで、担当者選択リストとしてのみ機能する(将来の認証導入は別スペックで扱い、その際`User`の意味が変わる点はdesign.mdのRevalidation Triggersに明記済み)
+- 認証は公開自己登録と HttpOnly Cookie セッションによるログイン／ログアウトを提供する。`User`はメールアドレス・表示名・パスワードハッシュを持つアカウントであり、担当者候補は登録済みアカウントから供給する
+- ワークスペースによる可視範囲の分離、RBAC、招待リンク・メール送信、OAuth／外部 IdP、JWT／MCP 等の機械用トークンは後続仕様で扱う
 - ログはCloudWatch Logsへのstdout/stderr転送までを対象とし、専用のログ集約・可視化基盤(ELK/Datadog等)は構築しない
 
 ### デプロイ範囲: 当面はStage 1まで(2026-07時点の決定)

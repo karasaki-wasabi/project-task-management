@@ -15,7 +15,7 @@
 // This file intentionally only makes negative assertions ("X is not
 // present"). Positive assertions for the replacement calendar feature live
 // in calendar.spec.ts (task 6.1) and are out of this file's scope.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("old /events path does not render the former timeline UI (Requirement 7.2)", async ({ page }) => {
   await page.goto("/events");

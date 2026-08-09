@@ -49,7 +49,8 @@
 //   calendar's own (possibly-overflowed) day cell to reach the edit form.
 // - Active templates registered in the marker test are stopped afterward
 //   so later case creates in this file are not contaminated.
-import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
+import type { APIRequestContext, Locator, Page } from "@playwright/test";
+import { csrfHeaders, expect, registerUser, test } from "./fixtures";
 
 // Backend URL for setup/teardown helpers. Mirrors events-removed.spec.ts;
 // this project's compose publishes the API on BACKEND_PORT (see .env).
@@ -75,16 +76,13 @@ async function purgePollutingCalendarCases(request: APIRequestContext) {
     const openEnded = item.startDate === null || item.endDate === null;
     const e2eCalendarFixture = item.name.startsWith("e2e-cal-");
     if (!openEnded && !e2eCalendarFixture) continue;
-    const del = await request.delete(`${API_BASE_URL}/api/cases/${item.id}`);
+    const del = await request.delete(`${API_BASE_URL}/api/cases/${item.id}`, { headers: await csrfHeaders(request) });
     expect([204, 404]).toContain(del.status());
   }
 }
 
-async function createUser(page: Page, name: string) {
-  await page.goto("/users");
-  await page.getByPlaceholder("ユーザー名").fill(name);
-  await page.getByRole("button", { name: "登録" }).click();
-  await expect(page.locator("tr", { hasText: name })).toBeVisible();
+async function createUser(request: APIRequestContext, name: string) {
+  await registerUser(request, name);
 }
 
 type ApiTemplate = {
@@ -118,7 +116,9 @@ async function stopTemplatesByTitle(request: APIRequestContext, titles: string[]
   const wanted = new Set(titles);
   for (const template of templates) {
     if (!wanted.has(template.title) || !template.isActive) continue;
-    const stop = await request.post(`${API_BASE_URL}/api/recurring-templates/${template.id}/stop`);
+    const stop = await request.post(`${API_BASE_URL}/api/recurring-templates/${template.id}/stop`, {
+      headers: await csrfHeaders(request),
+    });
     expect([204, 200, 404]).toContain(stop.status());
   }
 }
@@ -268,6 +268,7 @@ async function createCaseFixture(
   opts: { startDate?: string; endDate?: string } = {},
 ) {
   const response = await request.post(`${API_BASE_URL}/api/cases`, {
+    headers: await csrfHeaders(request),
     data: {
       name,
       ...(opts.startDate ? { startDate: opts.startDate } : {}),
@@ -291,8 +292,8 @@ test("期限日を持つタスクの表示・開発段階バッジ・担当者�
   const noDateTaskTitle = `e2e-cal-nodate-${suffix}`;
   const seedCaseName = `e2e-cal-seed-${suffix}`;
 
-  await createUser(page, userAName);
-  await createUser(page, userBName);
+  await createUser(request, userAName);
+  await createUser(request, userBName);
 
   // Requirement 2.2: a task with no scheduledDate is created (via the
   // ordinary /tasks form, which has no scheduledDate field at all) and
@@ -408,7 +409,7 @@ test("案件期間バー・片側日付・完了状態・詳細モーダル・�
   const noDateCaseName = `e2e-cal-case-nodate-${suffix}`;
   const filterUserName = `e2e-cal-case-filter-user-${suffix}`;
 
-  await createUser(page, filterUserName);
+  await createUser(request, filterUserName);
 
   const now = new Date();
   const currentLabel = monthLabel(now.getFullYear(), now.getMonth() + 1);
@@ -504,7 +505,7 @@ test("案件期間バー・片側日付・完了状態・詳細モーダル・�
   const listed = (await (await request.get(`${API_BASE_URL}/api/cases`)).json()) as ApiCase[];
   const point = listed.find((item) => item.name === pointCaseName);
   if (point) {
-    await request.delete(`${API_BASE_URL}/api/cases/${point.id}`);
+    await request.delete(`${API_BASE_URL}/api/cases/${point.id}`, { headers: await csrfHeaders(request) });
   }
 });
 

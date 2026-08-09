@@ -5,6 +5,7 @@
 // for both a success and a failure flow through the full app.
 import { Writable } from "node:stream";
 import { randomUUID } from "node:crypto";
+import type { InjectOptions } from "light-my-request";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 import { createLogger } from "./shared/logger.js";
@@ -29,15 +30,74 @@ function collectingStream() {
   return { stream, lines };
 }
 
+function withAuthenticatedInject(app: ReturnType<typeof buildApp>) {
+  const originalInject = app.inject.bind(app);
+  let auth: Promise<{ cookie: string; csrfToken: string; userId: string }> | undefined;
+
+  async function authenticate() {
+    auth ??= (async () => {
+      const registerResponse = await originalInject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: {
+          email: `app-routes-${randomUUID()}@example.test`,
+          name: "ルート検証",
+          password: "password-123",
+        },
+      });
+      const setCookie = registerResponse.headers["set-cookie"];
+      const cookie = (Array.isArray(setCookie) ? setCookie : [setCookie]).find((item) => item?.startsWith("session="))?.split(";")[0];
+      if (!cookie) throw new Error("session cookie was not set");
+
+      const csrfResponse = await originalInject({
+        method: "GET",
+        url: "/api/auth/csrf",
+        headers: { cookie },
+      });
+      const csrfSetCookie = csrfResponse.headers["set-cookie"];
+      const csrfCookie = (Array.isArray(csrfSetCookie) ? csrfSetCookie : [csrfSetCookie]).find((item) => item?.startsWith("session="))?.split(";")[0];
+      return { cookie: csrfCookie ?? cookie, csrfToken: csrfResponse.json().token, userId: registerResponse.json().id };
+    })();
+    return auth;
+  }
+
+  app.inject = (async (options: InjectOptions) => {
+    if (options.method === "OPTIONS" || options.url.startsWith("/api/auth/")) return originalInject(options);
+
+    const { cookie, csrfToken } = await authenticate();
+    return originalInject({
+      ...options,
+      headers: {
+        ...options.headers,
+        cookie: options.headers?.cookie ? `${options.headers.cookie}; ${cookie}` : cookie,
+        ...(options.method === "POST" || options.method === "PATCH" || options.method === "DELETE" ? { "csrf-token": csrfToken } : {}),
+      },
+    });
+  }) as typeof app.inject;
+
+  app.addHook("onClose", async () => {
+    const authenticated = await auth;
+    if (authenticated) await db.user.delete({ where: { id: authenticated.userId } });
+  });
+  return app;
+}
+
 function buildTestApp() {
   const { stream, lines } = collectingStream();
   const logger = createLogger("debug", stream);
   setBusinessEventLoggerForTests(logger);
   const app = buildApp(
-    { DATABASE_URL: "mysql://user:pass@localhost:3306/db", LOG_LEVEL: "debug", PORT: 3000 },
+    {
+      DATABASE_URL: "mysql://user:pass@localhost:3306/db",
+      SESSION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      CORS_ORIGIN: "http://localhost:3001",
+      COOKIE_SECURE: false,
+      LOG_LEVEL: "debug",
+      PORT: 3000,
+    },
     logger,
   );
-  return { app, lines };
+  return { app: withAuthenticatedInject(app), lines };
 }
 
 const createdCaseIds: string[] = [];
@@ -108,7 +168,7 @@ describe("app.ts route registration (task 10.3)", () => {
   it("the global error handler applies uniformly: a business HttpError from any module route returns its statusCode as JSON, not a raw 500", async () => {
     const { app } = buildTestApp();
 
-    const response = await app.inject({ method: "DELETE", url: `/api/users/${randomUUID()}` });
+    const response = await app.inject({ method: "DELETE", url: `/api/cases/${randomUUID()}` });
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toHaveProperty("error");
@@ -140,10 +200,10 @@ describe("app.ts route registration (task 10.3)", () => {
   it("a full failure flow (thrown HttpError -> global error handler) correlates access log + error log under the same requestId (Requirements 10.1, 10.3, 10.5)", async () => {
     const { app, lines } = buildTestApp();
 
-    const response = await app.inject({ method: "DELETE", url: `/api/users/${randomUUID()}` });
+    const response = await app.inject({ method: "DELETE", url: `/api/cases/${randomUUID()}` });
 
     expect(response.statusCode).toBe(404);
-    const accessLine = lines.find((l) => l.path?.toString().startsWith("/api/users/") && l.statusCode === 404);
+    const accessLine = lines.find((l) => l.path?.toString().startsWith("/api/cases/") && l.statusCode === 404);
     const errorLine = lines.find((l) => l.err !== undefined);
     expect(accessLine).toBeTruthy();
     expect(errorLine).toBeTruthy();
@@ -168,11 +228,11 @@ describe("app.ts CORS (found and fixed during task 11.x frontend integration)", 
     const response = await app.inject({
       method: "GET",
       url: "/api/users",
-      headers: { origin: "http://localhost:13021" },
+      headers: { origin: "http://localhost:3001" },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:13021");
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:3001");
 
     await app.close();
   });
@@ -184,14 +244,14 @@ describe("app.ts CORS (found and fixed during task 11.x frontend integration)", 
       method: "OPTIONS",
       url: "/api/users",
       headers: {
-        origin: "http://localhost:13021",
+        origin: "http://localhost:3001",
         "access-control-request-method": "POST",
         "access-control-request-headers": "content-type",
       },
     });
 
     expect(response.statusCode).toBeLessThan(300);
-    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:13021");
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:3001");
     expect(response.headers["access-control-allow-methods"]).toContain("POST");
 
     await app.close();

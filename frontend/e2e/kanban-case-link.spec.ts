@@ -13,7 +13,7 @@
 // seeding helper exists in this e2e/ directory). Requires the backend
 // (+MySQL) and frontend to already be running (`docker compose up`); see
 // playwright.config.ts.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 async function createTask(page: import("@playwright/test").Page, title: string) {
   await page.goto("/tasks");

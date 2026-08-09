@@ -8,13 +8,17 @@
 
 ### バックエンドモジュール
 **Location**: `backend/src/modules/<domain>/`
-**Purpose**: 1ドメイン(tasks, cases, holidays, throughput, recurrence, users, client-errors, development-stages など)につき1ディレクトリ。以下4ファイルの組み合わせが基本形
+**Purpose**: 1ドメイン(auth, tasks, cases, holidays, throughput, recurrence, users, client-errors, development-stages など)につき1ディレクトリ。以下4ファイルの組み合わせが基本形
 - `<domain>.types.ts` — ドメイン型・入力型・エラー型(Prisma生成型を`import type`で再エクスポートすることが多い)
 - `<domain>.repository.ts` — Prisma経由のデータアクセス(ソフトデリートは`shared/soft-delete.repository.ts`のPrisma Client Extensionが自動適用するため、repository側で明示的に気にする必要はない)
 - `<domain>.service.ts` — 業務ロジック。エラーは`HttpError`をthrowするのが基本形(`TasksService`のみ一部`Result<T, E>`パターンを併用、[[error-handling]]参照)
 - `<domain>.routes.ts` — Fastifyプラグインとしてのルート定義。Zodスキーマでリクエスト検証し、単体で(アプリ全体を組み立てずに)テスト可能な形にする
 
 **Example**: `backend/src/modules/tasks/{task.types,task.repository,task.service,task.routes}.ts`
+
+`auth` は登録・ログイン・ログアウト・現在ユーザー・CSRF・`requireUser` ガードを所有する。業務ハンドラは Cookie 実装詳細に触れず、付与された `currentUser`(PublicUser)のみを参照する。
+
+`users` はログイン必須の担当者候補一覧(`GET /api/users`)に縮退する。アカウント作成・削除は `auth` 側の責務であり、`POST /api/users` と `DELETE /api/users/:id` は提供しない。
 
 ### バックエンド共有コード
 **Location**: `backend/src/shared/`
@@ -32,9 +36,15 @@
 **Location**: `frontend/components/<domain>/`, `frontend/composables/`
 **Purpose**: 複数ページで再利用するUI部品(例: `components/tasks/TaskNode.vue`の再帰階層表示、`components/users/AssigneeFilter.vue`)とロジック(`useApiClient.ts`がバックエンドAPIへの唯一のHTTP境界、`useErrorReportRateLimit.ts`のような純粋関数の抽出)。`nuxt.config.ts`で`components: [{ path: "~/components", pathPrefix: false }]`を設定しているため、サブディレクトリのコンポーネントもディレクトリ名プレフィックスなしで`<ComponentName>`のまま参照できる([[local-dev-pitfalls]]参照)
 
+認証状態は `composables/useAuth.ts` が共有する。`useApiClient.ts` は `credentials: 'include'` と CSRF ヘッダ付与を担い、ページから直接 Cookie／CSRF を扱わない。
+
+### フロントエンド認証ミドルウェア
+**Location**: `frontend/middleware/auth.global.ts`
+**Purpose**: `/login`・`/register` 以外の業務ルートを要ログインにする。未ログイン時は業務内容を描画せず `/login?redirect=` へ誘導する。ログイン済みで認証画面へ来た場合は `/` へ戻す。
+
 ### フロントエンドE2E
 **Location**: `frontend/e2e/*.spec.ts`
-**Purpose**: Playwright。`vitest.config.ts`で`test.exclude`により通常のVitest実行からは除外される([[testing]]参照)
+**Purpose**: Playwright。`vitest.config.ts`で`test.exclude`により通常のVitest実行からは除外される([[testing]]参照)。認証済み状態は `frontend/e2e/fixtures.ts` の登録＋ログイン共有 fixture を使う。
 
 ## Naming Conventions
 
@@ -57,7 +67,10 @@ import { tasksService } from "./task.service.js";
   - `routes.ts` → `service.ts` → `repository.ts`の一方向
   - 他モジュールへ依存する場合はそのモジュールの`service`公開インターフェース経由のみ(例: `cases`→`recurrence`、`recurrence`→`holidays`/`tasks`)で、内部実装やPrismaクエリへ直接アクセスしない
 - 境界(Boundary)の遵守
-  - 新しいタスクを実装する際は、design.mdの`Boundary Commitments`とtasks.mdの`_Boundary:_`注記を確認し、他ドメインの責務を無断で肩代わりしない(例: 通知配信・認証・外部連携はOut of Boundary)
+  - 新しいタスクを実装する際は、design.mdの`Boundary Commitments`とtasks.mdの`_Boundary:_`注記を確認し、他ドメインの責務を無断で肩代わりしない
+  - 例
+    - 通知配信・外部 IdP・ワークスペース所属判定・機械用トークンは、当該仕様の Out of Boundary であれば肩代わりしない
+    - セッション発行や `requireUser` は `auth` モジュールの責務であり、業務モジュールが Cookie 実装詳細に依存しない
 - フロントエンドのAPI境界
   - `frontend/composables/useApiClient.ts`が唯一のHTTPクライアント
   - ページ/コンポーネントから直接`$fetch`/`fetch`を呼ばない(例外: `plugins/error-reporter.client.ts`のエラー通報のみ、設計上の意図的な例外)

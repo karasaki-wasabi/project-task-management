@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
+import { createUserData } from "../../test/user.fixture.js";
 import { tasksService } from "./task.service.js";
 
 async function hardDeleteTasks(ids: string[]): Promise<void> {
@@ -166,8 +167,8 @@ describe("tasksService (task 3.1)", () => {
   });
 
   it("updates assigneeUserId, overwriting an existing assignee (Requirement 7.2)", async () => {
-    const originalAssignee = await db.user.create({ data: { name: `orig-${randomUUID()}` } });
-    const newAssignee = await db.user.create({ data: { name: `new-${randomUUID()}` } });
+    const originalAssignee = await db.user.create({ data: createUserData(`orig-${randomUUID()}`) });
+    const newAssignee = await db.user.create({ data: createUserData(`new-${randomUUID()}`) });
     const created = await tasksService.create({
       title: "assign me",
       priority: "low",
@@ -216,7 +217,7 @@ describe("tasksService (task 3.1)", () => {
 
   it("filters the list by caseId and assigneeUserId (Requirement 7.2)", async () => {
     const caseRecord = await db.case.create({ data: { name: `c-${randomUUID()}`, endDate: new Date() } });
-    const user = await db.user.create({ data: { name: `u-${randomUUID()}` } });
+    const user = await db.user.create({ data: createUserData(`u-${randomUUID()}`) });
 
     const matching = await tasksService.create({
       title: "matches filter",
@@ -464,7 +465,7 @@ describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
   it("sets the assignee when the task is currently unassigned (Requirement 12.7)", async () => {
     const created = await tasksService.create({ title: "unassigned task", priority: "low" });
     if (!created.ok) throw new Error("setup failed");
-    const user = await db.user.create({ data: { name: `assignee-${randomUUID()}` } });
+    const user = await db.user.create({ data: createUserData(`assignee-${randomUUID()}`) });
     const stage = await db.developmentStage.create({ data: { name: `stage-${randomUUID()}`, order: 0 } });
 
     const result = await tasksService.updateDevelopmentStage(created.value.id, stage.id, user.id);
@@ -479,8 +480,8 @@ describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
   });
 
   it("does not overwrite the assignee when the task already has one (Requirement 12.8)", async () => {
-    const originalAssignee = await db.user.create({ data: { name: `original-${randomUUID()}` } });
-    const otherUser = await db.user.create({ data: { name: `other-${randomUUID()}` } });
+    const originalAssignee = await db.user.create({ data: createUserData(`original-${randomUUID()}`) });
+    const otherUser = await db.user.create({ data: createUserData(`other-${randomUUID()}`) });
     const created = await tasksService.create({
       title: "already assigned task",
       priority: "low",
