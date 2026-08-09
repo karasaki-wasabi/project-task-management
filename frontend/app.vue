@@ -27,6 +27,17 @@
             </a>
           </NuxtLink>
         </nav>
+        <div class="ml-auto flex items-center gap-3 text-sm">
+          <span class="max-w-32 truncate text-slate-600 sm:max-w-none">{{ user?.name }}</span>
+          <span class="h-5 border-l border-slate-200"></span>
+          <button
+            type="button"
+            class="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 font-medium text-slate-700 hover:bg-slate-50"
+            @click="handleLogout"
+          >
+            ログアウト
+          </button>
+        </div>
       </div>
     </header>
     <!-- User feedback: the kanban board previously broke itself out of this
@@ -45,15 +56,29 @@
         ? 'p-0'
         : ['px-4 py-6 sm:px-6', { 'mx-auto max-w-6xl': !route.meta.fullWidth }]"
     >
+      <ErrorAlert v-if="logoutError" :message="logoutError" />
       <NuxtPage />
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { navLinks } from "./app.helpers";
 
 const route = useRoute();
+const { user, logout } = useAuth();
 const isAuthScreen = computed(() => route.path === "/login" || route.path === "/register");
+const logoutError = ref<string | null>(null);
+
+async function handleLogout() {
+  logoutError.value = null;
+
+  try {
+    await logout();
+    await navigateTo("/login");
+  } catch (error) {
+    logoutError.value = error instanceof Error ? error.message : String(error);
+  }
+}
 </script>
