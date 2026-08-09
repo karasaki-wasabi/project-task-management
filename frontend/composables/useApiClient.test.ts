@@ -215,3 +215,93 @@ describe("useApiClient recurrence + case templateOperations contract (task 5.1)"
     });
   });
 });
+
+describe("useApiClient workspace contract (task 5.1)", () => {
+  it("exposes Workspace types and workspace API methods", () => {
+    expect(clientSource).toMatch(/export const WORKSPACE_COLORS/);
+    expect(clientSource).toMatch(/export type WorkspaceColor/);
+    expect(clientSource).toMatch(/export interface Workspace\b/);
+    expect(clientSource).toMatch(/export interface WorkspaceUserSummary/);
+    expect(clientSource).toMatch(/listWorkspaces/);
+    expect(clientSource).toMatch(/createWorkspace/);
+    expect(clientSource).toMatch(/updateWorkspace/);
+    expect(clientSource).toMatch(/deleteWorkspace/);
+    expect(clientSource).toMatch(/listWorkspaceMembers/);
+    expect(clientSource).toMatch(/searchAddableWorkspaceUsers/);
+    expect(clientSource).toMatch(/addWorkspaceMember/);
+  });
+
+  it("listWorkspaces GETs /api/workspaces", async () => {
+    const api = useApiClient();
+    await api.listWorkspaces();
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/workspaces", {
+      credentials: "include",
+    });
+  });
+
+  it("createWorkspace POSTs { name } to /api/workspaces", async () => {
+    const api = useApiClient();
+    await api.createWorkspace({ name: "Team" });
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/workspaces", {
+      method: "POST",
+      body: { name: "Team" },
+      credentials: "include",
+    });
+  });
+
+  it("updateWorkspace PATCHes name/color and deleteWorkspace DELETEs", async () => {
+    const api = useApiClient();
+    await api.updateWorkspace("ws-1", { name: "Renamed" });
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/workspaces/ws-1", {
+      method: "PATCH",
+      body: { name: "Renamed" },
+      credentials: "include",
+    });
+
+    fetchMock.mockClear();
+    await api.deleteWorkspace("ws-1");
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/workspaces/ws-1", {
+      method: "DELETE",
+      credentials: "include",
+    });
+  });
+
+  it("member endpoints call members and searchable-users contracts", async () => {
+    const api = useApiClient();
+
+    await api.listWorkspaceMembers("ws-1");
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/workspaces/ws-1/members", {
+      credentials: "include",
+    });
+
+    fetchMock.mockClear();
+    await api.searchAddableWorkspaceUsers("ws-1", "alice");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://backend:3000/api/workspaces/ws-1/searchable-users",
+      { query: { q: "alice" }, credentials: "include" },
+    );
+
+    fetchMock.mockClear();
+    await api.addWorkspaceMember("ws-1", "user-2");
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/workspaces/ws-1/members", {
+      method: "POST",
+      body: { userId: "user-2" },
+      credentials: "include",
+    });
+  });
+
+  it("listUsers accepts optional q query for search", async () => {
+    const api = useApiClient();
+    await api.listUsers();
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/users", {
+      credentials: "include",
+    });
+
+    fetchMock.mockClear();
+    await api.listUsers("bob");
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/users", {
+      query: { q: "bob" },
+      credentials: "include",
+    });
+  });
+});
