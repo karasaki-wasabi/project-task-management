@@ -10,7 +10,7 @@
 - `deletedAt`は本コードベース共通のsoft-delete拡張を機能させるため両モデルに必須（design.md参照）
 
 - [ ] 1. Foundation: スキーマ・共有エラー・型定義
-- [ ] 1.1 Workspace／WorkspaceMemberのデータモデルを追加してマイグレーションする
+- [x] 1.1 Workspace／WorkspaceMemberのデータモデルを追加してマイグレーションする
   - `Workspace`（名前・識別色・作成者）と`WorkspaceMember`（`(workspaceId, userId)`一意な所属関係）を追加する
   - `User`へ`createdWorkspaces`／`workspaceMemberships`の逆リレーションを追加する（`User`自身のカラムは変更しない）
   - 観測可能な完了状態: マイグレーション適用後、DBに`workspaces`／`workspace_members`テーブルが存在し、同一`(workspace_id, user_id)`の重複挿入がDB制約で拒否される

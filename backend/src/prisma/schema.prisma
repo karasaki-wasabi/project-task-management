@@ -63,10 +63,44 @@ model User {
   updatedAt    DateTime  @updatedAt @map("updated_at")
   deletedAt    DateTime? @map("deleted_at")
 
-  tasks Task[]
+  tasks                Task[]
+  createdWorkspaces    Workspace[]       @relation("WorkspaceCreator")
+  workspaceMemberships WorkspaceMember[]
 
   @@index([deletedAt])
   @@map("users")
+}
+
+model Workspace {
+  id              String    @id @default(uuid())
+  name            String
+  color           String    @default("#2563eb")
+  createdByUserId String    @map("created_by_user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  createdBy User              @relation("WorkspaceCreator", fields: [createdByUserId], references: [id])
+  members   WorkspaceMember[]
+
+  @@index([deletedAt])
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  userId      String    @map("user_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@unique([workspaceId, userId])
+  @@index([deletedAt])
+  @@map("workspace_members")
 }
 
 model Case {
