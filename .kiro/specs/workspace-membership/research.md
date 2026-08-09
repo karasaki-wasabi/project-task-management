@@ -173,9 +173,10 @@ user-auth が `phase: "tasks-generated"`（requirements/design/tasksすべて承
 ### 設計レビューのCritical Issue 1が解消される見込み
 `/kiro-validate-design`で指摘した「currentUserをどう注入してテストするか」は、user-authタスク1.3「統合テストからセッションCookie付与とCSRFヘッダ付与ができるテストヘルパーを用意する」で解決される。design.mdのTesting Strategyにこのヘルパー再利用を明記した
 
-### 実装進捗（コード確認、2026-08-09時点）
-- 完了: タスク1.1（依存・環境変数）、1.2（`User`への`email`/`passwordHash`追加、`schema.prisma`で確認済み）。`shared/http-errors.ts`に`unauthorized()`追加済み
-- 未着手: タスク1.3（テストヘルパー）、2系（authモジュール）、3（app.ts配線・`requireUser`適用）、6.4（ヘッダー変更）— workspace-membershipが実際に依存する`requireUser`／ヘッダー構成はまだ実コードに存在しない
+### 実装進捗（コード確認、2026-08-09時点・当時のスナップショット）
+- 当時完了: タスク1.1（依存・環境変数）、1.2（`User`への`email`/`passwordHash`追加）。`shared/http-errors.ts`に`unauthorized()`追加済み
+- 当時未着手と記録していたもの: タスク1.3（テストヘルパー）、2系（authモジュール）、3（app.ts配線・`requireUser`適用）、6.4（ヘッダー変更）
+- 以降の現状はセクション12を正とする
 
 ---
 
@@ -193,3 +194,25 @@ user-auth が `phase: "tasks-generated"`（requirements/design/tasksすべて承
 
 ### tasks.md: 同一境界の兄弟タスクと比べて`_Depends:_`が抜けていた3件
 - 3.2（`_Depends: 2.1, 2.2_`を追加）、6.4・6.6（いずれも`_Depends: 5.1_`を追加）。タスク番号の昇順で実行順序自体は偶然成立していたが、明示的な依存宣言を揃えた
+
+---
+
+## 12. main 取り込み後の実装突合（2026-08-09追記）
+
+`workspace-membership`ブランチへ最新`main`（`user-auth`実装完了を含む）を取り込み、仕様文書と実装の矛盾を突合した。
+
+### コードで確認した現状
+- `user-auth`は`phase: "implementation-complete"`
+- `app.ts`にCookieセッション・CSRF・`requireUser`（`/api/*`のうち認証免除パス以外）が配線済み
+- `request.currentUser`の型は`PublicUser`（`{ id, email, name, createdAt, updatedAt }`）
+- ヘッダー右端に表示名・ログアウトが存在する（`WorkspaceSwitcher`をナビとの間に置く前提は成立）
+- 統合テスト用ヘルパー`withSessionCookie` / `withCsrfToken`（`backend/src/test/auth.fixture.ts`）と、E2E共有 fixture（`frontend/e2e/fixtures.ts`）が存在する
+- `shared/http-errors.ts`に`unauthorized`はあるが`forbidden`は未追加（本仕様タスク1.2で追加する計画は変更不要）
+- `GET /api/users`は一覧のみ。`q`検索・`Workspace`モデル・`workspaces`モジュールは未実装（本仕様の未着手範囲）
+
+### 文書側の修正
+- `design.md`の Existing Architecture Analysis が「`requireUser`等が未着手」と書いていたため、実装済みの現状に合わせて更新した
+- `design.md`の Allowed Dependencies で`currentUser`形状を`PublicUser`に合わせ、`http-errors`の既存ヘルパー一覧を補った
+- `design.md`の`app.vue`注記から「user-auth未実装時の暫定配置」を削除し、既存ヘッダーへの差し込み位置のみ残した
+- `tasks.md`の Implementation Notes を、前提条件が満た済みである旨と実在ヘルパー名に更新した
+- `design.md`の Testing Strategy 注記も、同上の実在ヘルパー名に合わせた

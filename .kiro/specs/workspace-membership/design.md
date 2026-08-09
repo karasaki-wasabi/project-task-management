@@ -39,26 +39,27 @@
 - 招待リンク、メール送信、ワークスペース内ロール／RBAC、メンバーの個別削除・自己脱退
 
 ### Allowed Dependencies
-- `user-auth`が提供する`requireUser` preHandler（`app.ts`に全非公開ルートへ適用済みである前提）と、それが`request`に付与する`request.currentUser: { id, email, name }`相当の値
+- `user-auth`が提供する`requireUser` preHandler（`app.ts`に全非公開ルートへ適用済み）と、それが`request`に付与する`request.currentUser: PublicUser`（`{ id, email, name, createdAt, updatedAt }`）。本仕様の業務ロジックは主に`id`を参照する
 - `users`モジュールの既存公開インターフェース（`usersService.list()`）と、本仕様が追加する`usersService.search(query)`
-- `shared/db.ts`（`db`）、`shared/soft-delete.repository.ts`（`DbClient`、論理削除規約）、`shared/business-event-logger.ts`、`shared/http-errors.ts`
+- `shared/db.ts`（`db`）、`shared/soft-delete.repository.ts`（`DbClient`、論理削除規約）、`shared/business-event-logger.ts`、`shared/http-errors.ts`（既存の`badRequest`/`unauthorized`/`notFound`に加え、本仕様で`forbidden`を追加）
 - フロントエンド: `useApiClient.ts`（唯一のHTTP境界）、`components/shared/Modal.vue`
 - 凍結済みspec文書（`case-management-ux`等）は更新しない。コードに触れる場合も本仕様のスコープ外ファイルには変更を加えない
 
 ### Revalidation Triggers
 - `WorkspaceService.isMember` / `Workspace` / `WorkspaceMember`の型・シグネチャ変更 → `workspace-resource-scope`が再利用前提を置いているため要再検証
 - `user-auth`の`requireUser` / `request.currentUser`の形状変更 → 本仕様の全ルートが影響を受ける
-- `GET /api/users`への`q`パラメータ追加は、`user-auth`のdesign.mdが明記する Revalidation Trigger「`User`が担当者以外の意味をさらに持つ変更」に該当する → `user-auth`側の設計・実装状況を実装着手前に`/kiro-spec-status user-auth`で確認し、必要なら`user-auth`側の再検証を依頼する
+- `GET /api/users`への`q`パラメータ追加は、`user-auth`のdesign.mdが明記する Revalidation Trigger「`User`が担当者以外の意味をさらに持つ変更」に該当する → `user-auth`は`implementation-complete`済み。検索追加の実装着手時に`user-auth`側の再検証要否を確認し、必要なら依頼する
 - 現在ワークスペースの永続化方式をクライアント側からサーバー側に変更する場合 → API契約・データモデルの追加が発生するため設計再検討
 
 ## Architecture
 
 ### Existing Architecture Analysis
 
-- バックエンドは`routes → service → repository`の4点セット構成（`backend/src/modules/<domain>/`）。エラーは`HttpError`（`badRequest`/`notFound`、本仕様で`forbidden`追加）をserviceからthrow
-- `shared/soft-delete.repository.ts`のPrisma Client Extensionが`$allModels`に一律適用されるため、**新設する全モデルは`deletedAt`列を持つ必要がある**（持たないと`findMany`等のwhere句構築で実行時エラーになる）
-- `app.ts`は現時点で認証フックを持たない。`user-auth`は`tasks-generated`（承認済み・実装着手済み）で、スキーマ拡張（`email`/`passwordHash`）と`unauthorized`ヘルパー（タスク1.1, 1.2）は実コードに反映済みだが、`requireUser`ガード・CSRF・app.ts配線・ヘッダー変更（タスク2.3, 3, 6.4）は未着手。本設計はそれらの実装完了後の`app.ts`（`requireUser`が非公開ルート以外へ適用済み）を前提にする
-- フロントエンドは`useApiClient.ts`が唯一のHTTP境界、ページは`frontend/pages/<domain>/index.vue`、共有UIは`components/shared/Modal.vue`
+- バックエンドは`routes → service → repository`の4点セット構成（`backend/src/modules/<domain>/`）。エラーは`HttpError`（既存: `badRequest`/`unauthorized`/`notFound`、本仕様で`forbidden`追加）をserviceからthrow
+- `shared/soft-delete.repository.ts`のPrisma Client Extensionが`$allModels`に一律適用されるため、新設する全モデルは`deletedAt`列を持つ必要がある（持たないと`findMany`等のwhere句構築で実行時エラーになる）
+- `user-auth`は`implementation-complete`済み。`app.ts`にはCookieセッション・CSRF・`requireUser`（`/api/*`のうち認証免除パス以外）が配線済みで、ヘッダーには表示名・ログアウトがある。本仕様の全ワークスペースAPIは、この既存ガードを通過済みの`request.currentUser`を前提にする
+- フロントエンドは`useApiClient.ts`が唯一のHTTP境界（Cookie credentials・CSRF付与済み）、ページは`frontend/pages/<domain>/index.vue`、共有UIは`components/shared/Modal.vue`。認証状態は`useAuth.ts`、業務ルート保護は`middleware/auth.global.ts`
+
 
 ### Architecture Pattern & Boundary Map
 
@@ -147,7 +148,7 @@ frontend/
 - `frontend/composables/useApiClient.ts` — `Workspace`/`WorkspaceUserSummary`型、`listWorkspaces`/`createWorkspace`/`updateWorkspace`/`deleteWorkspace`/`listWorkspaceMembers`/`searchAddableWorkspaceUsers`/`addWorkspaceMember`メソッド、`listUsers`への任意`q`引数追加
 - `frontend/app.vue` / `frontend/app.helpers.ts` — 上記参照
 
-> `app.vue`の変更は、`user-auth`実装後（ヘッダー右端に表示名・ログアウトが存在する構成）を前提とする。`user-auth`が未実装の間は`WorkspaceSwitcher`をナビの右端に追加する形で暫定するが、実装順は roadmap どおり`user-auth` → `workspace-membership`を想定しているため通常は問題にならない。
+> `app.vue`の変更は、既存のヘッダー構成（左: ブランド／ナビ、右: 表示名・ログアウト）を前提とし、`WorkspaceSwitcher`はナビと表示名／ログアウトの間に置く（claude design案B）。
 
 ## System Flows
 
@@ -243,7 +244,7 @@ sequenceDiagram
 **Dependencies**
 - Inbound: workspace.routes — HTTPエントリポイント (P0)
 - Outbound: workspace.repository — 永続化 (P0), usersService.search — 検索委譲 (P0)
-- External: `user-auth`の`request.currentUser` — 呼び出し元ルートから渡される (P0、実装完了が前提)
+- External: `user-auth`の`request.currentUser`（`PublicUser`） — 呼び出し元ルートから渡される (P0、実装済み)
 
 **Contracts**: Service [x] / API [x]
 
@@ -445,7 +446,7 @@ workspaceMemberships WorkspaceMember[]
 - ワークスペース削除後、`GET /api/workspaces`にその後もう含まれないこと（soft-delete）
 - `GET /api/users`が`q`なしでは従来どおり全件を返すこと（後方互換）
 
-> テストでのcurrentUser注入は、`user-auth`タスク1.3で用意される「統合テストからセッションCookie付与とCSRFヘッダ付与ができるテストヘルパー」を再利用する。本仕様自身でセッション偽装の仕組みを新設しない
+> テストでのcurrentUser注入は、既存の`withSessionCookie` / `withCsrfToken`（`backend/src/test/auth.fixture.ts`）を再利用する。本仕様自身でセッション偽装の仕組みを新設しない
 
 ### E2E/UI Tests
 - ワークスペース0件 → `/workspaces`の空状態表示 → 作成 → ヘッダー切替に反映

@@ -3,9 +3,9 @@
 ## Implementation Notes
 
 - ビジュアル正本: `research.md`「8. ビジュアルデザイン確定（claude design連携）」の`Workspace Membership.dc.html`
-- 実装着手の前提条件: `user-auth`の`requireUser`ガード・`app.ts`へのCORS/CSRF/セッション配線・ヘッダー変更（user-authタスク2.3, 3, 6.4）が実コードに存在していること。バックエンドAPI公開（本仕様タスク4.1, 4.2）以降がこの前提に依存する
-- 統合テストのcurrentUser注入は、`user-auth`タスク1.3で用意されるセッションCookie付与テストヘルパーを再利用する（本仕様では新設しない）
-- CSRF・credentials送信は既存`useApiClient`の仕組み（user-auth実装分）にそのまま乗る。本仕様のフロントエンドタスクで新設しない
+- 実装着手の前提条件は満た済み: `user-auth`は`implementation-complete`で、`requireUser`・CORS/CSRF/セッション配線・ヘッダー（表示名・ログアウト）・`backend/src/test/auth.fixture.ts`・E2E共有 fixture が実コードに存在する。バックエンドAPI公開（本仕様タスク4.1, 4.2）以降はこの前提に乗る
+- 統合テストのcurrentUser注入は、既存のセッションCookie付与／CSRFヘッダ付与ヘルパー（`withSessionCookie` / `withCsrfToken`）を再利用する（本仕様では新設しない）
+- CSRF・credentials送信は既存`useApiClient`の仕組みにそのまま乗る。本仕様のフロントエンドタスクで新設しない
 - 既存データへの影響なし（新規テーブルのみ追加、既存モデルはリレーション配列の追加のみ）
 - `deletedAt`は本コードベース共通のsoft-delete拡張を機能させるため両モデルに必須（design.md参照）
 
