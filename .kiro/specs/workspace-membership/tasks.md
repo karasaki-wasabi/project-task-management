@@ -21,7 +21,7 @@
   - 観測可能な完了状態: `forbidden(...)`を呼ぶとstatusCode 403の`HttpError`が返る単体テストがgreen
   - _Requirements: 3.2, 4.5, 6.5, 7.2, 7.3_
 
-- [ ] 1.3 ワークスペースの型定義を用意する
+- [x] 1.3 ワークスペースの型定義を用意する
   - `Workspace`／`WorkspaceUserSummary`型と、識別色の固定選択肢（6色）を定義する
   - 観測可能な完了状態: 型と固定選択肢の定数が他モジュールからコンパイルエラーなくimportできる
   - _Requirements: 1.1, 6.3, 6.4_
