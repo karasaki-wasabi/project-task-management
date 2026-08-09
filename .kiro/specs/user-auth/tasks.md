@@ -25,7 +25,7 @@
   - _Requirements: 1.2, 1.3, 1.5_
   - _Depends: 1.1_
 
-- [ ] 1.3 unauthorized ヘルパと inject 用セッション／CSRF テストヘルパを追加する
+- [x] 1.3 unauthorized ヘルパと inject 用セッション／CSRF テストヘルパを追加する
   - `HttpError` に 401 用ヘルパを追加する
   - 統合テストからセッション Cookie 付与と CSRF ヘッダ付与ができるヘルパを用意する
   - 観測可能な完了状態: ヘルパを呼ぶ最小テスト、または型付きエクスポートで付与手段が利用できる
@@ -142,3 +142,4 @@
 
 - 1.1: `SESSION_SECRET`（64桁hex）・`CORS_ORIGIN`・`COOKIE_SECURE` は必須。ローカル `.env` 未設定だと Compose が空文字を渡し起動時検証で落ちる。CI は `.github/workflows/ci.yml` に配線済み。
 - 1.2: アカウント列追加 migration は `DELETE FROM users` を ALTER 前に置く（TRUNCATE 不可。`tasks.assignee_user_id` は ON DELETE SET NULL）。旧 POST /api/users の email/passwordHash 補完は task 4 廃止までの暫定。
+- 1.3: inject ヘルパは Cookie 名 `session`、CSRF ヘッダ `csrf-token`（プラグイン既定）。タスク3で同名を維持すること。
