@@ -5,6 +5,9 @@ describe("GET /health", () => {
   it("returns 200 with an ok status body", async () => {
     const app = buildApp({
       DATABASE_URL: "mysql://user:pass@localhost:3306/db",
+      SESSION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      CORS_ORIGIN: "http://localhost:3001",
+      COOKIE_SECURE: false,
       LOG_LEVEL: "error",
       PORT: 3000,
     });

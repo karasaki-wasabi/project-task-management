@@ -10,7 +10,7 @@ declare module "fastify" {
 }
 
 export async function requireUser(request: FastifyRequest): Promise<void> {
-  const userId = request.session.get<unknown>("userId");
+  const userId = request.session.get("userId");
   if (typeof userId !== "string" || userId.length === 0) {
     request.session.delete();
     throw unauthorized("ログインが必要です。");

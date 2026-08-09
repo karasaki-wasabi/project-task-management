@@ -9,6 +9,7 @@
 // tasks must also be hard-deleted so RESTRICT FKs allow case/template cleanup.
 import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
+import type { InjectOptions } from "light-my-request";
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 import { db } from "./shared/db.js";
@@ -34,13 +35,75 @@ function collectingStream() {
   return { stream, lines };
 }
 
+function withAuthenticatedInject(app: ReturnType<typeof buildApp>) {
+  const originalInject = app.inject.bind(app);
+  let auth: Promise<{ cookie: string; csrfToken: string; userId: string }> | undefined;
+
+  async function authenticate() {
+    auth ??= (async () => {
+      const registerResponse = await originalInject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: {
+          email: `validation-${randomUUID()}@example.test`,
+          name: "統合検証",
+          password: "password-123",
+        },
+      });
+      const setCookie = registerResponse.headers["set-cookie"];
+      const cookie = (Array.isArray(setCookie) ? setCookie : [setCookie]).find((item) => item?.startsWith("session="))?.split(";")[0];
+      if (!cookie) throw new Error("session cookie was not set");
+
+      const csrfResponse = await originalInject({
+        method: "GET",
+        url: "/api/auth/csrf",
+        headers: { cookie },
+      });
+      const csrfSetCookie = csrfResponse.headers["set-cookie"];
+      const csrfCookie = (Array.isArray(csrfSetCookie) ? csrfSetCookie : [csrfSetCookie]).find((item) => item?.startsWith("session="))?.split(";")[0];
+      return { cookie: csrfCookie ?? cookie, csrfToken: csrfResponse.json().token, userId: registerResponse.json().id };
+    })();
+    return auth;
+  }
+
+  app.inject = (async (options: InjectOptions) => {
+    if (options.method === "OPTIONS" || options.url.startsWith("/api/auth/")) return originalInject(options);
+
+    const { cookie, csrfToken } = await authenticate();
+    return originalInject({
+      ...options,
+      headers: {
+        ...options.headers,
+        cookie: options.headers?.cookie ? `${options.headers.cookie}; ${cookie}` : cookie,
+        ...(options.method === "POST" || options.method === "PATCH" || options.method === "DELETE" ? { "csrf-token": csrfToken } : {}),
+      },
+    });
+  }) as typeof app.inject;
+
+  app.addHook("onClose", async () => {
+    const authenticated = await auth;
+    if (authenticated) await db.user.delete({ where: { id: authenticated.userId } });
+  });
+  return app;
+}
+
 function buildTestApp() {
   const { stream, lines } = collectingStream();
   const logger = createLogger("debug", stream);
   setBusinessEventLoggerForTests(logger);
   setClientErrorLoggerForTests(logger);
-  const app = buildApp({ DATABASE_URL: "mysql://user:pass@localhost:3306/db", LOG_LEVEL: "debug", PORT: 3000 }, logger);
-  return { app, lines };
+  const app = buildApp(
+    {
+      DATABASE_URL: "mysql://user:pass@localhost:3306/db",
+      SESSION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      CORS_ORIGIN: "http://localhost:3001",
+      COOKIE_SECURE: false,
+      LOG_LEVEL: "debug",
+      PORT: 3000,
+    },
+    logger,
+  );
+  return { app: withAuthenticatedInject(app), lines };
 }
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {

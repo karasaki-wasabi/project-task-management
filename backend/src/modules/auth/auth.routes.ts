@@ -3,17 +3,13 @@ import { z } from "zod";
 import { badRequest, unauthorized } from "../../shared/http-errors.js";
 import { authService } from "./auth.service.js";
 
-interface Session {
-  get<T>(key: string): T | undefined;
-  set(key: string, value: unknown): void;
-  delete(): void;
+declare module "@fastify/secure-session" {
+  interface SessionData {
+    userId?: string;
+  }
 }
 
 declare module "fastify" {
-  interface FastifyRequest {
-    session: Session;
-  }
-
   interface FastifyReply {
     generateCsrf(): string;
   }
@@ -63,7 +59,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/api/auth/me", async (request) => {
-    const userId = request.session.get<string>("userId");
+    const userId = request.session.get("userId");
     if (!userId) {
       throw unauthorized("ログインが必要です。");
     }

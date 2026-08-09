@@ -304,6 +304,7 @@ interface AuthService {
 - `GET /api/auth/csrf` は未ログインでも成功する（公開ルート）。トークン発行にログイン済みセッションを必須としない
 - FE の `useApiClient`（または同等の初期化箇所）は、アプリ起動時およびログイン／登録成功直後に `GET /api/auth/csrf` でトークンを取得・保持する
 - 以降の変更系リクエストに、`@fastify/csrf-protection` の既定ヘッダ名（実装時にライブラリドキュメントで確認し、design／tasks で固定）でトークンを付与する
+- CSRF トークンの既定ヘッダ名は `csrf-token` とする
 - 統合テスト: 未ログインでの csrf GET 成功、CSRF なしの業務 POST／PATCH／DELETE 拒否、register／login が CSRF なしで成功、ことを観点に含める
 
 ##### Public routes（ガード除外）

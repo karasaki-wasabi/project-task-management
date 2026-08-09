@@ -58,7 +58,7 @@
   - _Boundary: auth.guard_
   - _Depends: 2.1_
 
-- [ ] 3. app に CORS・セッション・CSRF・ガードを配線する
+- [x] 3. app に CORS・セッション・CSRF・ガードを配線する
   - credentials CORS（`CORS_ORIGIN`）、secure-session（HttpOnly / SameSite=Lax / `COOKIE_SECURE` / 有効期限 7 日）、csrf-protection を登録する
   - CSRF ヘッダ名をライブラリ既定で固定し、design.md CSRF 節に1行追記する
   - requireUser 除外: health / register / login / csrf / client-errors
