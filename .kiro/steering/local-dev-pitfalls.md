@@ -39,11 +39,32 @@ MySQLの`STORED GENERATED COLUMN`+`UNIQUE INDEX`のように、Prismaスキー�
 `<Transition>`でラップした要素の表示/非表示を、`Transition`自身ではなくその**祖先**(`<template v-if="...">`など、`Transition`コンポーネントごと存在するかどうかを切り替える箇所)の条件分岐で制御すると、条件が`false`になった瞬間に`Transition`コンポーネント自体が丸ごと破棄され、`leave`のトランジションクラスが一切適用されないまま要素が即座に消える。ビルド・型チェック・(DOM環境のない)ユニットテストのいずれでも検出できず、実ブラウザで実際に閉じる操作をして初めて「アニメーションが効いていない」と気づく。
 → `v-if`は`Transition`が直接ラップする要素**自身**に付けること(`<Transition><div v-if="open">...</div></Transition>`)。背景クリック用のオーバーレイなど、アニメーションが不要な兄弟要素は別に`v-if`を付けて構わない。
 
+### 8. 認証用必須環境変数の未設定または Origin 不一致
+バックエンド起動時検証では次が必須である。
+- `SESSION_SECRET`
+  - 64桁の16進数(32バイト)
+- `CORS_ORIGIN`
+  - フロントの公開 Origin(例: `http://localhost:3001`)
+- `COOKIE_SECURE`
+  - ローカル HTTP では `false`
+
+未設定だと Compose が空文字を渡し、起動時に Zod 検証で落ちる。`CORS_ORIGIN` が実際のフロント公開 URL(ポート含む)と一致しないと、preflight 後に登録・ログインが失敗する。`.env.example` をコピーして揃え、変更後は `docker compose exec backend printenv | grep -E 'SESSION_SECRET|CORS_ORIGIN|COOKIE_SECURE'` でコンテナへ渡っているか確認する。
+
+### 9. ブランチ切替後の Prisma Client 不整合
+`backend_node_modules` ボリューム内の生成済み Prisma Client は、ブランチを切り替えても自動では更新されない。`user-auth` のようなスキーマ差分があるブランチへ戻った直後に、ソース上は `email` / `passwordHash` があるのに Client が古いと、テストが `Unknown argument email` で大量失敗する。
+→ スキーマやブランチを切り替えたあとは、テスト前に `docker compose run --rm -T backend npx prisma generate` を実行する。必要なら `prisma migrate status` で DB も最新か確認する。
+
+### 10. CSRF トークン取得後の session Cookie 更新
+`GET /api/auth/csrf` はトークン発行時に session Cookie を更新する。`app.inject` や手動の Cookie 組み立てで、csrf 取得前の古い Cookie のまま変更系 API を呼ぶと `Missing csrf secret` や 403 になる。
+→ csrf レスポンスの `Set-Cookie` を反映した最新 Cookie を、続けて呼ぶ POST / PATCH / DELETE / logout に使う。ブラウザ上の `useApiClient` はこれを自動で扱うが、統合テストヘルパでは明示的に更新する。
+
 ## Playwright(E2E)実行時の注意
 
 `docker compose run` はコマンドごとに使い捨てコンテナを作るため、あるコマンドで `npx playwright install --with-deps chromium` してブラウザバイナリを入れても、**次の `docker compose run` invocationには一切残らない**。実行のたびに毎回インストールするコストを避けたい場合は、ホストにNode.jsがあれば `frontend/node_modules`/`package-lock.json` を汚さないスクラッチディレクトリ(例: `/tmp/.../scratchpad/pw`)に `@playwright/test` を単独インストールし、公開済みポート(`http://localhost:<FRONTEND_PORT>`)に対してホスト側から実行するのが安定する。
 
 またVite devサーバーの `server.allowedHosts` はデフォルトで `localhost` のみ許可するため、`http://frontend:3001` のようなdocker内部サービス名でアクセスすると403になる。これはセキュリティ機能であり修正対象のバグではない — 実ブラウザ検証は必ず `localhost:<公開ポート>` 経由で行うこと。
+
+E2E では `E2E_BASE_URL` を実際のフロント公開 URL に合わせ、同時にバックエンドの `CORS_ORIGIN` も同じ Origin にする。例: フロントが `http://localhost:3401` なら、両方をその値に揃えてから `npm --prefix frontend run test:e2e` を実行する。詳細は [[testing]] を参照。
 
 ## 検証の原則
 
