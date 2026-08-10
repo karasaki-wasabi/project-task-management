@@ -5,13 +5,18 @@
 // by VerifiedWorkspaceId; cross-workspace access yields not_found (404).
 // workspace-resource-scope task 3.2: assigneeUserId must be a current workspace
 // member (Requirement 4.2); non-members yield validation_error → 400.
+// workspace-resource-scope task 3.3: caseId / parentTaskId / developmentStageId
+// must resolve in the current workspace (Requirement 3.5); missing or
+// cross-workspace related IDs yield validation_error → 400 (same style as
+// assignee validation; FK alone cannot enforce workspace co-location).
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { db } from "../../shared/db.js";
 import { err, ok, type Result } from "../../shared/result.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
-import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
+import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
+import { caseRepository } from "../cases/case.repository.js";
 import { workspaceService } from "../workspaces/workspace.service.js";
 import { taskRepository } from "./task.repository.js";
 import type { CreateTaskInput, Task, TaskError, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
@@ -41,6 +46,48 @@ async function assertAssigneeIsWorkspaceMember(
   return ok(undefined);
 }
 
+async function assertRelatedResourcesInWorkspace(
+  workspaceId: VerifiedWorkspaceId,
+  refs: {
+    caseId?: string | null;
+    parentTaskId?: string | null;
+    developmentStageId?: string | null;
+  },
+): Promise<Result<void, TaskError>> {
+  if (refs.caseId != null) {
+    const caseRecord = await caseRepository.findById(refs.caseId, workspaceId);
+    if (!caseRecord) {
+      return err({
+        type: "validation_error",
+        message: "caseId does not exist in the current workspace",
+      });
+    }
+  }
+  if (refs.parentTaskId != null) {
+    const parent = await taskRepository.findById(refs.parentTaskId, workspaceId);
+    if (!parent) {
+      return err({
+        type: "validation_error",
+        message: "parentTaskId does not exist in the current workspace",
+      });
+    }
+  }
+  if (refs.developmentStageId != null) {
+    // DevelopmentStageService is not yet workspace-scoped (task 6.1); resolve
+    // with a local scoped find so TaskService still enforces Requirement 3.5.
+    const stage = await db.developmentStage.findFirst({
+      where: withWorkspaceScope({ id: refs.developmentStageId }, workspaceId),
+    });
+    if (!stage) {
+      return err({
+        type: "validation_error",
+        message: "developmentStageId does not exist in the current workspace",
+      });
+    }
+  }
+  return ok(undefined);
+}
+
 export const tasksService = {
   async create(input: CreateTaskInput, client: DbClient = db): Promise<Result<Task, TaskError>> {
     const title = input.title.trim();
@@ -51,6 +98,14 @@ export const tasksService = {
     const assigneeCheck = await assertAssigneeIsWorkspaceMember(input.workspaceId, input.assigneeUserId);
     if (!assigneeCheck.ok) {
       return assigneeCheck;
+    }
+
+    const relatedCheck = await assertRelatedResourcesInWorkspace(input.workspaceId, {
+      caseId: input.caseId,
+      parentTaskId: input.parentTaskId,
+    });
+    if (!relatedCheck.ok) {
+      return relatedCheck;
     }
 
     try {
@@ -117,6 +172,11 @@ export const tasksService = {
       return err({ type: "not_found", taskId });
     }
 
+    const relatedCheck = await assertRelatedResourcesInWorkspace(workspaceId, { developmentStageId });
+    if (!relatedCheck.ok) {
+      return relatedCheck;
+    }
+
     const data: { developmentStageId: string | null; assigneeUserId?: string } = { developmentStageId };
     if (assigneeUserId && current.assigneeUserId === null) {
       const assigneeCheck = await assertAssigneeIsWorkspaceMember(workspaceId, assigneeUserId);
@@ -176,6 +236,10 @@ export const tasksService = {
     // isRequiredForCaseをfalse固定にする" — applied here on the merged
     // (post-update) caseId, same rule as create.
     if (input.caseId !== undefined) {
+      const relatedCheck = await assertRelatedResourcesInWorkspace(workspaceId, { caseId: input.caseId });
+      if (!relatedCheck.ok) {
+        return relatedCheck;
+      }
       data.caseId = input.caseId;
       data.isRequiredForCase = input.caseId === null ? false : (input.isRequiredForCase ?? current.isRequiredForCase);
     } else if (input.isRequiredForCase !== undefined) {
@@ -219,6 +283,14 @@ export const tasksService = {
       return assigneeCheck;
     }
 
+    const relatedCheck = await assertRelatedResourcesInWorkspace(workspaceId, {
+      caseId: input.caseId,
+      parentTaskId,
+    });
+    if (!relatedCheck.ok) {
+      return relatedCheck;
+    }
+
     try {
       const child = await taskRepository.create({ ...input, title, parentTaskId, workspaceId });
       return ok(child);
@@ -253,6 +325,15 @@ export const tasksService = {
       const assigneeCheck = await assertAssigneeIsWorkspaceMember(workspaceId, part.assigneeUserId);
       if (!assigneeCheck.ok) {
         return assigneeCheck;
+      }
+      // Reject cross-workspace related IDs on part input even though case/
+      // parent are overwritten by inheritance below (Requirement 3.5).
+      const relatedCheck = await assertRelatedResourcesInWorkspace(workspaceId, {
+        caseId: part.caseId,
+        parentTaskId: part.parentTaskId,
+      });
+      if (!relatedCheck.ok) {
+        return relatedCheck;
       }
     }
 

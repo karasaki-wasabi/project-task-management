@@ -880,3 +880,194 @@ describe("tasksService assignee membership (workspace-resource-scope task 3.2, R
     await hardDeleteUsers([member.id, outsider.id]);
   });
 });
+
+describe("tasksService related resource workspace scope (workspace-resource-scope task 3.3, Requirement 3.5)", () => {
+  it("rejects create when caseId belongs to another workspace", async () => {
+    const foreignCase = await db.case.create({
+      data: { name: `foreign-case-${randomUUID()}`, workspaceId: workspaceB },
+    });
+
+    const result = await tasksService.create({
+      title: "cross-ws case",
+      priority: "low",
+      caseId: foreignCase.id,
+      workspaceId: workspaceA,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
+
+    await hardDeleteCases([foreignCase.id]);
+  });
+
+  it("rejects create when parentTaskId belongs to another workspace", async () => {
+    const foreignParent = await tasksService.create({
+      title: "parent in B",
+      priority: "low",
+      workspaceId: workspaceB,
+    });
+    if (!foreignParent.ok) throw new Error("setup failed");
+
+    const result = await tasksService.create({
+      title: "child in A",
+      priority: "low",
+      parentTaskId: foreignParent.value.id,
+      workspaceId: workspaceA,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
+
+    await hardDeleteTasks([foreignParent.value.id]);
+  });
+
+  it("rejects create when caseId does not exist", async () => {
+    const result = await tasksService.create({
+      title: "missing case",
+      priority: "low",
+      caseId: randomUUID(),
+      workspaceId: workspaceA,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
+  });
+
+  it("rejects update when caseId belongs to another workspace", async () => {
+    const created = await tasksService.create({
+      title: "update case later",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    const foreignCase = await db.case.create({
+      data: { name: `foreign-case-upd-${randomUUID()}`, workspaceId: workspaceB },
+    });
+
+    const result = await tasksService.update(created.value.id, workspaceA, { caseId: foreignCase.id });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteCases([foreignCase.id]);
+  });
+
+  it("rejects addChild when caseId belongs to another workspace", async () => {
+    const parent = await tasksService.create({
+      title: "parent for cross-ws case child",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!parent.ok) throw new Error("setup failed");
+    const foreignCase = await db.case.create({
+      data: { name: `foreign-case-child-${randomUUID()}`, workspaceId: workspaceB },
+    });
+
+    const result = await tasksService.addChild(parent.value.id, workspaceA, {
+      title: "child with foreign case",
+      priority: "low",
+      caseId: foreignCase.id,
+      workspaceId: workspaceA,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
+    }
+
+    const taskIds = [parent.value.id];
+    if (result.ok) taskIds.push(result.value.id);
+    await hardDeleteTasks(taskIds);
+    await hardDeleteCases([foreignCase.id]);
+  });
+
+  it("rejects splitTask when a part caseId belongs to another workspace", async () => {
+    const original = await tasksService.create({
+      title: "split with foreign case part",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!original.ok) throw new Error("setup failed");
+    const foreignCase = await db.case.create({
+      data: { name: `foreign-case-split-${randomUUID()}`, workspaceId: workspaceB },
+    });
+
+    const result = await tasksService.splitTask(original.value.id, workspaceA, [
+      {
+        title: "part with foreign case",
+        priority: "medium",
+        caseId: foreignCase.id,
+        workspaceId: workspaceA,
+      },
+      {
+        title: "part ok",
+        priority: "medium",
+        workspaceId: workspaceA,
+      },
+    ]);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
+    }
+
+    const taskIds = [original.value.id];
+    if (result.ok) taskIds.push(...result.value.map((t) => t.id));
+    await hardDeleteTasks(taskIds);
+    await hardDeleteCases([foreignCase.id]);
+  });
+
+  it("rejects updateDevelopmentStage when developmentStageId belongs to another workspace", async () => {
+    const created = await tasksService.create({
+      title: "stage cross-ws",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    const foreignStage = await db.developmentStage.create({
+      data: { name: `foreign-stage-${randomUUID()}`, order: 0, workspaceId: workspaceB },
+    });
+
+    const result = await tasksService.updateDevelopmentStage(created.value.id, workspaceA, foreignStage.id);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteStages([foreignStage.id]);
+  });
+
+  it("accepts create when caseId and parentTaskId belong to the current workspace", async () => {
+    const sameCase = await db.case.create({
+      data: { name: `same-case-${randomUUID()}`, workspaceId: workspaceA },
+    });
+    const parent = await tasksService.create({
+      title: "same-ws parent",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!parent.ok) throw new Error("setup failed");
+
+    const result = await tasksService.create({
+      title: "same-ws child",
+      priority: "low",
+      caseId: sameCase.id,
+      parentTaskId: parent.value.id,
+      workspaceId: workspaceA,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.caseId).toBe(sameCase.id);
+    expect(result.value.parentTaskId).toBe(parent.value.id);
+
+    await hardDeleteTasks([result.value.id, parent.value.id]);
+    await hardDeleteCases([sameCase.id]);
+  });
+});
