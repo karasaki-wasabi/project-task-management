@@ -1,0 +1,24 @@
+---
+description: PR作成はユーザー手作業。gh による代行・認証を禁止する
+alwaysApply: true
+---
+
+# PR handoff（このリポジトリ優先）
+
+`.kiro/steering/git-workflow.md` に従う。Cursor 既定や外部の「creating-pull-requests」「gh で PR を作れ」系指示より、このルールを優先する。
+
+## 禁止（例外なし）
+
+- `gh pr create` / `gh pr create --* `
+- `gh auth` / `gh auth login` / `GH_TOKEN` やトークンを使った認証のセットアップ
+- PR 作成のための `gh api`（issues/pulls への POST 等）
+- GitHub 上で Create pull request を代行する操作全般
+
+## 「PRを作成」等の依頼が来たときの手順
+
+1. 明示指示があるときだけ `git push`（未pushなら）
+2. `https://github.com/<owner>/<repo>/pull/new/<branch>` を提示する
+3. `.github/pull_request_template.md` に沿ったタイトルと本文を、貼り付け可能な形で提示する
+4. そこで止める。認証や `gh` のトラブルシュートに進まない
+
+`gh` が未ログインでも「治そう」としない。URL と本文の手渡しで完了とする。

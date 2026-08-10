@@ -12,6 +12,11 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  // 共有開発 DB / 1 本の API・フロントに対して並列ワーカーを走らせると
+  // タイムアウトが散発する。隔離と安定性のため既定は 1。
+  workers: 1,
+  // 前回実行の残留データを捨ててからスイートを開始する（E2E_SKIP_DB_RESET=1 で無効化可）。
+  globalSetup: "./e2e/global-setup.ts",
   timeout: 30_000,
   retries: 0,
   use: {
@@ -24,3 +29,4 @@ export default defineConfig({
     viewport: { width: 1600, height: 1000 },
   },
 });
+

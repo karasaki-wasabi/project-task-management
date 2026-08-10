@@ -10,7 +10,8 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "db:reset-for-e2e": "tsx src/prisma/reset-for-e2e.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

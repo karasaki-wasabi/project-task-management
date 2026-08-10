@@ -17,6 +17,7 @@
  */
 import { hash } from "@node-rs/argon2";
 import { PrismaClient } from "@prisma/client";
+import { clearAllTables } from "./clear-tables.js";
 
 const prisma = new PrismaClient();
 
@@ -38,31 +39,12 @@ const HOLIDAY_ID = "88888888-8888-4888-8888-888888888801";
 const LOGIN_EMAIL = "root@example.com";
 const LOGIN_PASSWORD = "root@example.com";
 
-const TABLES_IN_TRUNCATE_ORDER = [
-  "tasks",
-  "recurring_task_templates",
-  "non_business_days",
-  "development_stages",
-  "cases",
-  "workspace_members",
-  "workspaces",
-  "users",
-] as const;
-
 function utcDate(year: number, monthIndex: number, day: number): Date {
   return new Date(Date.UTC(year, monthIndex, day));
 }
 
-async function clearAllTables(): Promise<void> {
-  await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 0");
-  for (const table of TABLES_IN_TRUNCATE_ORDER) {
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE \`${table}\``);
-  }
-  await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1");
-}
-
 async function main(): Promise<void> {
-  await clearAllTables();
+  await clearAllTables(prisma);
 
   const passwordHash = await hash(LOGIN_PASSWORD);
   const today = new Date();

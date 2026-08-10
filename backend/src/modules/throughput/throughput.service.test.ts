@@ -7,7 +7,7 @@
 // in-progress period containing `now` itself is never included (Requirement
 // 6.2 "過去複数期間分" / 6.3 "過去の消化ペースをもとにした今後の目安").
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
 import { createUserData } from "../../test/user.fixture.js";
 import { throughputService } from "./throughput.service.js";
@@ -15,6 +15,12 @@ import { throughputService } from "./throughput.service.js";
 const createdTaskIds: string[] = [];
 let workspaceId: string;
 let ownerUserId: string;
+
+// throughput 集計はワークスペース非依存のグローバル COUNT のため、共有 DB 上の
+// 他テスト／前回失敗の残留 `completedAt` が絶対件数アサートを壊す。
+// このスイート専用の歴史日付帯だけを beforeEach で物理削除して隔離する。
+const THROUGHPUT_BAND_START = new Date("2023-11-01T00:00:00.000Z");
+const THROUGHPUT_BAND_END_EXCLUSIVE = new Date("2024-04-01T00:00:00.000Z");
 
 async function completedTask(completedAt: Date): Promise<string> {
   const task = await db.task.create({
@@ -39,6 +45,15 @@ async function cleanup(): Promise<void> {
   createdTaskIds.length = 0;
 }
 
+async function purgeThroughputDateBand(): Promise<void> {
+  await db.$executeRawUnsafe(
+    `DELETE FROM tasks WHERE completed_at >= ? AND completed_at < ?`,
+    THROUGHPUT_BAND_START,
+    THROUGHPUT_BAND_END_EXCLUSIVE,
+  );
+  createdTaskIds.length = 0;
+}
+
 beforeAll(async () => {
   const owner = await db.user.create({ data: createUserData(`throughput-owner-${randomUUID()}`) });
   ownerUserId = owner.id;
@@ -48,8 +63,12 @@ beforeAll(async () => {
   workspaceId = workspace.id;
 });
 
+beforeEach(async () => {
+  await purgeThroughputDateBand();
+});
+
 afterAll(async () => {
-  await cleanup();
+  await purgeThroughputDateBand();
   if (workspaceId) {
     await db.$executeRawUnsafe(`DELETE FROM tasks WHERE workspace_id = ?`, workspaceId);
     await db.workspace.delete({ where: { id: workspaceId } }).catch(() => undefined);
