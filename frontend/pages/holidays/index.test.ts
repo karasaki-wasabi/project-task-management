@@ -1,7 +1,8 @@
 // Mount tests for HolidaysPage (task 7.2): list / register / delete / sync.
 // Requirements 7.1, 7.3, 9.1, 9.2, 9.3, 9.4.
+// workspace-resource-scope task 7.2: empty state when currentId is null (Req 2.1, 2.2).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineComponent, nextTick } from "vue";
+import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import type { NonBusinessDay } from "../../composables/useApiClient";
 import HolidaysPage from "./index.vue";
@@ -10,6 +11,11 @@ const listHolidays = vi.fn();
 const registerHoliday = vi.fn();
 const deleteHoliday = vi.fn();
 const syncHolidays = vi.fn();
+const currentId = ref<string | null>("ws-1");
+
+vi.mock("../../composables/useCurrentWorkspace", () => ({
+  useCurrentWorkspace: () => ({ currentId }),
+}));
 
 vi.mock("../../composables/useApiClient", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../composables/useApiClient")>();
@@ -39,6 +45,12 @@ const ErrorAlertStub = defineComponent({
   template: `<div data-testid="error-alert">{{ message }}</div>`,
 });
 
+const NuxtLinkStub = defineComponent({
+  name: "NuxtLink",
+  props: { to: { type: [String, Object], required: true } },
+  template: `<a :href="typeof to === 'string' ? to : '#'" data-testid="nuxt-link"><slot /></a>`,
+});
+
 function makeHoliday(overrides: Partial<NonBusinessDay> = {}): NonBusinessDay {
   return {
     id: "h1",
@@ -61,6 +73,7 @@ function mountPage() {
       stubs: {
         Badge: BadgeStub,
         ErrorAlert: ErrorAlertStub,
+        NuxtLink: NuxtLinkStub,
       },
     },
   });
@@ -72,6 +85,7 @@ describe("HolidaysPage (task 7.2)", () => {
     registerHoliday.mockReset();
     deleteHoliday.mockReset();
     syncHolidays.mockReset();
+    currentId.value = "ws-1";
     listHolidays.mockResolvedValue([
       makeHoliday({ id: "h2", date: "2026-08-14", label: "夏季休業", source: "manual" }),
       makeHoliday(),
@@ -145,5 +159,19 @@ describe("HolidaysPage (task 7.2)", () => {
 
     expect(wrapper.text()).not.toContain("テンプレート");
     expect(wrapper.text()).not.toContain("繰り返し");
+  });
+
+  it("ワークスペース未選択時は空状態を表示し一覧・登録・同期を行わない（workspace-resource-scope Req 2.1, 2.2）", async () => {
+    currentId.value = null;
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("ワークスペースがありません");
+    expect(wrapper.text()).toContain("ワークスペースを作成");
+    expect(wrapper.text()).not.toContain("休日マスタ");
+    expect(wrapper.text()).not.toContain("祝日を取得");
+    expect(listHolidays).not.toHaveBeenCalled();
+    expect(wrapper.find('a[href="/workspaces"]').exists()).toBe(true);
   });
 });

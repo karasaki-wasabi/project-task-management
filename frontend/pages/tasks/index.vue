@@ -6,6 +6,7 @@
 <script setup lang="ts">
 const api = useApiClient();
 const route = useRoute();
+const { currentId } = useCurrentWorkspace();
 
 const tasks = ref<Task[]>([]);
 const assigneeUserId = ref("");
@@ -28,6 +29,7 @@ function childrenOf(taskId: string): Task[] {
 }
 
 async function load() {
+  if (currentId.value === null) return;
   tasks.value = await api.listTasks({
     assigneeUserId: assigneeUserId.value || undefined,
     caseId: caseId.value || undefined,
@@ -82,15 +84,50 @@ async function confirmSplit() {
   await load();
 }
 
-watch([assigneeUserId, caseId], load);
-onMounted(async () => {
-  await load();
-  users.value = await api.listUsers();
+watch([assigneeUserId, caseId], () => {
+  if (currentId.value === null) return;
+  void load();
 });
+
+watch(
+  currentId,
+  (id) => {
+    if (id === null) {
+      tasks.value = [];
+      users.value = [];
+      splitTarget.value = null;
+      error.value = null;
+      return;
+    }
+    void (async () => {
+      await load();
+      users.value = await api.listUsers();
+    })();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
   <div class="space-y-6">
+    <div
+      v-if="currentId === null"
+      data-testid="workspace-empty-state"
+      class="rounded-lg bg-white p-8 text-center ring-1 ring-slate-200"
+    >
+      <h1 class="text-xl font-semibold tracking-tight text-slate-900">ワークスペースがありません</h1>
+      <p class="mt-2 text-sm text-slate-600">
+        最初のワークスペースを作成すると、メンバーを追加して共有の可視境界を持てます。
+      </p>
+      <NuxtLink
+        to="/workspaces"
+        class="mt-5 inline-block rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
+      >
+        ワークスペースを作成
+      </NuxtLink>
+    </div>
+
+    <template v-else>
     <h1 class="text-xl font-semibold tracking-tight">タスク一覧</h1>
 
     <AssigneeFilter v-model="assigneeUserId" />
@@ -183,5 +220,6 @@ onMounted(async () => {
         </button>
       </div>
     </div>
+    </template>
   </div>
 </template>

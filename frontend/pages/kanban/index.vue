@@ -114,6 +114,7 @@ import {
 definePageMeta({ fullWidth: true });
 
 const api = useApiClient();
+const { currentId } = useCurrentWorkspace();
 const stages = ref<DevelopmentStage[]>([]);
 
 const tasks = ref<Task[]>([]);
@@ -233,14 +234,17 @@ function syncColumnTasks() {
 watch([tasks, stages], syncColumnTasks, { immediate: true });
 
 async function loadStages() {
+  if (currentId.value === null) return;
   stages.value = await api.listDevelopmentStages();
 }
 
 async function loadCases() {
+  if (currentId.value === null) return;
   cases.value = await api.listCases();
 }
 
 async function loadTasks() {
+  if (currentId.value === null) return;
   tasks.value = await api.listTasks();
 }
 
@@ -413,16 +417,47 @@ async function cancelPendingMove() {
   focusTrayRef.value?.resync();
 }
 
-onMounted(async () => {
-  await loadStages();
-  await loadTasks();
-  users.value = await api.listUsers();
-  await loadCases();
-});
+watch(
+  currentId,
+  (id) => {
+    if (id === null) {
+      stages.value = [];
+      tasks.value = [];
+      users.value = [];
+      cases.value = [];
+      return;
+    }
+    void (async () => {
+      await loadStages();
+      await loadTasks();
+      users.value = await api.listUsers();
+      await loadCases();
+    })();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
   <div class="space-y-5">
+    <div
+      v-if="currentId === null"
+      data-testid="workspace-empty-state"
+      class="rounded-lg bg-white p-8 text-center ring-1 ring-slate-200"
+    >
+      <h1 class="text-xl font-semibold tracking-tight text-slate-900">ワークスペースがありません</h1>
+      <p class="mt-2 text-sm text-slate-600">
+        最初のワークスペースを作成すると、メンバーを追加して共有の可視境界を持てます。
+      </p>
+      <NuxtLink
+        to="/workspaces"
+        class="mt-5 inline-block rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
+      >
+        ワークスペースを作成
+      </NuxtLink>
+    </div>
+
+    <template v-else>
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
       <h1 class="text-xl font-semibold tracking-tight text-slate-900">カンバン</h1>
       <NuxtLink
@@ -587,5 +622,6 @@ onMounted(async () => {
         </VueDraggable>
       </div>
     </div>
+    </template>
   </div>
 </template>

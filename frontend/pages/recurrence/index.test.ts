@@ -1,13 +1,19 @@
 // Mount tests for RecurrencePage (task 7.3): template-only list + modals.
 // Proves: no holiday / fixed_interval controls; create/detail modals open;
 // list renders case-relative API fields. Requirements 1.3, 7.1, 7.2, 8.1–8.3.
+// workspace-resource-scope task 7.2: empty state when currentId is null (Req 2.1, 2.2).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineComponent, nextTick } from "vue";
+import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import type { RecurringTaskTemplate } from "../../composables/useApiClient";
 import RecurrencePage from "./index.vue";
 
 const listRecurringTemplates = vi.fn();
+const currentId = ref<string | null>("ws-1");
+
+vi.mock("../../composables/useCurrentWorkspace", () => ({
+  useCurrentWorkspace: () => ({ currentId }),
+}));
 
 vi.mock("../../composables/useApiClient", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../composables/useApiClient")>();
@@ -32,6 +38,12 @@ const ErrorAlertStub = defineComponent({
   name: "ErrorAlert",
   props: { message: { type: String, required: true } },
   template: `<div data-testid="error-alert">{{ message }}</div>`,
+});
+
+const NuxtLinkStub = defineComponent({
+  name: "NuxtLink",
+  props: { to: { type: [String, Object], required: true } },
+  template: `<a :href="typeof to === 'string' ? to : '#'" data-testid="nuxt-link"><slot /></a>`,
 });
 
 const RecurrenceFormModalStub = defineComponent({
@@ -76,6 +88,7 @@ function mountPage() {
       stubs: {
         Badge: BadgeStub,
         ErrorAlert: ErrorAlertStub,
+        NuxtLink: NuxtLinkStub,
         RecurrenceFormModal: RecurrenceFormModalStub,
         RecurrenceDetailModal: RecurrenceDetailModalStub,
       },
@@ -86,6 +99,7 @@ function mountPage() {
 describe("RecurrencePage (task 7.3)", () => {
   beforeEach(() => {
     listRecurringTemplates.mockReset();
+    currentId.value = "ws-1";
     listRecurringTemplates.mockResolvedValue([
       makeTemplate(),
       makeTemplate({
@@ -162,5 +176,18 @@ describe("RecurrencePage (task 7.3)", () => {
     expect(wrapper.text()).not.toContain("今すぐ生成");
     expect(wrapper.text()).not.toContain("間隔");
     expect(wrapper.html()).not.toMatch(/fixed_interval|intervalUnit|intervalValue|generateDue|generate-due/i);
+  });
+
+  it("ワークスペース未選択時は空状態を表示し一覧・作成導線を出さない（workspace-resource-scope Req 2.1, 2.2）", async () => {
+    currentId.value = null;
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("ワークスペースがありません");
+    expect(wrapper.text()).toContain("ワークスペースを作成");
+    expect(wrapper.text()).not.toContain("テンプレートを登録");
+    expect(listRecurringTemplates).not.toHaveBeenCalled();
+    expect(wrapper.find('a[href="/workspaces"]').exists()).toBe(true);
   });
 });
