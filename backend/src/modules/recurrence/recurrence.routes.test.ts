@@ -1,26 +1,96 @@
-// HTTP routes for RecurrenceService template management (task 2.1).
-// Mounts the plugin on a throwaway Fastify instance.
-//
-// Cleanup policy: every `it()` deletes its own rows in a `finally` block —
-// see recurrence.service.test.ts's header comment.
+// HTTP routes for RecurrenceService template management (task 2.1 +
+// workspace-resource-scope task 4.1). Uses buildApp so requireUser / CSRF /
+// requireWorkspaceMember apply; injects X-Workspace-Id.
 import { randomUUID } from "node:crypto";
-import Fastify from "fastify";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { buildApp } from "../../app.js";
 import { db } from "../../shared/db.js";
-import { recurrenceRoutes } from "./recurrence.routes.js";
+import { WORKSPACE_HEADER_NAME } from "../../shared/workspace-scope.js";
+import { withCsrfToken, withSessionCookie } from "../../test/auth.fixture.js";
 
-async function hardDeleteTemplates(ids: string[]): Promise<void> {
-  if (ids.length === 0) return;
-  await db.$executeRawUnsafe(
-    `DELETE FROM recurring_task_templates WHERE id IN (${ids.map(() => "?").join(",")})`,
-    ...ids,
+const env = {
+  DATABASE_URL: "mysql://user:pass@localhost:3306/db",
+  SESSION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  CORS_ORIGIN: "http://localhost:3001",
+  COOKIE_SECURE: false,
+  LOG_LEVEL: "error" as const,
+  PORT: 3000,
+};
+
+type App = ReturnType<typeof buildApp>;
+
+function sessionCookie(response: { headers: Record<string, string | string[] | undefined> }): string {
+  const setCookie = response.headers["set-cookie"];
+  const session = (Array.isArray(setCookie) ? setCookie : [setCookie]).find((cookie) =>
+    cookie?.startsWith("session="),
   );
+  if (!session) throw new Error("session cookie was not set");
+  return session.split(";")[0];
 }
 
-async function buildTestApp() {
-  const app = Fastify({ logger: false });
-  await app.register(recurrenceRoutes);
-  return app;
+async function registerUser(app: App, name: string) {
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/register",
+    payload: {
+      email: `recurrence-route-${randomUUID()}@example.test`,
+      name,
+      password: "password-123",
+    },
+  });
+  expect(response.statusCode).toBe(201);
+  return {
+    user: response.json() as { id: string; email: string; name: string },
+    cookie: sessionCookie(response),
+  };
+}
+
+async function csrfToken(app: App, cookie: string): Promise<{ token: string; cookie: string }> {
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/auth/csrf",
+    headers: { cookie },
+  });
+  expect(response.statusCode).toBe(200);
+  return { token: response.json().token as string, cookie: sessionCookie(response) };
+}
+
+async function hardDelete(table: string, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
+}
+
+async function createWorkspace(app: App, csrf: { token: string; cookie: string }, name: string): Promise<string> {
+  const response = await app.inject(
+    withCsrfToken(
+      withSessionCookie(
+        { method: "POST", url: "/api/workspaces", payload: { name } },
+        csrf.cookie,
+      ),
+      csrf.token,
+    ),
+  );
+  expect(response.statusCode).toBe(201);
+  return response.json().id as string;
+}
+
+function withWorkspace(
+  options: Parameters<App["inject"]>[0],
+  cookie: string,
+  csrf: string | undefined,
+  workspaceId: string,
+) {
+  const withSession = withSessionCookie(
+    {
+      ...options,
+      headers: {
+        ...(options.headers ?? {}),
+        [WORKSPACE_HEADER_NAME]: workspaceId,
+      },
+    },
+    cookie,
+  );
+  return csrf ? withCsrfToken(withSession, csrf) : withSession;
 }
 
 const validPayload = {
@@ -32,20 +102,47 @@ const validPayload = {
   nonBusinessDayPolicy: "as_is" as const,
 };
 
-afterAll(async () => {
-  await db.$disconnect();
-});
+describe("recurrenceRoutes (task 2.1 + workspace-resource-scope 4.1)", () => {
+  const app = buildApp(env);
 
-describe("recurrenceRoutes (task 2.1)", () => {
-  it("POST /api/recurring-templates registers a case-relative template and returns 201", async () => {
-    const app = await buildTestApp();
+  let memberId: string;
+  let memberCsrf: { token: string; cookie: string };
+  let workspaceA: string;
+  let workspaceB: string;
+
+  beforeAll(async () => {
+    const member = await registerUser(app, "繰り返しルートメンバー");
+    memberId = member.user.id;
+    memberCsrf = await csrfToken(app, member.cookie);
+    workspaceA = await createWorkspace(app, memberCsrf, `recurrence-route-a-${randomUUID()}`);
+    workspaceB = await createWorkspace(app, memberCsrf, `recurrence-route-b-${randomUUID()}`);
+  });
+
+  afterAll(async () => {
+    const members = await db.workspaceMember.findMany({
+      where: { workspaceId: { in: [workspaceA, workspaceB] } },
+    });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspaceA, workspaceB]);
+    await hardDelete("users", [memberId]);
+    await app.close();
+    await db.$disconnect();
+  });
+
+  it("POST /api/recurring-templates registers a template in the current workspace and returns 201", async () => {
     const templateIds: string[] = [];
     try {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/recurring-templates",
-        payload: validPayload,
-      });
+      const response = await app.inject(
+        withWorkspace(
+          { method: "POST", url: "/api/recurring-templates", payload: validPayload },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
       if (response.statusCode === 201) templateIds.push(response.json().id);
 
       expect(response.statusCode).toBe(201);
@@ -53,126 +150,197 @@ describe("recurrenceRoutes (task 2.1)", () => {
       expect(response.json().caseAnchor).toBe("case_end");
       expect(response.json().caseOffsetDays).toBe(2);
       expect(response.json().defaultMemo).toBe("default note");
+      expect(response.json().workspaceId).toBe(workspaceA);
       expect(response.json()).not.toHaveProperty("kind");
     } finally {
-      await hardDeleteTemplates(templateIds);
-      await app.close();
+      await hardDelete("recurring_task_templates", templateIds);
     }
   });
 
   it("POST /api/recurring-templates returns 400 for invalid input (negative offset / missing fields)", async () => {
-    const app = await buildTestApp();
-    try {
-      const negative = await app.inject({
-        method: "POST",
-        url: "/api/recurring-templates",
-        payload: { ...validPayload, caseOffsetDays: -1 },
-      });
-      expect(negative.statusCode).toBe(400);
+    const negative = await app.inject(
+      withWorkspace(
+        { method: "POST", url: "/api/recurring-templates", payload: { ...validPayload, caseOffsetDays: -1 } },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(negative.statusCode).toBe(400);
 
-      const fixedIntervalShape = await app.inject({
-        method: "POST",
-        url: "/api/recurring-templates",
-        payload: {
-          title: "legacy",
-          priority: "low",
-          kind: "fixed_interval",
-          intervalUnit: "day",
-          intervalValue: 1,
-          nonBusinessDayPolicy: "as_is",
+    const fixedIntervalShape = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/recurring-templates",
+          payload: {
+            title: "legacy",
+            priority: "low",
+            kind: "fixed_interval",
+            intervalUnit: "day",
+            intervalValue: 1,
+            nonBusinessDayPolicy: "as_is",
+          },
         },
-      });
-      expect(fixedIntervalShape.statusCode).toBe(400);
-    } finally {
-      await app.close();
-    }
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(fixedIntervalShape.statusCode).toBe(400);
   });
 
-  it("POST /api/recurring-templates/:id/stop and /resume deactivate and reactivate a template", async () => {
-    const app = await buildTestApp();
+  it("POST stop/resume and GET list are scoped to the current workspace", async () => {
     const templateIds: string[] = [];
     try {
-      const created = await app.inject({
-        method: "POST",
-        url: "/api/recurring-templates",
-        payload: { ...validPayload, title: "stoppable" },
-      });
+      const created = await app.inject(
+        withWorkspace(
+          { method: "POST", url: "/api/recurring-templates", payload: { ...validPayload, title: "stoppable" } },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
       expect(created.statusCode).toBe(201);
       const { id } = created.json();
       templateIds.push(id);
 
-      const stopResponse = await app.inject({ method: "POST", url: `/api/recurring-templates/${id}/stop` });
+      const foreign = await app.inject(
+        withWorkspace(
+          { method: "POST", url: "/api/recurring-templates", payload: { ...validPayload, title: "foreign" } },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceB,
+        ),
+      );
+      expect(foreign.statusCode).toBe(201);
+      templateIds.push(foreign.json().id);
+
+      const stopResponse = await app.inject(
+        withWorkspace(
+          { method: "POST", url: `/api/recurring-templates/${id}/stop` },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
       expect(stopResponse.statusCode).toBe(204);
 
-      const resumeResponse = await app.inject({ method: "POST", url: `/api/recurring-templates/${id}/resume` });
+      const resumeResponse = await app.inject(
+        withWorkspace(
+          { method: "POST", url: `/api/recurring-templates/${id}/resume` },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
       expect(resumeResponse.statusCode).toBe(204);
 
-      const listResponse = await app.inject({ method: "GET", url: "/api/recurring-templates" });
-      const found = listResponse.json().find((t: { id: string; isActive: boolean }) => t.id === id);
-      expect(found?.isActive).toBe(true);
+      const listResponse = await app.inject(
+        withWorkspace(
+          { method: "GET", url: "/api/recurring-templates" },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      const list = listResponse.json() as { id: string; isActive: boolean }[];
+      expect(list.some((t) => t.id === id)).toBe(true);
+      expect(list.some((t) => t.id === foreign.json().id)).toBe(false);
+      expect(list.find((t) => t.id === id)?.isActive).toBe(true);
 
-      const missingStop = await app.inject({
-        method: "POST",
-        url: `/api/recurring-templates/${randomUUID()}/stop`,
-      });
+      const crossStop = await app.inject(
+        withWorkspace(
+          { method: "POST", url: `/api/recurring-templates/${foreign.json().id}/stop` },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(crossStop.statusCode).toBe(404);
+
+      const missingStop = await app.inject(
+        withWorkspace(
+          { method: "POST", url: `/api/recurring-templates/${randomUUID()}/stop` },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
       expect(missingStop.statusCode).toBe(404);
-
-      const missingResume = await app.inject({
-        method: "POST",
-        url: `/api/recurring-templates/${randomUUID()}/resume`,
-      });
-      expect(missingResume.statusCode).toBe(404);
     } finally {
-      await hardDeleteTemplates(templateIds);
-      await app.close();
+      await hardDelete("recurring_task_templates", templateIds);
     }
   });
 
-  it("GET /api/recurring-templates lists registered templates and excludes deleted ones", async () => {
-    const app = await buildTestApp();
+  it("GET /api/recurring-templates excludes deleted templates in the current workspace", async () => {
     const templateIds: string[] = [];
     try {
-      const created = await app.inject({
-        method: "POST",
-        url: "/api/recurring-templates",
-        payload: { ...validPayload, title: "listable", nonBusinessDayPolicy: "skip" },
-      });
+      const created = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/recurring-templates",
+            payload: { ...validPayload, title: "listable", nonBusinessDayPolicy: "skip" },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
       expect(created.statusCode).toBe(201);
       const { id } = created.json();
       templateIds.push(id);
 
-      const deleteResponse = await app.inject({ method: "DELETE", url: `/api/recurring-templates/${id}` });
+      const deleteResponse = await app.inject(
+        withWorkspace(
+          { method: "DELETE", url: `/api/recurring-templates/${id}` },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
       expect(deleteResponse.statusCode).toBe(204);
 
-      const listResponse = await app.inject({ method: "GET", url: "/api/recurring-templates" });
+      const listResponse = await app.inject(
+        withWorkspace(
+          { method: "GET", url: "/api/recurring-templates" },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
       expect(listResponse.json().some((t: { id: string }) => t.id === id)).toBe(false);
     } finally {
-      await hardDeleteTemplates(templateIds);
-      await app.close();
+      await hardDelete("recurring_task_templates", templateIds);
     }
   });
 
   it("DELETE /api/recurring-templates/:id returns 404 for a non-existent template", async () => {
-    const app = await buildTestApp();
-    try {
-      const response = await app.inject({ method: "DELETE", url: `/api/recurring-templates/${randomUUID()}` });
-      expect(response.statusCode).toBe(404);
-    } finally {
-      await app.close();
-    }
+    const response = await app.inject(
+      withWorkspace(
+        { method: "DELETE", url: `/api/recurring-templates/${randomUUID()}` },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(response.statusCode).toBe(404);
   });
 
   it("POST /api/recurring-templates/generate-due is removed (Requirement 1.2)", async () => {
-    const app = await buildTestApp();
-    try {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/recurring-templates/generate-due",
-        payload: { asOf: "2035-01-03T00:00:00.000Z" },
-      });
-      expect(response.statusCode).toBe(404);
-    } finally {
-      await app.close();
-    }
+    const response = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/recurring-templates/generate-due",
+          payload: { asOf: "2035-01-03T00:00:00.000Z" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(response.statusCode).toBe(404);
   });
 });

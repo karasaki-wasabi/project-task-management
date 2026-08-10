@@ -1,6 +1,9 @@
 // RecurringTaskTemplate domain types (task 2.1 template management,
 // design.md "RecurrenceService" Service Interface; task 3.2 applyToCase).
+// workspace-resource-scope task 4.1: RegisterTemplateInput.workspaceId is
+// VerifiedWorkspaceId from request.currentWorkspaceId only.
 import type { RecurringTaskTemplate } from "@prisma/client";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 
 export type { RecurringTaskTemplate, Task } from "@prisma/client";
 export type CaseRelativeAnchor = RecurringTaskTemplate["caseAnchor"];
@@ -25,4 +28,6 @@ export interface RegisterTemplateInput {
   caseOffsetDays: number;
   defaultMemo?: string;
   nonBusinessDayPolicy: NonBusinessDayPolicy;
+  /** From request.currentWorkspaceId only (VerifiedWorkspaceId). */
+  workspaceId: VerifiedWorkspaceId;
 }
