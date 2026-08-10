@@ -7,15 +7,24 @@
 // in-progress period containing `now` itself is never included (Requirement
 // 6.2 "過去複数期間分" / 6.3 "過去の消化ペースをもとにした今後の目安").
 import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
+import { createUserData } from "../../test/user.fixture.js";
 import { throughputService } from "./throughput.service.js";
 
 const createdTaskIds: string[] = [];
+let workspaceId: string;
+let ownerUserId: string;
 
 async function completedTask(completedAt: Date): Promise<string> {
   const task = await db.task.create({
-    data: { title: `task-${randomUUID()}`, priority: "low", status: "done", completedAt },
+    data: {
+      title: `task-${randomUUID()}`,
+      priority: "low",
+      status: "done",
+      completedAt,
+      workspaceId,
+    },
   });
   createdTaskIds.push(task.id);
   return task.id;
@@ -30,8 +39,24 @@ async function cleanup(): Promise<void> {
   createdTaskIds.length = 0;
 }
 
+beforeAll(async () => {
+  const owner = await db.user.create({ data: createUserData(`throughput-owner-${randomUUID()}`) });
+  ownerUserId = owner.id;
+  const workspace = await db.workspace.create({
+    data: { name: `throughput-ws-${randomUUID()}`, createdByUserId: ownerUserId },
+  });
+  workspaceId = workspace.id;
+});
+
 afterAll(async () => {
   await cleanup();
+  if (workspaceId) {
+    await db.$executeRawUnsafe(`DELETE FROM tasks WHERE workspace_id = ?`, workspaceId);
+    await db.workspace.delete({ where: { id: workspaceId } }).catch(() => undefined);
+  }
+  if (ownerUserId) {
+    await db.user.delete({ where: { id: ownerUserId } }).catch(() => undefined);
+  }
   await db.$disconnect();
 });
 

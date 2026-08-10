@@ -16,7 +16,21 @@ import { db } from "./shared/db.js";
 import { createLogger } from "./shared/logger.js";
 import { setBusinessEventLoggerForTests } from "./shared/business-event-logger.js";
 import { setClientErrorLoggerForTests } from "./modules/client-errors/client-error.service.js";
+import { WORKSPACE_HEADER_NAME } from "./shared/workspace-scope.js";
 import { createUserData } from "./test/user.fixture.js";
+
+const WORKSPACE_SCOPED_PREFIXES = [
+  "/api/cases",
+  "/api/tasks",
+  "/api/recurring-templates",
+  "/api/holidays",
+  "/api/development-stages",
+] as const;
+
+function needsWorkspaceHeader(url: string): boolean {
+  const path = url.split("?")[0] ?? url;
+  return WORKSPACE_SCOPED_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+}
 
 function collectingStream() {
   const lines: Record<string, unknown>[] = [];
@@ -36,9 +50,14 @@ function collectingStream() {
   return { stream, lines };
 }
 
-function withAuthenticatedInject(app: ReturnType<typeof buildApp>) {
+type TestAuth = { cookie: string; csrfToken: string; userId: string; workspaceId: string };
+type AppWithTestAuth = ReturnType<typeof buildApp> & {
+  getTestAuth: () => Promise<TestAuth>;
+};
+
+function withAuthenticatedInject(app: ReturnType<typeof buildApp>): AppWithTestAuth {
   const originalInject = app.inject.bind(app);
-  let auth: Promise<{ cookie: string; csrfToken: string; userId: string }> | undefined;
+  let auth: Promise<TestAuth> | undefined;
 
   async function authenticate() {
     auth ??= (async () => {
@@ -62,7 +81,25 @@ function withAuthenticatedInject(app: ReturnType<typeof buildApp>) {
       });
       const csrfSetCookie = csrfResponse.headers["set-cookie"];
       const csrfCookie = (Array.isArray(csrfSetCookie) ? csrfSetCookie : [csrfSetCookie]).find((item) => item?.startsWith("session="))?.split(";")[0];
-      return { cookie: csrfCookie ?? cookie, csrfToken: csrfResponse.json().token, userId: registerResponse.json().id };
+      const sessionCookie = csrfCookie ?? cookie;
+      const csrfToken = csrfResponse.json().token as string;
+
+      const workspaceResponse = await originalInject({
+        method: "POST",
+        url: "/api/workspaces",
+        headers: { cookie: sessionCookie, "csrf-token": csrfToken },
+        payload: { name: `validation-ws-${randomUUID()}` },
+      });
+      if (workspaceResponse.statusCode !== 201) {
+        throw new Error(`failed to create workspace for validation tests: ${workspaceResponse.statusCode}`);
+      }
+
+      return {
+        cookie: sessionCookie,
+        csrfToken,
+        userId: registerResponse.json().id as string,
+        workspaceId: workspaceResponse.json().id as string,
+      };
     })();
     return auth;
   }
@@ -70,22 +107,40 @@ function withAuthenticatedInject(app: ReturnType<typeof buildApp>) {
   app.inject = (async (options: InjectOptions) => {
     if (options.method === "OPTIONS" || options.url.startsWith("/api/auth/")) return originalInject(options);
 
-    const { cookie, csrfToken } = await authenticate();
+    const { cookie, csrfToken, workspaceId } = await authenticate();
+    const url = typeof options.url === "string" ? options.url : String(options.url);
     return originalInject({
       ...options,
       headers: {
         ...options.headers,
         cookie: options.headers?.cookie ? `${options.headers.cookie}; ${cookie}` : cookie,
         ...(options.method === "POST" || options.method === "PATCH" || options.method === "DELETE" ? { "csrf-token": csrfToken } : {}),
+        ...(needsWorkspaceHeader(url) && !options.headers?.[WORKSPACE_HEADER_NAME]
+          ? { [WORKSPACE_HEADER_NAME]: workspaceId }
+          : {}),
       },
     });
   }) as typeof app.inject;
 
   app.addHook("onClose", async () => {
     const authenticated = await auth;
-    if (authenticated) await db.user.delete({ where: { id: authenticated.userId } });
+    if (!authenticated) return;
+    await db.$executeRawUnsafe(`DELETE FROM tasks WHERE workspace_id = ?`, authenticated.workspaceId);
+    await db.$executeRawUnsafe(
+      `DELETE FROM recurring_task_templates WHERE workspace_id = ?`,
+      authenticated.workspaceId,
+    );
+    await db.$executeRawUnsafe(`DELETE FROM non_business_days WHERE workspace_id = ?`, authenticated.workspaceId);
+    await db.$executeRawUnsafe(`DELETE FROM development_stages WHERE workspace_id = ?`, authenticated.workspaceId);
+    await db.$executeRawUnsafe(`DELETE FROM cases WHERE workspace_id = ?`, authenticated.workspaceId);
+    await db.$executeRawUnsafe(`DELETE FROM workspace_members WHERE workspace_id = ?`, authenticated.workspaceId);
+    await db.$executeRawUnsafe(`DELETE FROM workspaces WHERE id = ?`, authenticated.workspaceId);
+    await db.$executeRawUnsafe(`DELETE FROM users WHERE id = ?`, authenticated.userId);
   });
-  return app;
+
+  const authed = app as AppWithTestAuth;
+  authed.getTestAuth = () => authenticate();
+  return authed;
 }
 
 function buildTestApp() {
@@ -104,7 +159,7 @@ function buildTestApp() {
     },
     logger,
   );
-  return { app: withAuthenticatedInject(app), lines };
+  return { app: withAuthenticatedInject(app) as AppWithTestAuth, lines };
 }
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
@@ -490,9 +545,16 @@ describe("12.6: 論理削除の一覧除外と消化数実績不変の統合検�
     const { app } = buildTestApp();
     const taskIds: string[] = [];
     try {
+      const { workspaceId } = await app.getTestAuth();
       const completedAt = new Date("2041-06-04T09:00:00.000Z"); // Wednesday
       const task = await db.task.create({
-        data: { title: `e2e-throughput-${randomUUID()}`, priority: "low", status: "done", completedAt },
+        data: {
+          title: `e2e-throughput-${randomUUID()}`,
+          priority: "low",
+          status: "done",
+          completedAt,
+          workspaceId,
+        },
       });
       taskIds.push(task.id);
 
@@ -603,8 +665,10 @@ describe("18.2: 開発段階更新時の担当者自動設定ルールの統合�
     const stageIds: string[] = [];
     const userIds: string[] = [];
     try {
+      const { workspaceId } = await app.getTestAuth();
       const user = await db.user.create({ data: createUserData(`e2e user ${randomUUID()}`) });
       userIds.push(user.id);
+      await db.workspaceMember.create({ data: { workspaceId, userId: user.id } });
       const stage = await app
         .inject({ method: "POST", url: "/api/development-stages", payload: { name: `e2e stage ${randomUUID()}` } })
         .then((r) => r.json());
@@ -626,6 +690,12 @@ describe("18.2: 開発段階更新時の担当者自動設定ルールの統合�
     } finally {
       await hardDelete("tasks", taskIds);
       await hardDelete("development_stages", stageIds);
+      if (userIds.length > 0) {
+        await db.$executeRawUnsafe(
+          `DELETE FROM workspace_members WHERE user_id IN (${userIds.map(() => "?").join(",")})`,
+          ...userIds,
+        );
+      }
       await hardDelete("users", userIds);
       await app.close();
     }
@@ -637,10 +707,13 @@ describe("18.2: 開発段階更新時の担当者自動設定ルールの統合�
     const stageIds: string[] = [];
     const userIds: string[] = [];
     try {
+      const { workspaceId } = await app.getTestAuth();
       const originalAssignee = await db.user.create({ data: createUserData(`e2e original ${randomUUID()}`) });
       userIds.push(originalAssignee.id);
       const otherUser = await db.user.create({ data: createUserData(`e2e other ${randomUUID()}`) });
       userIds.push(otherUser.id);
+      await db.workspaceMember.create({ data: { workspaceId, userId: originalAssignee.id } });
+      await db.workspaceMember.create({ data: { workspaceId, userId: otherUser.id } });
       const stage = await app
         .inject({ method: "POST", url: "/api/development-stages", payload: { name: `e2e stage ${randomUUID()}` } })
         .then((r) => r.json());
@@ -666,6 +739,12 @@ describe("18.2: 開発段階更新時の担当者自動設定ルールの統合�
     } finally {
       await hardDelete("tasks", taskIds);
       await hardDelete("development_stages", stageIds);
+      if (userIds.length > 0) {
+        await db.$executeRawUnsafe(
+          `DELETE FROM workspace_members WHERE user_id IN (${userIds.map(() => "?").join(",")})`,
+          ...userIds,
+        );
+      }
       await hardDelete("users", userIds);
       await app.close();
     }

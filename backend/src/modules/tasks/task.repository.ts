@@ -31,8 +31,8 @@ export const taskRepository = {
     });
   },
 
-  findById(id: string, workspaceId: VerifiedWorkspaceId): Promise<Task | null> {
-    return db.task.findFirst({ where: withWorkspaceScope({ id }, workspaceId) });
+  findById(id: string, workspaceId: VerifiedWorkspaceId, client: DbClient = db): Promise<Task | null> {
+    return client.task.findFirst({ where: withWorkspaceScope({ id }, workspaceId) });
   },
 
   updateStatus(

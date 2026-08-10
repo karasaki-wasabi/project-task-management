@@ -53,9 +53,13 @@ async function assertRelatedResourcesInWorkspace(
     parentTaskId?: string | null;
     developmentStageId?: string | null;
   },
+  client: DbClient = db,
 ): Promise<Result<void, TaskError>> {
   if (refs.caseId != null) {
-    const caseRecord = await caseRepository.findById(refs.caseId, workspaceId);
+    // Must use the same DbClient as the caller: caseService.create runs
+    // applyToCase inside an interactive TX, so an uncommitted case is only
+    // visible on that TX client (not the global `db`).
+    const caseRecord = await caseRepository.findById(refs.caseId, workspaceId, client);
     if (!caseRecord) {
       return err({
         type: "validation_error",
@@ -64,7 +68,7 @@ async function assertRelatedResourcesInWorkspace(
     }
   }
   if (refs.parentTaskId != null) {
-    const parent = await taskRepository.findById(refs.parentTaskId, workspaceId);
+    const parent = await taskRepository.findById(refs.parentTaskId, workspaceId, client);
     if (!parent) {
       return err({
         type: "validation_error",
@@ -73,9 +77,7 @@ async function assertRelatedResourcesInWorkspace(
     }
   }
   if (refs.developmentStageId != null) {
-    // DevelopmentStageService is not yet workspace-scoped (task 6.1); resolve
-    // with a local scoped find so TaskService still enforces Requirement 3.5.
-    const stage = await db.developmentStage.findFirst({
+    const stage = await client.developmentStage.findFirst({
       where: withWorkspaceScope({ id: refs.developmentStageId }, workspaceId),
     });
     if (!stage) {
@@ -100,10 +102,14 @@ export const tasksService = {
       return assigneeCheck;
     }
 
-    const relatedCheck = await assertRelatedResourcesInWorkspace(input.workspaceId, {
-      caseId: input.caseId,
-      parentTaskId: input.parentTaskId,
-    });
+    const relatedCheck = await assertRelatedResourcesInWorkspace(
+      input.workspaceId,
+      {
+        caseId: input.caseId,
+        parentTaskId: input.parentTaskId,
+      },
+      client,
+    );
     if (!relatedCheck.ok) {
       return relatedCheck;
     }

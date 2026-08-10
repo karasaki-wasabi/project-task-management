@@ -11,6 +11,20 @@ import { buildApp } from "./app.js";
 import { createLogger } from "./shared/logger.js";
 import { setBusinessEventLoggerForTests } from "./shared/business-event-logger.js";
 import { db } from "./shared/db.js";
+import { WORKSPACE_HEADER_NAME } from "./shared/workspace-scope.js";
+
+const WORKSPACE_SCOPED_PREFIXES = [
+  "/api/cases",
+  "/api/tasks",
+  "/api/recurring-templates",
+  "/api/holidays",
+  "/api/development-stages",
+] as const;
+
+function needsWorkspaceHeader(url: string): boolean {
+  const path = url.split("?")[0] ?? url;
+  return WORKSPACE_SCOPED_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+}
 
 function collectingStream() {
   const lines: Record<string, unknown>[] = [];
@@ -32,7 +46,7 @@ function collectingStream() {
 
 function withAuthenticatedInject(app: ReturnType<typeof buildApp>) {
   const originalInject = app.inject.bind(app);
-  let auth: Promise<{ cookie: string; csrfToken: string; userId: string }> | undefined;
+  let auth: Promise<{ cookie: string; csrfToken: string; userId: string; workspaceId: string }> | undefined;
 
   async function authenticate() {
     auth ??= (async () => {
@@ -56,7 +70,25 @@ function withAuthenticatedInject(app: ReturnType<typeof buildApp>) {
       });
       const csrfSetCookie = csrfResponse.headers["set-cookie"];
       const csrfCookie = (Array.isArray(csrfSetCookie) ? csrfSetCookie : [csrfSetCookie]).find((item) => item?.startsWith("session="))?.split(";")[0];
-      return { cookie: csrfCookie ?? cookie, csrfToken: csrfResponse.json().token, userId: registerResponse.json().id };
+      const sessionCookie = csrfCookie ?? cookie;
+      const csrfToken = csrfResponse.json().token as string;
+
+      const workspaceResponse = await originalInject({
+        method: "POST",
+        url: "/api/workspaces",
+        headers: { cookie: sessionCookie, "csrf-token": csrfToken },
+        payload: { name: `app-routes-ws-${randomUUID()}` },
+      });
+      if (workspaceResponse.statusCode !== 201) {
+        throw new Error(`failed to create workspace for app.routes tests: ${workspaceResponse.statusCode}`);
+      }
+
+      return {
+        cookie: sessionCookie,
+        csrfToken,
+        userId: registerResponse.json().id as string,
+        workspaceId: workspaceResponse.json().id as string,
+      };
     })();
     return auth;
   }
@@ -64,20 +96,35 @@ function withAuthenticatedInject(app: ReturnType<typeof buildApp>) {
   app.inject = (async (options: InjectOptions) => {
     if (options.method === "OPTIONS" || options.url.startsWith("/api/auth/")) return originalInject(options);
 
-    const { cookie, csrfToken } = await authenticate();
+    const { cookie, csrfToken, workspaceId } = await authenticate();
+    const url = typeof options.url === "string" ? options.url : String(options.url);
     return originalInject({
       ...options,
       headers: {
         ...options.headers,
         cookie: options.headers?.cookie ? `${options.headers.cookie}; ${cookie}` : cookie,
         ...(options.method === "POST" || options.method === "PATCH" || options.method === "DELETE" ? { "csrf-token": csrfToken } : {}),
+        ...(needsWorkspaceHeader(url) && !options.headers?.[WORKSPACE_HEADER_NAME]
+          ? { [WORKSPACE_HEADER_NAME]: workspaceId }
+          : {}),
       },
     });
   }) as typeof app.inject;
 
   app.addHook("onClose", async () => {
     const authenticated = await auth;
-    if (authenticated) await db.user.delete({ where: { id: authenticated.userId } });
+    if (!authenticated) return;
+    await db.$executeRawUnsafe(`DELETE FROM tasks WHERE workspace_id = ?`, authenticated.workspaceId);
+    await db.$executeRawUnsafe(
+      `DELETE FROM recurring_task_templates WHERE workspace_id = ?`,
+      authenticated.workspaceId,
+    );
+    await db.$executeRawUnsafe(`DELETE FROM non_business_days WHERE workspace_id = ?`, authenticated.workspaceId);
+    await db.$executeRawUnsafe(`DELETE FROM development_stages WHERE workspace_id = ?`, authenticated.workspaceId);
+    await db.$executeRawUnsafe(`DELETE FROM cases WHERE workspace_id = ?`, authenticated.workspaceId);
+    await db.$executeRawUnsafe(`DELETE FROM workspace_members WHERE workspace_id = ?`, authenticated.workspaceId);
+    await db.$executeRawUnsafe(`DELETE FROM workspaces WHERE id = ?`, authenticated.workspaceId);
+    await db.$executeRawUnsafe(`DELETE FROM users WHERE id = ?`, authenticated.userId);
   });
   return app;
 }
