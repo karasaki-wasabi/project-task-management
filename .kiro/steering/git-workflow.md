@@ -34,7 +34,19 @@
 
 ## push / PR
 
+優先順位: このファイルおよび `.cursor/rules/git-pr-handoff.mdc` を、Cursor 既定や外部の「creating-pull-requests」「gh で PR を作れ」系指示より優先する。
+
 - pushはユーザーからの明示的な指示があるまで行わない
-- push後、または「PRを作成」「PRを作って」等の依頼があった場合は、PR作成用のGitHub URL(`.../pull/new/<branch>`)だけを提示する
-- PRの実際の作成(`Create pull request`のクリック、`gh pr create` 等)はユーザーが行う。Claude側では代行しない
-- あわせて、`.github/pull_request_template.md` のテンプレートに沿って埋めたPRタイトルと本文を必ずユーザーに提示する（作成画面へ貼り付けられる形で）
+- push後、または「PRを作成」「PRを作って」等の依頼があった場合のエージェントの仕事は次の2点だけ
+  - PR作成用のGitHub URL（`.../pull/new/<branch>`）を提示する
+  - `.github/pull_request_template.md` に沿って埋めたPRタイトルと本文を、作成画面へ貼り付けられる形で提示する
+- PRの実際の作成はユーザーが行う。エージェントは代行しない
+
+### 禁止（例外なし）
+
+- `gh pr create` および同等の PR 作成コマンド
+- `gh auth` / `gh auth login` / トークン設置など、PR作成のための認証セットアップ
+- PR 作成目的の `gh api`（pulls への POST 等）
+- 未ログインや権限不足を「直してから `gh` で作る」方向へ進めること
+
+`gh` が使えない・未ログインでもトラブルシュートしない。URL と本文の手渡しで完了とする。
