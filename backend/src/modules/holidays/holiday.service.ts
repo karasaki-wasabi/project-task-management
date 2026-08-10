@@ -1,10 +1,13 @@
 // HolidaysService: manual management (task 6.1) + external-API manual sync
 // (task 6.2) + business event logging (task 10.2, design.md
 // "Backend/holidays", Requirements 8.1, 8.2, 8.8, 8.9, 9.1-9.4, 10.2).
+// workspace-resource-scope task 5.1: register/list/remove/sync and business-day
+// helpers are scoped by VerifiedWorkspaceId; cross-workspace access yields 404.
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { HttpError, badRequest, notFound } from "../../shared/http-errors.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { fetchJapaneseHolidays, type ExternalHolidayRecord } from "./holiday.external-api.js";
 import { holidayRepository } from "./holiday.repository.js";
 import type { NonBusinessDay, RegisterNonBusinessDayInput } from "./holiday.types.js";
@@ -44,9 +47,13 @@ export const holidaysService = {
     }
   },
 
-  async remove(id: string, requestId: string = randomUUID()): Promise<void> {
+  async remove(
+    id: string,
+    workspaceId: VerifiedWorkspaceId,
+    requestId: string = randomUUID(),
+  ): Promise<void> {
     try {
-      await holidayRepository.remove(id);
+      await holidayRepository.remove(id, workspaceId);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         throw notFound(`Non-business day not found: ${id}`);
@@ -56,21 +63,21 @@ export const holidaysService = {
     businessEventLogger.logBusinessEvent("non_business_day.deleted", { requestId, entityId: id });
   },
 
-  list(): Promise<NonBusinessDay[]> {
-    return holidayRepository.list();
+  list(workspaceId: VerifiedWorkspaceId): Promise<NonBusinessDay[]> {
+    return holidayRepository.list(workspaceId);
   },
 
-  async isBusinessDay(date: string): Promise<boolean> {
+  async isBusinessDay(date: string, workspaceId: VerifiedWorkspaceId): Promise<boolean> {
     assertValidDate(date);
-    return !(await holidayRepository.existsOnDate(date));
+    return !(await holidayRepository.existsOnDate(date, workspaceId));
   },
 
   // design.md Postconditions: steps day-by-day, starting the day AFTER
   // `date`, until a non-holiday is found (Requirement 8.4).
-  async nextBusinessDay(date: string): Promise<string> {
+  async nextBusinessDay(date: string, workspaceId: VerifiedWorkspaceId): Promise<string> {
     assertValidDate(date);
     let candidate = addDays(date, 1);
-    while (await holidayRepository.existsOnDate(candidate)) {
+    while (await holidayRepository.existsOnDate(candidate, workspaceId)) {
       candidate = addDays(candidate, 1);
     }
     return candidate;
@@ -78,10 +85,10 @@ export const holidaysService = {
 
   // Mirror of nextBusinessDay, stepping backward from the day BEFORE `date`
   // (Requirement 8.5).
-  async previousBusinessDay(date: string): Promise<string> {
+  async previousBusinessDay(date: string, workspaceId: VerifiedWorkspaceId): Promise<string> {
     assertValidDate(date);
     let candidate = addDays(date, -1);
-    while (await holidayRepository.existsOnDate(candidate)) {
+    while (await holidayRepository.existsOnDate(candidate, workspaceId)) {
       candidate = addDays(candidate, -1);
     }
     return candidate;
@@ -91,8 +98,9 @@ export const holidaysService = {
   // (never polled). If the fetch itself fails, the master is left untouched
   // and a 502 is thrown before any writes happen (Requirement: "外部API障害
   // 時は既存マスタを変更せず502を返す"). Records that already exist for a
-  // date are skipped, not overwritten.
+  // date in the current workspace are skipped, not overwritten.
   async syncFromExternalApi(
+    workspaceId: VerifiedWorkspaceId,
     fetchHolidays: () => Promise<ExternalHolidayRecord[]> = fetchJapaneseHolidays,
   ): Promise<{ added: NonBusinessDay[]; skippedExisting: number }> {
     let records: ExternalHolidayRecord[];
@@ -106,7 +114,12 @@ export const holidaysService = {
     let skippedExisting = 0;
     for (const record of records) {
       try {
-        added.push(await holidayRepository.register({ date: record.date, label: record.label }, "external_api"));
+        added.push(
+          await holidayRepository.register(
+            { date: record.date, label: record.label, workspaceId },
+            "external_api",
+          ),
+        );
       } catch (error) {
         if (isUniqueConstraintViolation(error)) {
           skippedExisting += 1;

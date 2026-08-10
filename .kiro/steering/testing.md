@@ -41,6 +41,8 @@
 
 業務画面の E2E はログイン済み状態が前提である。新規シナリオでは `frontend/e2e/fixtures.ts` の共有 fixture を使い、名前だけのユーザー作成 UI を再導入しない。
 
+案件・タスク系などワークスペース文脈が必要な E2E は、既定の `test` fixture（登録／ログイン後にワークスペース作成・選択まで行う）を使う。ワークスペース未作成の空状態を検証するときだけ `authTest`（認証のみ）を使う。API 直叩きヘルパでは `workspaceScopedHeaders`（`x-workspace-id`）を付与する。共有開発 DB では `--workers=1` を推奨する。
+
 実行前に次を同じ Origin に揃える。
 - `E2E_BASE_URL`
   - Playwright が開くフロント URL
@@ -55,6 +57,8 @@ E2E_BASE_URL=http://localhost:3401 npm --prefix frontend run test:e2e -- auth.sp
 ```
 
 `CORS_ORIGIN` だけが `http://localhost:3001` のままだと、登録・ログインの preflight が失敗し、認証クリティカルパスが落ちる。
+
+手動確認用シード（`prisma db seed`）は E2E とは別用途である。E2E 実行後に手元確認へ戻すときはシードを再投入する（[[local-dev-pitfalls]] §11）。
 
 ### 開発DBがE2E実行間でリセットされない
 

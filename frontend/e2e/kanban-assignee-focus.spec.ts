@@ -15,12 +15,13 @@
 // kanban/index.vue only prompts when task.assigneeUserId is unset), keeping
 // this test focused purely on assignee-filter behavior rather than the
 // move-with-assignee-prompt flow already covered by kanban.spec.ts.
-import { expect, registerUser, test } from "./fixtures";
+import { expect, registerWorkspaceMember, test } from "./fixtures";
 import { dragCardTo } from "./drag";
 
 test("selecting an assignee in the kanban filter links the focus tray and stage board to that assignee, and clearing it hides the tray again (Requirements 1.1, 1.2, 4.2, 4.3)", async ({
   page,
   request,
+  workspace,
 }) => {
   const suffix = Date.now();
   const userAName = `e2e-focus-user-a-${suffix}`;
@@ -30,8 +31,8 @@ test("selecting an assignee in the kanban filter links the focus tray and stage 
   const taskBTitle = `e2e-focus-task-b-${suffix}`;
 
   // 1. Create two distinct accounts for the assignee fixtures.
-  await registerUser(request, userAName);
-  await registerUser(request, userBName);
+  await registerWorkspaceMember(page, request, workspace.id, userAName);
+  await registerWorkspaceMember(page, request, workspace.id, userBName);
 
   // 2. Create a development stage.
   await page.goto("/kanban/stages");

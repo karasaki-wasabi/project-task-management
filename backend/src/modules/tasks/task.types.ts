@@ -4,7 +4,10 @@
 // shape per design.md so this task accepts it (and lets Prisma's FK
 // constraint reject a non-existent parent) without implementing hierarchy
 // business rules yet.
+// workspace-resource-scope task 3.1: CreateTaskInput / TaskListFilter require
+// VerifiedWorkspaceId (clients cannot set it via body).
 import type { Task as PrismaTask } from "@prisma/client";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 
 export type { Task } from "@prisma/client";
 export type TaskStatus = PrismaTask["status"];
@@ -26,6 +29,8 @@ export interface CreateTaskInput {
   // Snapshot of the template caseAnchor at generation time (Req 5.3).
   sourceAnchor?: PrismaTask["sourceAnchor"];
   scheduledDate?: Date;
+  /** From request.currentWorkspaceId only (VerifiedWorkspaceId). */
+  workspaceId: VerifiedWorkspaceId;
 }
 
 export interface TaskListFilter {
@@ -35,6 +40,8 @@ export interface TaskListFilter {
   // truthy, exclusively filters caseId IS NULL regardless of any other
   // caseId value also present on this filter.
   unassignedCase?: boolean;
+  /** Current workspace scope (VerifiedWorkspaceId). */
+  workspaceId: VerifiedWorkspaceId;
 }
 
 export interface UpdateTaskInput {

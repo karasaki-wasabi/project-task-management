@@ -211,6 +211,7 @@ const OVERFLOW_CHIP_STYLE = {
 };
 
 const api = useApiClient();
+const { currentId } = useCurrentWorkspace();
 
 const now = new Date();
 const todayIso = computeTodayIso(now);
@@ -402,6 +403,7 @@ function visibleMarkersFor(cell: DateCell, maxTasks: number) {
 // kanban/index.vue. Does not touch `cases` (Requirement 5.3 — case bars are
 // always unfiltered, and listCases has no filter param, task 4.2).
 async function loadTasks() {
+  if (currentId.value === null) return;
   error.value = null;
   try {
     tasks.value = await api.listTasks({ assigneeUserId: assigneeUserId.value || undefined });
@@ -420,6 +422,7 @@ async function loadTasks() {
 // convention, the full list is fetched once here rather than re-fetched per
 // month.
 async function load() {
+  if (currentId.value === null) return;
   error.value = null;
   try {
     [tasks.value, cases.value, users.value, stages.value, holidays.value] = await Promise.all([
@@ -562,13 +565,50 @@ function goToToday() {
 // `loadTasks` (server-side `assigneeUserId` filter); cases are fetched only
 // once at mount (see file header comment for why month navigation doesn't
 // need a cases re-fetch).
-watch([year, month, assigneeUserId], loadTasks);
+watch([year, month, assigneeUserId], () => {
+  if (currentId.value === null) return;
+  void loadTasks();
+});
 
-onMounted(load);
+watch(
+  currentId,
+  (id) => {
+    if (id === null) {
+      tasks.value = [];
+      cases.value = [];
+      users.value = [];
+      stages.value = [];
+      holidays.value = [];
+      loaded.value = false;
+      error.value = null;
+      return;
+    }
+    void load();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
   <div class="space-y-5">
+    <div
+      v-if="currentId === null"
+      data-testid="workspace-empty-state"
+      class="rounded-lg bg-white p-8 text-center ring-1 ring-slate-200"
+    >
+      <h1 class="text-xl font-semibold tracking-tight text-slate-900">ワークスペースがありません</h1>
+      <p class="mt-2 text-sm text-slate-600">
+        最初のワークスペースを作成すると、メンバーを追加して共有の可視境界を持てます。
+      </p>
+      <NuxtLink
+        to="/workspaces"
+        class="mt-5 inline-block rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
+      >
+        ワークスペースを作成
+      </NuxtLink>
+    </div>
+
+    <template v-else>
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
       <h1 class="text-xl font-semibold tracking-tight text-slate-900">カレンダー</h1>
 
@@ -807,5 +847,6 @@ onMounted(load);
       @select="onOverflowSelect"
       @close="closeOverflowPopup"
     />
+    </template>
   </div>
 </template>

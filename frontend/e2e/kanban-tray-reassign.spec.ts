@@ -14,10 +14,10 @@
 //
 // Same manual-mouse-events rationale as ./drag.ts's `dragCardTo` — Sortable
 // (`forceFallback` mode) doesn't use native HTML5 drag events.
-import { expect, registerUser, test } from "./fixtures";
+import { expect, registerWorkspaceMember, test } from "./fixtures";
 import { dragCardTo } from "./drag";
 
-test("dragging an already-assigned task into a different assignee's focus tray reassigns it (Requirement 9)", async ({ page, request }) => {
+test("dragging an already-assigned task into a different assignee's focus tray reassigns it (Requirement 9)", async ({ page, request, workspace }) => {
   const suffix = Date.now();
   const userAName = `e2e-reassign-user-a-${suffix}`;
   const userBName = `e2e-reassign-user-b-${suffix}`;
@@ -25,8 +25,8 @@ test("dragging an already-assigned task into a different assignee's focus tray r
   const taskTitle = `e2e-reassign-task-${suffix}`;
   const userATaskTitle = `e2e-reassign-task-a-${suffix}`;
 
-  await registerUser(request, userAName);
-  await registerUser(request, userBName);
+  await registerWorkspaceMember(page, request, workspace.id, userAName);
+  await registerWorkspaceMember(page, request, workspace.id, userBName);
 
   await page.goto("/kanban/stages");
   await page.getByPlaceholder("段階名(例: 仕様未確定)").fill(stageName);

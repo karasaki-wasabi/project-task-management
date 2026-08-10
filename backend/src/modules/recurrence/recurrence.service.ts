@@ -6,6 +6,8 @@
 // Task 4: CaseService passes a DbClient (interactive TX) through
 // applyToCase → generateForAnchor / tryCreateInstance /
 // deleteGeneratedForAnchors → tasksService.create|delete.
+// workspace-resource-scope task 4.1: template CRUD takes VerifiedWorkspaceId;
+// applyToCase filters templates by case.workspaceId.
 import { randomUUID } from "node:crypto";
 import type { Case } from "@prisma/client";
 import { Prisma } from "@prisma/client";
@@ -13,6 +15,7 @@ import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { db } from "../../shared/db.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { formatDateOnly, parseDateOnly } from "../holidays/holiday.repository.js";
 import { holidaysService } from "../holidays/holiday.service.js";
 import { tasksService } from "../tasks/task.service.js";
@@ -119,21 +122,25 @@ export function computeRawScheduledDates(
 
 // Requirements 5.7 / holidays policy: apply NBD after the raw period check.
 // Returns null when policy=skip and the raw date is a non-business day.
-async function resolveScheduledDate(date: Date, policy: NonBusinessDayPolicy): Promise<Date | null> {
+async function resolveScheduledDate(
+  date: Date,
+  policy: NonBusinessDayPolicy,
+  workspaceId: VerifiedWorkspaceId,
+): Promise<Date | null> {
   const dateStr = formatDateOnly(date);
   if (policy === "as_is") {
     return date;
   }
-  if (await holidaysService.isBusinessDay(dateStr)) {
+  if (await holidaysService.isBusinessDay(dateStr, workspaceId)) {
     return date;
   }
   switch (policy) {
     case "skip":
       return null;
     case "next_business_day":
-      return parseDateOnly(await holidaysService.nextBusinessDay(dateStr));
+      return parseDateOnly(await holidaysService.nextBusinessDay(dateStr, workspaceId));
     case "previous_business_day":
-      return parseDateOnly(await holidaysService.previousBusinessDay(dateStr));
+      return parseDateOnly(await holidaysService.previousBusinessDay(dateStr, workspaceId));
   }
 }
 
@@ -146,11 +153,13 @@ function logInstanceGenerated(instance: Task, requestId: string): void {
 
 // design.md tryCreateInstance pattern: TasksService.create with caseId,
 // defaultMemo, sourceTemplateId, sourceAnchor, scheduledDate. Active unique
-// collision → idempotent null.
+// collision → idempotent null. Generated tasks inherit the case workspace
+// (Requirement 1.3 / workspace-resource-scope 4.1).
 async function tryCreateInstance(
   template: RecurringTaskTemplate,
   scheduledDate: Date,
   caseId: string,
+  caseWorkspaceId: VerifiedWorkspaceId,
   client: DbClient,
 ): Promise<Task | null> {
   let result;
@@ -164,6 +173,7 @@ async function tryCreateInstance(
         sourceTemplateId: template.id,
         sourceAnchor: template.caseAnchor,
         scheduledDate,
+        workspaceId: caseWorkspaceId,
       },
       client,
     );
@@ -193,7 +203,12 @@ async function deleteGeneratedForAnchors(
     where: { caseId, sourceAnchor: { in: anchors } },
   });
   for (const task of tasks) {
-    const result = await tasksService.delete(task.id, requestId, client);
+    const result = await tasksService.delete(
+      task.id,
+      task.workspaceId as VerifiedWorkspaceId,
+      requestId,
+      client,
+    );
     if (!result.ok && result.error.type !== "not_found") {
       throw new Error(`recurrence: failed to delete task instance: ${result.error.type}`);
     }
@@ -206,9 +221,9 @@ export const recurrenceService = {
     return recurrenceRepository.create({ ...input, title: input.title.trim() });
   },
 
-  async stopTemplate(templateId: string): Promise<void> {
+  async stopTemplate(templateId: string, workspaceId: VerifiedWorkspaceId): Promise<void> {
     try {
-      await recurrenceRepository.stop(templateId);
+      await recurrenceRepository.stop(templateId, workspaceId);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         throw notFound(`Recurring task template not found: ${templateId}`);
@@ -218,9 +233,9 @@ export const recurrenceService = {
   },
 
   // Requirement 2.7: isActive=true only; does not scan or backfill cases.
-  async resumeTemplate(templateId: string): Promise<void> {
+  async resumeTemplate(templateId: string, workspaceId: VerifiedWorkspaceId): Promise<void> {
     try {
-      await recurrenceRepository.resume(templateId);
+      await recurrenceRepository.resume(templateId, workspaceId);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         throw notFound(`Recurring task template not found: ${templateId}`);
@@ -229,9 +244,13 @@ export const recurrenceService = {
     }
   },
 
-  async deleteTemplate(templateId: string, requestId: string = randomUUID()): Promise<void> {
+  async deleteTemplate(
+    templateId: string,
+    workspaceId: VerifiedWorkspaceId,
+    requestId: string = randomUUID(),
+  ): Promise<void> {
     try {
-      await recurrenceRepository.remove(templateId);
+      await recurrenceRepository.remove(templateId, workspaceId);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         throw notFound(`Recurring task template not found: ${templateId}`);
@@ -241,20 +260,22 @@ export const recurrenceService = {
     businessEventLogger.logBusinessEvent("recurring_task_template.deleted", { requestId, entityId: templateId });
   },
 
-  list(): Promise<RecurringTaskTemplate[]> {
-    return recurrenceRepository.list();
+  list(workspaceId: VerifiedWorkspaceId): Promise<RecurringTaskTemplate[]> {
+    return recurrenceRepository.list(workspaceId);
   },
 
   // Internal helper for applyToCase. Active templates with the given
-  // caseAnchor only (Requirement 5.1). Period check on raw dates, then NBD;
-  // skip → no instance (design.md 予定日計算).
+  // caseAnchor only (Requirement 5.1), limited to the case's workspace
+  // (Requirement 1.3 / design.md recurrence applyToCase). Period check on
+  // raw dates, then NBD; skip → no instance (design.md 予定日計算).
   async generateForAnchor(
-    caseEntity: Pick<Case, "id" | "startDate" | "endDate">,
+    caseEntity: Pick<Case, "id" | "startDate" | "endDate" | "workspaceId">,
     anchor: CaseRelativeAnchor,
     requestId: string = randomUUID(),
     client: DbClient = db,
   ): Promise<Task[]> {
-    const templates = (await recurrenceRepository.listActive()).filter((t) => t.caseAnchor === anchor);
+    const workspaceId = caseEntity.workspaceId as VerifiedWorkspaceId;
+    const templates = (await recurrenceRepository.listActive(workspaceId)).filter((t) => t.caseAnchor === anchor);
     const created: Task[] = [];
 
     for (const template of templates) {
@@ -265,9 +286,13 @@ export const recurrenceService = {
         caseEntity.endDate,
       );
       for (const raw of rawDates) {
-        const scheduledDate = await resolveScheduledDate(parseDateOnly(raw), template.nonBusinessDayPolicy);
+        const scheduledDate = await resolveScheduledDate(
+          parseDateOnly(raw),
+          template.nonBusinessDayPolicy,
+          workspaceId,
+        );
         if (scheduledDate === null) continue;
-        const instance = await tryCreateInstance(template, scheduledDate, caseEntity.id, client);
+        const instance = await tryCreateInstance(template, scheduledDate, caseEntity.id, workspaceId, client);
         if (instance) {
           created.push(instance);
           logInstanceGenerated(instance, requestId);

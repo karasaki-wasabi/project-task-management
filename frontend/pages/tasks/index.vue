@@ -2,14 +2,27 @@
   Task list with status/priority at a glance, hierarchy display, and split
   UI (task 11.1, design.md "Frontend/tasks", Requirements 1.1-1.6, 2.1-2.4).
   Assignee filtering reuses AssigneeFilter (task 11.6, Requirement 7.2).
+
+  Explicit Vue / useApiClient imports so vitest can mount without Nuxt
+  auto-import runtime (same approach as pages/holidays/index.vue).
 -->
 <script setup lang="ts">
+import { computed, ref, watch } from "vue";
+import {
+  useApiClient,
+  type Priority,
+  type Task,
+  type TaskStatus,
+  type User,
+} from "../../composables/useApiClient";
+import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
+
 const api = useApiClient();
-const route = useRoute();
+const { currentId } = useCurrentWorkspace();
 
 const tasks = ref<Task[]>([]);
 const assigneeUserId = ref("");
-const caseId = ref((route.query.caseId as string | undefined) ?? "");
+const caseId = ref((useRoute().query.caseId as string | undefined) ?? "");
 
 const newTitle = ref("");
 const newPriority = ref<Priority>("medium");
@@ -28,6 +41,7 @@ function childrenOf(taskId: string): Task[] {
 }
 
 async function load() {
+  if (currentId.value === null) return;
   tasks.value = await api.listTasks({
     assigneeUserId: assigneeUserId.value || undefined,
     caseId: caseId.value || undefined,
@@ -82,15 +96,59 @@ async function confirmSplit() {
   await load();
 }
 
-watch([assigneeUserId, caseId], load);
-onMounted(async () => {
-  await load();
-  users.value = await api.listUsers();
+watch([assigneeUserId, caseId], () => {
+  if (currentId.value === null) return;
+  void load();
 });
+
+watch(
+  currentId,
+  (id) => {
+    if (id === null) {
+      tasks.value = [];
+      users.value = [];
+      splitTarget.value = null;
+      error.value = null;
+      return;
+    }
+    void (async () => {
+      await load();
+      // Requirement 4.1 / design.md: assignee candidates are current
+      // workspace members. Normalize WorkspaceUserSummary.userId → User.id
+      // so existing option :value / :key keep working.
+      const members = await api.listWorkspaceMembers(id);
+      users.value = members.map((member) => ({
+        id: member.userId,
+        name: member.name,
+        createdAt: "",
+        updatedAt: "",
+      }));
+    })();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
   <div class="space-y-6">
+    <div
+      v-if="currentId === null"
+      data-testid="workspace-empty-state"
+      class="rounded-lg bg-white p-8 text-center ring-1 ring-slate-200"
+    >
+      <h1 class="text-xl font-semibold tracking-tight text-slate-900">ワークスペースがありません</h1>
+      <p class="mt-2 text-sm text-slate-600">
+        最初のワークスペースを作成すると、メンバーを追加して共有の可視境界を持てます。
+      </p>
+      <NuxtLink
+        to="/workspaces"
+        class="mt-5 inline-block rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
+      >
+        ワークスペースを作成
+      </NuxtLink>
+    </div>
+
+    <template v-else>
     <h1 class="text-xl font-semibold tracking-tight">タスク一覧</h1>
 
     <AssigneeFilter v-model="assigneeUserId" />
@@ -183,5 +241,6 @@ onMounted(async () => {
         </button>
       </div>
     </div>
+    </template>
   </div>
 </template>

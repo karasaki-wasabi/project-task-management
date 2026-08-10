@@ -15,11 +15,12 @@
 // (`forceFallback` mode) doesn't use native HTML5 drag events, so this
 // needs a real multi-hop mouse down/move/move/up sequence, not
 // `locator.dragTo()`.
-import { expect, registerUser, test } from "./fixtures";
+import { expect, registerWorkspaceMember, test } from "./fixtures";
 
 test("dragging a card out to another column and back to its origin before releasing leaves it in the origin column (regression)", async ({
   page,
   request,
+  workspace,
 }) => {
   const suffix = Date.now();
   const stageAName = `e2e-cancel-stage-a-${suffix}`;
@@ -27,7 +28,7 @@ test("dragging a card out to another column and back to its origin before releas
   const userName = `e2e-cancel-user-${suffix}`;
   const taskTitle = `e2e-cancel-task-${suffix}`;
 
-  await registerUser(request, userName);
+  await registerWorkspaceMember(page, request, workspace.id, userName);
 
   await page.goto("/tasks");
   await page.getByPlaceholder("タスク名").fill(taskTitle);

@@ -2,9 +2,12 @@
 // design.md "Backend/tasks" API Contract). Registered into the shared app in
 // task 10.3; standalone Fastify plugin here so this module stays testable in
 // isolation.
-import type { FastifyInstance } from "fastify";
+// workspace-resource-scope task 3.1: passes request.currentWorkspaceId into
+// TasksService; clients cannot set workspaceId via body.
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { tasksService } from "./task.service.js";
 import type { TaskError } from "./task.types.js";
 
@@ -54,6 +57,13 @@ function parseOrBadRequest<T>(schema: z.ZodType<T>, data: unknown): T {
   return result.data;
 }
 
+function requireCurrentWorkspaceId(request: FastifyRequest): VerifiedWorkspaceId {
+  if (!request.currentWorkspaceId) {
+    throw badRequest("X-Workspace-Id is required");
+  }
+  return request.currentWorkspaceId;
+}
+
 function taskErrorStatusCode(error: TaskError): number {
   switch (error.type) {
     case "not_found":
@@ -79,7 +89,8 @@ function taskErrorMessage(error: TaskError): string {
 export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/tasks", async (request, reply) => {
     const body = parseOrBadRequest(createTaskBodySchema, request.body);
-    const result = await tasksService.create(body);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    const result = await tasksService.create({ ...body, workspaceId });
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
@@ -89,7 +100,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/tasks/:id", async (request, reply) => {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
-    const result = await tasksService.getById(params.id);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    const result = await tasksService.getById(params.id, workspaceId);
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
@@ -100,7 +112,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.patch("/api/tasks/:id", async (request, reply) => {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
     const body = parseOrBadRequest(updateTaskBodySchema, request.body);
-    const result = await tasksService.update(params.id, body);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    const result = await tasksService.update(params.id, workspaceId, body);
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
@@ -111,7 +124,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.patch("/api/tasks/:id/status", async (request, reply) => {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
     const body = parseOrBadRequest(updateStatusBodySchema, request.body);
-    const result = await tasksService.updateStatus(params.id, body.status);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    const result = await tasksService.updateStatus(params.id, workspaceId, body.status);
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
@@ -122,7 +136,13 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.patch("/api/tasks/:id/development-stage", async (request, reply) => {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
     const body = parseOrBadRequest(updateDevelopmentStageBodySchema, request.body);
-    const result = await tasksService.updateDevelopmentStage(params.id, body.developmentStageId, body.assigneeUserId);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    const result = await tasksService.updateDevelopmentStage(
+      params.id,
+      workspaceId,
+      body.developmentStageId,
+      body.assigneeUserId,
+    );
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
@@ -133,7 +153,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/tasks/:id/children", async (request, reply) => {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
     const body = parseOrBadRequest(createTaskBodySchema, request.body);
-    const result = await tasksService.addChild(params.id, body);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    const result = await tasksService.addChild(params.id, workspaceId, { ...body, workspaceId });
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
@@ -144,7 +165,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/tasks/:id/split", async (request, reply) => {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
     const body = parseOrBadRequest(splitBodySchema, request.body);
-    const result = await tasksService.splitTask(params.id, body.parts);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    const result = await tasksService.splitTask(
+      params.id,
+      workspaceId,
+      body.parts.map((part) => ({ ...part, workspaceId })),
+    );
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
@@ -154,7 +180,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete("/api/tasks/:id", async (request, reply) => {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
-    const result = await tasksService.delete(params.id, request.id);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    const result = await tasksService.delete(params.id, workspaceId, request.id);
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
@@ -164,10 +191,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/tasks", async (request) => {
     const query = parseOrBadRequest(listQuerySchema, request.query);
+    const workspaceId = requireCurrentWorkspaceId(request);
     return tasksService.list({
       caseId: query.caseId,
       assigneeUserId: query.assigneeUserId,
       unassignedCase: query.unassignedCase === "true",
+      workspaceId,
     });
   });
 }

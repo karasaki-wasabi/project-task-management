@@ -2,8 +2,11 @@
 // audit-column behavior and the default `deletedAt: null` list filter come
 // from the shared `db` client (task 1.4). Optional DbClient supports
 // CaseService same-TX apply (task 4).
+// workspace-resource-scope task 3.1: all queries take VerifiedWorkspaceId and
+// compose where via withWorkspaceScope.
 import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
+import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import type { CreateTaskInput, Task, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
 
 export const taskRepository = {
@@ -23,42 +26,55 @@ export const taskRepository = {
         sourceTemplateId: input.sourceTemplateId,
         sourceAnchor: input.sourceAnchor,
         scheduledDate: input.scheduledDate,
+        workspaceId: input.workspaceId,
       },
     });
   },
 
-  findById(id: string): Promise<Task | null> {
-    return db.task.findUnique({ where: { id } });
+  findById(id: string, workspaceId: VerifiedWorkspaceId, client: DbClient = db): Promise<Task | null> {
+    return client.task.findFirst({ where: withWorkspaceScope({ id }, workspaceId) });
   },
 
-  updateStatus(id: string, status: TaskStatus, completedAt: Date | null): Promise<Task> {
-    return db.task.update({ where: { id }, data: { status, completedAt } });
+  updateStatus(
+    id: string,
+    workspaceId: VerifiedWorkspaceId,
+    status: TaskStatus,
+    completedAt: Date | null,
+  ): Promise<Task> {
+    return db.task.update({
+      where: withWorkspaceScope({ id }, workspaceId),
+      data: { status, completedAt },
+    });
   },
 
   updateDevelopmentStage(
     id: string,
+    workspaceId: VerifiedWorkspaceId,
     data: { developmentStageId: string | null; assigneeUserId?: string },
   ): Promise<Task> {
-    return db.task.update({ where: { id }, data });
+    return db.task.update({ where: withWorkspaceScope({ id }, workspaceId), data });
   },
 
-  update(id: string, data: UpdateTaskInput): Promise<Task> {
-    return db.task.update({ where: { id }, data });
+  update(id: string, workspaceId: VerifiedWorkspaceId, data: UpdateTaskInput): Promise<Task> {
+    return db.task.update({ where: withWorkspaceScope({ id }, workspaceId), data });
   },
 
-  delete(id: string, client: DbClient = db): Promise<Task> {
-    return client.task.delete({ where: { id } });
+  delete(id: string, workspaceId: VerifiedWorkspaceId, client: DbClient = db): Promise<Task> {
+    return client.task.delete({ where: withWorkspaceScope({ id }, workspaceId) });
   },
 
   list(filter: TaskListFilter): Promise<Task[]> {
     return db.task.findMany({
-      where: {
-        // design.md "Backend/tasks > TasksService.list 未割当フィルタ拡張":
-        // unassignedCase is exclusive and takes priority over any caseId
-        // also present on the filter.
-        caseId: filter.unassignedCase ? null : filter.caseId,
-        assigneeUserId: filter.assigneeUserId,
-      },
+      where: withWorkspaceScope(
+        {
+          // design.md "Backend/tasks > TasksService.list 未割当フィルタ拡張":
+          // unassignedCase is exclusive and takes priority over any caseId
+          // also present on the filter.
+          caseId: filter.unassignedCase ? null : filter.caseId,
+          assigneeUserId: filter.assigneeUserId,
+        },
+        filter.workspaceId,
+      ),
       orderBy: { createdAt: "asc" },
     });
   },
@@ -87,6 +103,7 @@ export const taskRepository = {
               isRequiredForCase: input.caseId ? (input.isRequiredForCase ?? false) : false,
               assigneeUserId: input.assigneeUserId,
               parentTaskId: input.parentTaskId,
+              workspaceId: input.workspaceId,
             },
           }),
         );

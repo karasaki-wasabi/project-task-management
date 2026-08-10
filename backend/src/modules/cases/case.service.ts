@@ -7,11 +7,15 @@
 // Task 4: date save + template apply run in one Prisma TX. templateOperations
 // omit = full candidates, [] = no apply, non-subset = 400 (Requirements
 // 3.2–3.4, 3.6, 4.3, 4.13; design.md CaseService / Architecture Integration).
+//
+// workspace-resource-scope task 2.1: create/list/get/update/delete are scoped
+// by VerifiedWorkspaceId; cross-workspace access yields notFound (404).
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { db } from "../../shared/db.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { recurrenceService } from "../recurrence/recurrence.service.js";
 import { caseRepository } from "./case.repository.js";
 import {
@@ -80,7 +84,12 @@ export const caseService = {
     // (false) apply. Date write + apply share one TX (design.md CaseService).
     const caseEntity = await db.$transaction(async (tx) => {
       const created = await caseRepository.create(
-        { name, startDate: input.startDate, endDate: input.endDate },
+        {
+          name,
+          startDate: input.startDate,
+          endDate: input.endDate,
+          workspaceId: input.workspaceId,
+        },
         tx,
       );
       if (operations.length > 0) {
@@ -95,8 +104,13 @@ export const caseService = {
     return caseEntity;
   },
 
-  async update(id: string, input: UpdateCaseInput, requestId: string = randomUUID()): Promise<Case> {
-    const current = await caseRepository.findById(id);
+  async update(
+    id: string,
+    workspaceId: VerifiedWorkspaceId,
+    input: UpdateCaseInput,
+    requestId: string = randomUUID(),
+  ): Promise<Case> {
+    const current = await caseRepository.findById(id, workspaceId);
     if (!current) {
       throw notFound(`Case not found: ${id}`);
     }
@@ -132,7 +146,7 @@ export const caseService = {
 
     try {
       return await db.$transaction(async (tx) => {
-        const updated = await caseRepository.update(id, data, tx);
+        const updated = await caseRepository.update(id, workspaceId, data, tx);
         if (operations.length > 0) {
           await recurrenceService.applyToCase(id, operations, requestId, tx);
         }
@@ -146,15 +160,15 @@ export const caseService = {
     }
   },
 
-  async getProgress(id: string): Promise<CaseProgress> {
-    const caseEntity = await caseRepository.findById(id);
+  async getProgress(id: string, workspaceId: VerifiedWorkspaceId): Promise<CaseProgress> {
+    const caseEntity = await caseRepository.findById(id, workspaceId);
     if (!caseEntity) {
       throw notFound(`Case not found: ${id}`);
     }
 
     const [requiredTotal, requiredCompleted] = await Promise.all([
-      caseRepository.countRequiredTasks(id),
-      caseRepository.countRequiredCompletedTasks(id),
+      caseRepository.countRequiredTasks(id, workspaceId),
+      caseRepository.countRequiredCompletedTasks(id, workspaceId),
     ]);
     const requiredIncomplete = requiredTotal - requiredCompleted;
 
@@ -176,9 +190,13 @@ export const caseService = {
     };
   },
 
-  async delete(id: string, requestId: string = randomUUID()): Promise<void> {
+  async delete(
+    id: string,
+    workspaceId: VerifiedWorkspaceId,
+    requestId: string = randomUUID(),
+  ): Promise<void> {
     try {
-      await caseRepository.delete(id);
+      await caseRepository.delete(id, workspaceId);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         throw notFound(`Case not found: ${id}`);
@@ -188,7 +206,7 @@ export const caseService = {
     businessEventLogger.logBusinessEvent("case.deleted", { requestId, entityId: id });
   },
 
-  list(): Promise<Case[]> {
-    return caseRepository.list();
+  list(workspaceId: VerifiedWorkspaceId): Promise<Case[]> {
+    return caseRepository.list(workspaceId);
   },
 };

@@ -62,6 +62,23 @@ describe("recurrence schema shape (task 1.1)", () => {
 });
 
 describe("physical schema (task 1.2)", () => {
+  async function createOwnedWorkspace(suffix: string) {
+    const user = await prisma.user.create({
+      data: {
+        email: `owned-${suffix}@example.test`,
+        name: `owned-${suffix}`,
+        passwordHash: "test-password-hash",
+      },
+    });
+    const workspace = await prisma.workspace.create({
+      data: {
+        name: `owned-ws-${suffix}`,
+        createdByUserId: user.id,
+      },
+    });
+    return { user, workspace };
+  }
+
   it("provides email and password_hash columns and enforces unique email", async () => {
     const columns = await prisma.$queryRaw<Array<{ Field: string }>>`SHOW COLUMNS FROM users`;
     const columnNames = columns.map((column) => column.Field);
@@ -84,16 +101,14 @@ describe("physical schema (task 1.2)", () => {
   });
 
   it("round-trips user, case, template, task, and non_business_day", async () => {
-    const userId = randomUUID();
-    const user = await prisma.user.create({
-      data: {
-        email: `user-${userId}@example.test`,
-        name: `user-${userId}`,
-        passwordHash: "test-password-hash",
-      },
-    });
+    const suffix = randomUUID();
+    const { user, workspace } = await createOwnedWorkspace(suffix);
     const caseEntity = await prisma.case.create({
-      data: { name: `case-${randomUUID()}`, endDate: new Date("2026-08-01") },
+      data: {
+        name: `case-${randomUUID()}`,
+        endDate: new Date("2026-08-01"),
+        workspaceId: workspace.id,
+      },
     });
     const template = await prisma.recurringTaskTemplate.create({
       data: {
@@ -102,6 +117,7 @@ describe("physical schema (task 1.2)", () => {
         caseAnchor: CaseRelativeAnchor.case_start,
         caseOffsetDays: 0,
         nonBusinessDayPolicy: "as_is",
+        workspaceId: workspace.id,
       },
     });
     const task = await prisma.task.create({
@@ -112,14 +128,21 @@ describe("physical schema (task 1.2)", () => {
         sourceTemplateId: template.id,
         sourceAnchor: CaseRelativeAnchor.case_start,
         scheduledDate: new Date("2026-08-10"),
+        workspaceId: workspace.id,
       },
     });
     const holiday = await prisma.nonBusinessDay.create({
-      data: { date: new Date("2030-01-01"), label: "test-holiday", source: "manual" },
+      data: {
+        date: new Date("2030-01-01"),
+        label: "test-holiday",
+        source: "manual",
+        workspaceId: workspace.id,
+      },
     });
 
     expect(user.id).toBeTruthy();
     expect(caseEntity.id).toBeTruthy();
+    expect(caseEntity.workspaceId).toBe(workspace.id);
     expect(template.caseAnchor).toBe(CaseRelativeAnchor.case_start);
     expect(task.sourceAnchor).toBe(CaseRelativeAnchor.case_start);
     expect(holiday.source).toBe("manual");
@@ -128,6 +151,7 @@ describe("physical schema (task 1.2)", () => {
     await prisma.nonBusinessDay.delete({ where: { id: holiday.id } });
     await prisma.recurringTaskTemplate.delete({ where: { id: template.id } });
     await prisma.case.delete({ where: { id: caseEntity.id } });
+    await prisma.workspace.delete({ where: { id: workspace.id } });
     await prisma.user.delete({ where: { id: user.id } });
   });
 
@@ -147,30 +171,42 @@ describe("physical schema (task 1.2)", () => {
   });
 
   it("rejects two active non_business_days on the same date via date_active_key, but allows re-registration after soft delete", async () => {
+    const suffix = randomUUID();
+    const { user, workspace } = await createOwnedWorkspace(`nbd-${suffix}`);
     const date = new Date("2031-05-05");
 
     const first = await prisma.nonBusinessDay.create({
-      data: { date, label: "first", source: "manual" },
+      data: { date, label: "first", source: "manual", workspaceId: workspace.id },
     });
 
     await expect(
-      prisma.nonBusinessDay.create({ data: { date, label: "duplicate", source: "manual" } }),
+      prisma.nonBusinessDay.create({
+        data: { date, label: "duplicate", source: "manual", workspaceId: workspace.id },
+      }),
     ).rejects.toThrow();
 
     await prisma.$executeRaw`UPDATE non_business_days SET deleted_at = NOW() WHERE id = ${first.id}`;
 
     const second = await prisma.nonBusinessDay.create({
-      data: { date, label: "second", source: "manual" },
+      data: { date, label: "second", source: "manual", workspaceId: workspace.id },
     });
 
     expect(second.id).not.toBe(first.id);
 
     await prisma.$executeRaw`DELETE FROM non_business_days WHERE id IN (${first.id}, ${second.id})`;
+    await prisma.workspace.delete({ where: { id: workspace.id } });
+    await prisma.user.delete({ where: { id: user.id } });
   });
 
   it("rejects two active template tasks on the same (template, case, scheduledDate), but allows recreate after soft delete", async () => {
+    const suffix = randomUUID();
+    const { user, workspace } = await createOwnedWorkspace(`tpl-${suffix}`);
     const caseEntity = await prisma.case.create({
-      data: { name: `case-uniq-${randomUUID()}`, endDate: new Date("2026-09-01") },
+      data: {
+        name: `case-uniq-${randomUUID()}`,
+        endDate: new Date("2026-09-01"),
+        workspaceId: workspace.id,
+      },
     });
     const template = await prisma.recurringTaskTemplate.create({
       data: {
@@ -179,6 +215,7 @@ describe("physical schema (task 1.2)", () => {
         caseAnchor: CaseRelativeAnchor.case_end,
         caseOffsetDays: 1,
         nonBusinessDayPolicy: "skip",
+        workspaceId: workspace.id,
       },
     });
     const scheduledDate = new Date("2026-09-15");
@@ -189,6 +226,7 @@ describe("physical schema (task 1.2)", () => {
       sourceTemplateId: template.id,
       sourceAnchor: CaseRelativeAnchor.case_end,
       scheduledDate,
+      workspaceId: workspace.id,
     };
 
     const first = await prisma.task.create({ data: baseTask });
@@ -203,17 +241,22 @@ describe("physical schema (task 1.2)", () => {
     await prisma.$executeRaw`DELETE FROM tasks WHERE id IN (${first.id}, ${second.id})`;
     await prisma.recurringTaskTemplate.delete({ where: { id: template.id } });
     await prisma.case.delete({ where: { id: caseEntity.id } });
+    await prisma.workspace.delete({ where: { id: workspace.id } });
+    await prisma.user.delete({ where: { id: user.id } });
   });
 
   it("round-trips a development stage linked from a task", async () => {
+    const suffix = randomUUID();
+    const { user, workspace } = await createOwnedWorkspace(`stage-${suffix}`);
     const stage = await prisma.developmentStage.create({
-      data: { name: `stage-${randomUUID()}`, order: 0 },
+      data: { name: `stage-${randomUUID()}`, order: 0, workspaceId: workspace.id },
     });
     const task = await prisma.task.create({
       data: {
         title: `stage-task-${randomUUID()}`,
         priority: "low",
         developmentStageId: stage.id,
+        workspaceId: workspace.id,
       },
     });
 
@@ -225,6 +268,8 @@ describe("physical schema (task 1.2)", () => {
 
     await prisma.task.delete({ where: { id: task.id } });
     await prisma.developmentStage.delete({ where: { id: stage.id } });
+    await prisma.workspace.delete({ where: { id: workspace.id } });
+    await prisma.user.delete({ where: { id: user.id } });
   });
 });
 
@@ -384,5 +429,185 @@ describe("workspace membership schema (task 1.1)", () => {
     await prisma.workspace.delete({ where: { id: workspace.id } });
     await prisma.user.delete({ where: { id: memberUser.id } });
     await prisma.user.delete({ where: { id: creator.id } });
+  });
+});
+
+describe("workspace resource scope schema (task 1.5)", () => {
+  async function createWorkspaceFixture(suffix: string) {
+    const creator = await prisma.user.create({
+      data: {
+        email: `scope-creator-${suffix}@example.test`,
+        name: `scope-creator-${suffix}`,
+        passwordHash: "test-password-hash",
+      },
+    });
+    const workspace = await prisma.workspace.create({
+      data: {
+        name: `scope-ws-${suffix}`,
+        createdByUserId: creator.id,
+      },
+    });
+    return { creator, workspace };
+  }
+
+  it("exposes required workspaceId on Case/Task/RecurringTaskTemplate/NonBusinessDay/DevelopmentStage", () => {
+    expect(Prisma.CaseScalarFieldEnum).toMatchObject({ workspaceId: "workspaceId" });
+    expect(Prisma.TaskScalarFieldEnum).toMatchObject({ workspaceId: "workspaceId" });
+    expect(Prisma.RecurringTaskTemplateScalarFieldEnum).toMatchObject({
+      workspaceId: "workspaceId",
+    });
+    expect(Prisma.NonBusinessDayScalarFieldEnum).toMatchObject({
+      workspaceId: "workspaceId",
+    });
+    expect(Prisma.DevelopmentStageScalarFieldEnum).toMatchObject({
+      workspaceId: "workspaceId",
+    });
+
+    const schemaPath = resolve(__dirname, "schema.prisma");
+    const schema = readFileSync(schemaPath, "utf8");
+    expect(schema).toMatch(/model Workspace \{[\s\S]*cases\s+Case\[\]/);
+    expect(schema).toMatch(/model Workspace \{[\s\S]*tasks\s+Task\[\]/);
+    expect(schema).toMatch(/model Workspace \{[\s\S]*recurringTaskTemplates\s+RecurringTaskTemplate\[\]/);
+    expect(schema).toMatch(/model Workspace \{[\s\S]*nonBusinessDays\s+NonBusinessDay\[\]/);
+    expect(schema).toMatch(/model Workspace \{[\s\S]*developmentStages\s+DevelopmentStage\[\]/);
+  });
+
+  it("provides workspace_id NOT NULL columns and workspace-scoped holiday unique index", async () => {
+    for (const table of [
+      "cases",
+      "tasks",
+      "recurring_task_templates",
+      "non_business_days",
+      "development_stages",
+    ]) {
+      const columns = await prisma.$queryRawUnsafe<
+        Array<{ Field: string; Null: string }>
+      >(`SHOW COLUMNS FROM ${table} LIKE 'workspace_id'`);
+      expect(columns).toHaveLength(1);
+      expect(columns[0]?.Null).toBe("NO");
+    }
+
+    const indexes = await prisma.$queryRaw<
+      Array<{ Key_name: string; Column_name: string }>
+    >`SHOW INDEX FROM non_business_days`;
+    const keyNames = new Set(indexes.map((row) => row.Key_name));
+    expect(keyNames.has("non_business_days_date_active_key_key")).toBe(false);
+    expect(keyNames.has("non_business_days_workspace_id_date_active_key_key")).toBe(true);
+
+    const scopedUniqueCols = indexes
+      .filter((row) => row.Key_name === "non_business_days_workspace_id_date_active_key_key")
+      .map((row) => row.Column_name);
+    expect(scopedUniqueCols).toEqual(["workspace_id", "date_active_key"]);
+  });
+
+  it("rejects creating scoped resources without a workspace_id at the database", async () => {
+    const suffix = randomUUID();
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO cases (id, name, is_completed, created_at, updated_at)
+        VALUES (${`case-no-ws-${suffix}`}, ${`case-no-ws-${suffix}`}, false, NOW(3), NOW(3))
+      `,
+    ).rejects.toThrow();
+
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO tasks (id, title, status, priority, is_required_for_case, created_at, updated_at)
+        VALUES (
+          ${`task-no-ws-${suffix}`},
+          ${`task-no-ws-${suffix}`},
+          'not_started',
+          'medium',
+          false,
+          NOW(3),
+          NOW(3)
+        )
+      `,
+    ).rejects.toThrow();
+
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO recurring_task_templates (
+          id, title, priority, case_anchor, case_offset_days,
+          non_business_day_policy, is_active, created_at, updated_at
+        ) VALUES (
+          ${`tpl-no-ws-${suffix}`},
+          ${`tpl-no-ws-${suffix}`},
+          'medium',
+          'case_start',
+          0,
+          'as_is',
+          true,
+          NOW(3),
+          NOW(3)
+        )
+      `,
+    ).rejects.toThrow();
+
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO non_business_days (id, date, label, source, created_at, updated_at)
+        VALUES (
+          ${`nbd-no-ws-${suffix}`},
+          '2032-01-01',
+          'no-ws',
+          'manual',
+          NOW(3),
+          NOW(3)
+        )
+      `,
+    ).rejects.toThrow();
+
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO development_stages (id, name, \`order\`, created_at, updated_at)
+        VALUES (${`stage-no-ws-${suffix}`}, ${`stage-no-ws-${suffix}`}, 0, NOW(3), NOW(3))
+      `,
+    ).rejects.toThrow();
+  });
+
+  it("allows the same non_business_day date across workspaces, but not within one", async () => {
+    const suffix = randomUUID();
+    const a = await createWorkspaceFixture(`a-${suffix}`);
+    const b = await createWorkspaceFixture(`b-${suffix}`);
+    const date = new Date("2032-06-06");
+
+    const holidayA = await prisma.nonBusinessDay.create({
+      data: {
+        date,
+        label: "ws-a",
+        source: "manual",
+        workspaceId: a.workspace.id,
+      },
+    });
+    const holidayB = await prisma.nonBusinessDay.create({
+      data: {
+        date,
+        label: "ws-b",
+        source: "manual",
+        workspaceId: b.workspace.id,
+      },
+    });
+
+    expect(holidayA.workspaceId).toBe(a.workspace.id);
+    expect(holidayB.workspaceId).toBe(b.workspace.id);
+
+    await expect(
+      prisma.nonBusinessDay.create({
+        data: {
+          date,
+          label: "ws-a-dup",
+          source: "manual",
+          workspaceId: a.workspace.id,
+        },
+      }),
+    ).rejects.toThrow();
+
+    await prisma.$executeRaw`
+      DELETE FROM non_business_days WHERE id IN (${holidayA.id}, ${holidayB.id})
+    `;
+    await prisma.workspace.delete({ where: { id: a.workspace.id } });
+    await prisma.workspace.delete({ where: { id: b.workspace.id } });
+    await prisma.user.delete({ where: { id: a.creator.id } });
+    await prisma.user.delete({ where: { id: b.creator.id } });
   });
 });

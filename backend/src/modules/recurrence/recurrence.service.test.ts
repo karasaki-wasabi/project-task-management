@@ -6,11 +6,17 @@
 // (not just at the end of the happy path). This suite shares one real MySQL
 // database across runs.
 import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
+import { createUserData } from "../../test/user.fixture.js";
 import { recurrenceRepository } from "./recurrence.repository.js";
 import { computeRawScheduledDates, recurrenceService } from "./recurrence.service.js";
 import type { CaseRelativeAnchor, RegisterTemplateInput } from "./recurrence.types.js";
+
+function asVerified(id: string): VerifiedWorkspaceId {
+  return id as VerifiedWorkspaceId;
+}
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
@@ -29,6 +35,10 @@ async function cleanup(ids: {
   await hardDelete("non_business_days", ids.nonBusinessDayIds ?? []);
 }
 
+let workspaceA: VerifiedWorkspaceId;
+let workspaceB: VerifiedWorkspaceId;
+let userId: string;
+
 function baseInput(overrides: Partial<RegisterTemplateInput> = {}): RegisterTemplateInput {
   return {
     title: "case-relative template",
@@ -36,11 +46,41 @@ function baseInput(overrides: Partial<RegisterTemplateInput> = {}): RegisterTemp
     caseAnchor: "case_end",
     caseOffsetDays: 3,
     nonBusinessDayPolicy: "as_is",
+    workspaceId: workspaceA,
     ...overrides,
   };
 }
 
+async function createCase(data: {
+  name: string;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  workspaceId?: VerifiedWorkspaceId;
+}) {
+  return db.case.create({
+    data: {
+      name: data.name,
+      startDate: data.startDate === undefined ? undefined : data.startDate,
+      endDate: data.endDate === undefined ? new Date("2036-06-15") : data.endDate,
+      workspaceId: data.workspaceId ?? workspaceA,
+    },
+  });
+}
+
+beforeAll(async () => {
+  const user = await db.user.create({ data: createUserData("recurrence-svc-ws") });
+  userId = user.id;
+  const [a, b] = await Promise.all([
+    db.workspace.create({ data: { name: `recurrence-svc-a-${randomUUID()}`, createdByUserId: userId } }),
+    db.workspace.create({ data: { name: `recurrence-svc-b-${randomUUID()}`, createdByUserId: userId } }),
+  ]);
+  workspaceA = asVerified(a.id);
+  workspaceB = asVerified(b.id);
+});
+
 afterAll(async () => {
+  await hardDelete("workspaces", [workspaceA, workspaceB]);
+  await hardDelete("users", [userId]);
   await db.$disconnect();
 });
 
@@ -65,6 +105,7 @@ describe("recurrenceService.registerTemplate (task 2.1)", () => {
       expect(template.defaultMemo).toBe("Zoom: https://example.com/meeting");
       expect(template.nonBusinessDayPolicy).toBe("next_business_day");
       expect(template.isActive).toBe(true);
+      expect(template.workspaceId).toBe(workspaceA);
       expect(template).not.toHaveProperty("kind");
       expect(template).not.toHaveProperty("intervalUnit");
       expect(template).not.toHaveProperty("intervalValue");
@@ -116,12 +157,12 @@ describe("recurrenceService.stopTemplate / resumeTemplate / deleteTemplate / lis
       const template = await recurrenceService.registerTemplate(baseInput({ title: "stoppable" }));
       templateIds.push(template.id);
 
-      await recurrenceService.stopTemplate(template.id);
+      await recurrenceService.stopTemplate(template.id, workspaceA);
 
-      const list = await recurrenceService.list();
+      const list = await recurrenceService.list(workspaceA);
       const found = list.find((t) => t.id === template.id);
       expect(found?.isActive).toBe(false);
-      const active = await recurrenceRepository.listActive();
+      const active = await recurrenceRepository.listActive(workspaceA);
       expect(active.some((t) => t.id === template.id)).toBe(false);
     } finally {
       await cleanup({ templateIds });
@@ -132,20 +173,18 @@ describe("recurrenceService.stopTemplate / resumeTemplate / deleteTemplate / lis
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     try {
-      const caseEntity = await db.case.create({
-        data: { name: `resume-${randomUUID()}`, endDate: new Date("2036-06-15") },
-      });
+      const caseEntity = await createCase({ name: `resume-${randomUUID()}`, endDate: new Date("2036-06-15") });
       caseIds.push(caseEntity.id);
 
       const template = await recurrenceService.registerTemplate(baseInput({ title: "resumable" }));
       templateIds.push(template.id);
-      await recurrenceService.stopTemplate(template.id);
+      await recurrenceService.stopTemplate(template.id, workspaceA);
 
-      await recurrenceService.resumeTemplate(template.id);
+      await recurrenceService.resumeTemplate(template.id, workspaceA);
 
-      const list = await recurrenceService.list();
+      const list = await recurrenceService.list(workspaceA);
       expect(list.find((t) => t.id === template.id)?.isActive).toBe(true);
-      const active = await recurrenceRepository.listActive();
+      const active = await recurrenceRepository.listActive(workspaceA);
       expect(active.some((t) => t.id === template.id)).toBe(true);
 
       const tasksForCase = await db.task.findMany({
@@ -159,8 +198,8 @@ describe("recurrenceService.stopTemplate / resumeTemplate / deleteTemplate / lis
 
   it("returns not_found (404) when stopping or resuming a non-existent template", async () => {
     const missing = randomUUID();
-    await expect(recurrenceService.stopTemplate(missing)).rejects.toMatchObject({ statusCode: 404 });
-    await expect(recurrenceService.resumeTemplate(missing)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(recurrenceService.stopTemplate(missing, workspaceA)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(recurrenceService.resumeTemplate(missing, workspaceA)).rejects.toMatchObject({ statusCode: 404 });
   });
 
   it("deleteTemplate soft-deletes and excludes it from list, distinct from stopTemplate (Requirement 2.8)", async () => {
@@ -169,9 +208,9 @@ describe("recurrenceService.stopTemplate / resumeTemplate / deleteTemplate / lis
       const template = await recurrenceService.registerTemplate(baseInput({ title: "deletable" }));
       templateIds.push(template.id);
 
-      await recurrenceService.deleteTemplate(template.id);
+      await recurrenceService.deleteTemplate(template.id, workspaceA);
 
-      const list = await recurrenceService.list();
+      const list = await recurrenceService.list(workspaceA);
       expect(list.some((t) => t.id === template.id)).toBe(false);
 
       const rawRow = await db.recurringTaskTemplate.findFirst({
@@ -184,7 +223,7 @@ describe("recurrenceService.stopTemplate / resumeTemplate / deleteTemplate / lis
   });
 
   it("returns not_found (404) when deleting a non-existent template", async () => {
-    await expect(recurrenceService.deleteTemplate(randomUUID())).rejects.toMatchObject({ statusCode: 404 });
+    await expect(recurrenceService.deleteTemplate(randomUUID(), workspaceA)).rejects.toMatchObject({ statusCode: 404 });
   });
 
   it("lists registered templates", async () => {
@@ -193,7 +232,7 @@ describe("recurrenceService.stopTemplate / resumeTemplate / deleteTemplate / lis
       const template = await recurrenceService.registerTemplate(baseInput({ title: "listable" }));
       templateIds.push(template.id);
 
-      const list = await recurrenceService.list();
+      const list = await recurrenceService.list(workspaceA);
       expect(list.some((t) => t.id === template.id)).toBe(true);
     } finally {
       await cleanup({ templateIds });
@@ -329,7 +368,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
         templateIds.push(template.id);
 
         const caseEntity = await db.case.create({
-          data: { name: `gen-case-${randomUUID()}`, startDate, endDate },
+          data: { name: `gen-case-${randomUUID()}`, startDate, endDate, workspaceId: workspaceA },
         });
         caseIds.push(caseEntity.id);
 
@@ -360,13 +399,14 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
         baseInput({ title: "stopped-gen", caseAnchor: "case_end", caseOffsetDays: 1 }),
       );
       templateIds.push(template.id);
-      await recurrenceService.stopTemplate(template.id);
+      await recurrenceService.stopTemplate(template.id, workspaceA);
 
       const caseEntity = await db.case.create({
         data: {
           name: `stopped-${randomUUID()}`,
           startDate: new Date("2036-07-01T00:00:00.000Z"),
           endDate: new Date("2036-07-20T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -385,7 +425,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
     let taskIds: string[] = [];
     try {
       const holiday = await db.nonBusinessDay.create({
-        data: { date: new Date("2036-08-15T00:00:00.000Z"), source: "manual", label: "skip-day" },
+        data: { date: new Date("2036-08-15T00:00:00.000Z"), source: "manual", label: "skip-day", workspaceId: workspaceA },
       });
       nonBusinessDayIds.push(holiday.id);
 
@@ -414,6 +454,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
           name: `nbd-${randomUUID()}`,
           startDate: new Date("2036-08-15T00:00:00.000Z"),
           endDate: new Date("2036-08-15T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -437,7 +478,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
     let taskIds: string[] = [];
     try {
       const holiday = await db.nonBusinessDay.create({
-        data: { date: new Date("2036-08-20T00:00:00.000Z"), source: "manual", label: "prev-day" },
+        data: { date: new Date("2036-08-20T00:00:00.000Z"), source: "manual", label: "prev-day", workspaceId: workspaceA },
       });
       nonBusinessDayIds.push(holiday.id);
 
@@ -456,6 +497,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
           name: `nbd-prev-${randomUUID()}`,
           startDate: new Date("2036-08-01T00:00:00.000Z"),
           endDate: new Date("2036-08-20T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -490,6 +532,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
           name: `memo-${randomUUID()}`,
           startDate: new Date("2036-09-01T00:00:00.000Z"),
           endDate: new Date("2036-10-31T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -532,6 +575,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
           name: `apply-start-gen-${randomUUID()}`,
           startDate: new Date("2037-01-10T00:00:00.000Z"),
           endDate: null,
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -562,6 +606,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
           name: `apply-end-gen-${randomUUID()}`,
           startDate: null,
           endDate: new Date("2037-02-20T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -595,6 +640,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
           name: `apply-month-gen-${randomUUID()}`,
           startDate: new Date("2037-03-15T00:00:00.000Z"),
           endDate: new Date("2037-04-10T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -631,6 +677,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
         data: {
           name: `apply-start-del-${randomUUID()}`,
           startDate: new Date("2037-05-01T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -669,6 +716,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
         data: {
           name: `apply-end-del-${randomUUID()}`,
           endDate: new Date("2037-06-15T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -708,6 +756,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
           name: `apply-month-del-${randomUUID()}`,
           startDate: new Date("2037-07-01T00:00:00.000Z"),
           endDate: new Date("2037-07-31T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -738,6 +787,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
         data: {
           name: `apply-start-regen-${randomUUID()}`,
           startDate: new Date("2037-08-01T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -780,6 +830,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
         data: {
           name: `apply-end-regen-${randomUUID()}`,
           endDate: new Date("2037-09-20T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -822,6 +873,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
           name: `apply-month-regen-${randomUUID()}`,
           startDate: new Date("2037-10-01T00:00:00.000Z"),
           endDate: new Date("2037-10-31T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -864,6 +916,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
         data: {
           name: `apply-manual-${randomUUID()}`,
           startDate: new Date("2037-12-01T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -878,6 +931,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
           priority: "medium",
           caseId: caseEntity.id,
           scheduledDate: new Date("2037-12-01T00:00:00.000Z"),
+          workspaceId: workspaceA,
         },
       });
       taskIds = [generated[0].id, manual.id];
@@ -907,6 +961,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
         data: {
           name: `apply-stopped-${randomUUID()}`,
           endDate: new Date("2038-01-15T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -916,7 +971,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
       taskIds = before.map((t) => t.id);
       expect(before).toHaveLength(1);
 
-      await recurrenceService.stopTemplate(template.id);
+      await recurrenceService.stopTemplate(template.id, workspaceA);
 
       // generate must not create new instances from stopped templates
       await recurrenceService.applyToCase(caseEntity.id, ["end_generate"]);
@@ -943,6 +998,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
         data: {
           name: `apply-idempotent-${randomUUID()}`,
           startDate: new Date("2038-02-01T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -969,6 +1025,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
         data: {
           name: `apply-empty-${randomUUID()}`,
           startDate: new Date("2038-03-01T00:00:00.000Z"),
+        workspaceId: workspaceA,
         },
       });
       caseIds.push(caseEntity.id);
@@ -977,6 +1034,95 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
       expect(await listActiveTasksForCase(caseEntity.id)).toHaveLength(0);
     } finally {
       await cleanup({ caseIds });
+    }
+  });
+});
+
+describe("recurrenceService workspace scope (workspace-resource-scope 4.1)", () => {
+  it("registerTemplate attributes the template to the given workspace (Requirement 1.1, 1.2)", async () => {
+    const templateIds: string[] = [];
+    try {
+      const template = await recurrenceService.registerTemplate(baseInput({ title: "ws-create", workspaceId: workspaceB }));
+      templateIds.push(template.id);
+      expect(template.workspaceId).toBe(workspaceB);
+    } finally {
+      await cleanup({ templateIds });
+    }
+  });
+
+  it("list returns only templates in the current workspace (Requirement 3.1)", async () => {
+    const templateIds: string[] = [];
+    try {
+      const inA = await recurrenceService.registerTemplate(baseInput({ title: "list-a", workspaceId: workspaceA }));
+      const inB = await recurrenceService.registerTemplate(baseInput({ title: "list-b", workspaceId: workspaceB }));
+      templateIds.push(inA.id, inB.id);
+
+      const listA = await recurrenceService.list(workspaceA);
+      expect(listA.some((t) => t.id === inA.id)).toBe(true);
+      expect(listA.some((t) => t.id === inB.id)).toBe(false);
+    } finally {
+      await cleanup({ templateIds });
+    }
+  });
+
+  it("stop / resume / delete on another workspace template return 404 (Requirement 3.3)", async () => {
+    const templateIds: string[] = [];
+    try {
+      const inB = await recurrenceService.registerTemplate(baseInput({ title: "foreign", workspaceId: workspaceB }));
+      templateIds.push(inB.id);
+
+      await expect(recurrenceService.stopTemplate(inB.id, workspaceA)).rejects.toMatchObject({ statusCode: 404 });
+      await expect(recurrenceService.resumeTemplate(inB.id, workspaceA)).rejects.toMatchObject({ statusCode: 404 });
+      await expect(recurrenceService.deleteTemplate(inB.id, workspaceA)).rejects.toMatchObject({ statusCode: 404 });
+
+      const stillThere = await recurrenceService.list(workspaceB);
+      expect(stillThere.some((t) => t.id === inB.id)).toBe(true);
+    } finally {
+      await cleanup({ templateIds });
+    }
+  });
+
+  it("applyToCase ignores templates from a different workspace and attributes generated tasks to the case workspace (Requirements 1.3, 3.1)", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      const foreign = await recurrenceService.registerTemplate(
+        baseInput({
+          title: "foreign-apply",
+          caseAnchor: "case_start",
+          caseOffsetDays: 0,
+          workspaceId: workspaceB,
+        }),
+      );
+      const local = await recurrenceService.registerTemplate(
+        baseInput({
+          title: "local-apply",
+          caseAnchor: "case_start",
+          caseOffsetDays: 1,
+          workspaceId: workspaceA,
+        }),
+      );
+      templateIds.push(foreign.id, local.id);
+
+      const caseEntity = await createCase({
+        name: `apply-ws-${randomUUID()}`,
+        startDate: new Date("2039-01-10T00:00:00.000Z"),
+        endDate: new Date("2039-01-31T00:00:00.000Z"),
+        workspaceId: workspaceA,
+      });
+      caseIds.push(caseEntity.id);
+
+      await recurrenceService.applyToCase(caseEntity.id, ["start_generate"]);
+
+      const tasks = await db.task.findMany({ where: { caseId: caseEntity.id }, orderBy: { createdAt: "asc" } });
+      taskIds = tasks.map((t) => t.id);
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0].sourceTemplateId).toBe(local.id);
+      expect(tasks[0].workspaceId).toBe(workspaceA);
+      expect(tasks[0].workspaceId).toBe(caseEntity.workspaceId);
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
     }
   });
 });

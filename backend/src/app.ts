@@ -30,6 +30,19 @@ import { recurrenceRoutes } from "./modules/recurrence/recurrence.routes.js";
 import { clientErrorRoutes } from "./modules/client-errors/client-error.routes.js";
 import { developmentStageRoutes } from "./modules/development-stages/development-stage.routes.js";
 import { workspaceRoutes } from "./modules/workspaces/workspace.routes.js";
+import { requireWorkspaceMember } from "./workspace-scope.guard.js";
+
+const WORKSPACE_SCOPED_PATH_PREFIXES = [
+  "/api/cases",
+  "/api/tasks",
+  "/api/recurring-templates",
+  "/api/holidays",
+  "/api/development-stages",
+] as const;
+
+function isWorkspaceScopedPath(path: string): boolean {
+  return WORKSPACE_SCOPED_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
 
 export function buildApp(env: Env = loadEnv(), logger: AppLogger = createLogger(env.LOG_LEVEL)): FastifyInstance {
   const app = Fastify({ logger: false });
@@ -93,6 +106,13 @@ export function buildApp(env: Env = loadEnv(), logger: AppLogger = createLogger(
       path === "/api/client-errors";
     if (path.startsWith("/api/") && !isRequireUserExempt) {
       await requireUser(request);
+    }
+  });
+
+  app.addHook("preHandler", async (request) => {
+    const path = request.routeOptions.url ?? "";
+    if (isWorkspaceScopedPath(path)) {
+      await requireWorkspaceMember(request);
     }
   });
 

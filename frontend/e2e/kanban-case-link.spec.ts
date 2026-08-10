@@ -35,6 +35,10 @@ async function createCase(page: import("@playwright/test").Page, name: string) {
   // case having dates at all, so there is nothing to gain by driving the
   // DatePicker UI here just to fill in a value nothing asserts on.
   await formModal.getByRole("button", { name: "登録", exact: true }).click();
+  // Missing dates → CaseTemplateApplyConfirm Screen A.
+  const confirm = page.getByRole("dialog", { name: "案件を作成しますか?" });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "作成する", exact: true }).click();
   await expect(formModal).toBeHidden();
 }
 

@@ -18,13 +18,15 @@
 
 `auth` は登録・ログイン・ログアウト・現在ユーザー・CSRF・`requireUser` ガードを所有する。業務ハンドラは Cookie 実装詳細に触れず、付与された `currentUser`(PublicUser)のみを参照する。
 
-`users` はログイン必須の担当者候補一覧(`GET /api/users`)に縮退する。任意の `q`（表示名・メールの部分一致）を受け付けるが、未指定時は従来どおり全件を返す。アカウント作成・削除は `auth` 側の責務であり、`POST /api/users` と `DELETE /api/users/:id` は提供しない。
+`users` はログイン必須の全アカウント一覧(`GET /api/users`)に縮退する。任意の `q`（表示名・メールの部分一致）を受け付けるが、未指定時は従来どおり全件を返す。担当者フィルタやカレンダー表示など、ワークスペース非限定の参照用途が主である。タスク作成・カンバン再割当の担当者「候補」は `workspaces` のメンバー一覧を使う。アカウント作成・削除は `auth` 側の責務であり、`POST /api/users` と `DELETE /api/users/:id` は提供しない。
 
-`workspaces` はワークスペースとメンバーシップを所有する。所属判定(`isMember`)の公開入口でもあり、後続のリソーススコープ仕様が再利用する。現在ワークスペースのサーバー永続化は持たない。
+`workspaces` はワークスペースとメンバーシップを所有する。所属判定(`isMember` / `workspaceService`)の公開入口でもあり、リソーススコープのガードとタスク担当者検証がこれを再利用する。現在ワークスペースのサーバー永続化は持たない。
 
 ### バックエンド共有コード
 **Location**: `backend/src/shared/`
-**Purpose**: 全モジュール共通のインフラ(ログ基盤`logger.ts`/`business-event-logger.ts`、DBクライアント`db.ts`、`HttpError`、ソフトデリートのPrisma拡張、`Result`型)。モジュール固有のロジックはここに置かない
+**Purpose**: 全モジュール共通のインフラ(ログ基盤`logger.ts`/`business-event-logger.ts`、DBクライアント`db.ts`、`HttpError`、ソフトデリートのPrisma拡張、`Result`型、ワークスペース文脈`workspace-scope.ts`の定数・`VerifiedWorkspaceId`・`withWorkspaceScope`)。モジュール固有のロジックはここに置かない
+
+ワークスペース所属ガード(`requireWorkspaceMember`)は`backend/src/workspace-scope.guard.ts`に置き、`app.ts`が対象パスへ配線する。対象プレフィックスは`/api/cases`・`/api/tasks`・`/api/recurring-templates`・`/api/holidays`・`/api/development-stages`の5つ。`/api/throughput`はAPIスコープ対象外（画面の未選択時空状態のみ）。
 
 ### バックエンド機能横断テスト
 **Location**: `backend/src/*.test.ts`(`src/`直下)
@@ -38,9 +40,9 @@
 **Location**: `frontend/components/<domain>/`, `frontend/composables/`
 **Purpose**: 複数ページで再利用するUI部品(例: `components/tasks/TaskNode.vue`の再帰階層表示、`components/users/AssigneeFilter.vue`)とロジック(`useApiClient.ts`がバックエンドAPIへの唯一のHTTP境界、`useErrorReportRateLimit.ts`のような純粋関数の抽出)。`nuxt.config.ts`で`components: [{ path: "~/components", pathPrefix: false }]`を設定しているため、サブディレクトリのコンポーネントもディレクトリ名プレフィックスなしで`<ComponentName>`のまま参照できる([[local-dev-pitfalls]]参照)
 
-認証状態は `composables/useAuth.ts` が共有する。`useApiClient.ts` は `credentials: 'include'` と CSRF ヘッダ付与を担い、ページから直接 Cookie／CSRF を扱わない。
+認証状態は `composables/useAuth.ts` が共有する。`useApiClient.ts` は `credentials: 'include'` と CSRF ヘッダ付与を担い、ページから直接 Cookie／CSRF を扱わない。対象5プレフィックスのAPI呼び出しには現在ワークスペースIDを`x-workspace-id`として付与する（`/api/throughput`は付与しない）。
 
-現在ワークスペースの選択は `composables/useCurrentWorkspace.ts` が共有する（Nuxt `useState` + `localStorage`）。ヘッダー切替と `/workspaces` が同一状態を参照し、ページから `localStorage` キーを直接操作しない。
+現在ワークスペースの選択は `composables/useCurrentWorkspace.ts` が共有する（Nuxt `useState` + `localStorage`キー`currentWorkspaceId`）。ヘッダー切替と `/workspaces` が同一状態を参照し、ページから `localStorage` キーを直接操作しない。`WorkspaceSwitcher`の`refresh()`は保存IDが無効または未設定のとき所属一覧の先頭を自動選択する。
 
 ### フロントエンド認証ミドルウェア
 **Location**: `frontend/middleware/auth.global.ts`

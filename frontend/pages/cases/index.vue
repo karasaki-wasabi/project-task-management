@@ -39,6 +39,7 @@
 import { computeStatusCounts, filterCases, type CaseRow, type CaseStatusFilter } from "./index.helpers";
 
 const api = useApiClient();
+const { currentId } = useCurrentWorkspace();
 const cases = ref<CaseRow[]>([]);
 const loaded = ref(false);
 const error = ref<string | null>(null);
@@ -70,6 +71,7 @@ function requiredProgressRatio(progress: CaseProgress | null): number {
 }
 
 async function load() {
+  if (currentId.value === null) return;
   error.value = null;
   try {
     const list = await api.listCases();
@@ -84,7 +86,21 @@ async function load() {
   }
 }
 
-onMounted(load);
+watch(
+  currentId,
+  (id) => {
+    if (id === null) {
+      cases.value = [];
+      loaded.value = false;
+      error.value = null;
+      showCreateModal.value = false;
+      activeCaseId.value = null;
+      return;
+    }
+    void load();
+  },
+  { immediate: true },
+);
 
 function openCreateModal() {
   showCreateModal.value = true;
@@ -132,111 +148,130 @@ async function onCaseDeleted() {
 
 <template>
   <div class="space-y-5">
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
-      <h1 class="text-xl font-semibold tracking-tight text-slate-900">案件一覧</h1>
-      <button
-        type="button"
-        class="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
-        @click="openCreateModal"
+    <div
+      v-if="currentId === null"
+      data-testid="workspace-empty-state"
+      class="rounded-lg bg-white p-8 text-center ring-1 ring-slate-200"
+    >
+      <h1 class="text-xl font-semibold tracking-tight text-slate-900">ワークスペースがありません</h1>
+      <p class="mt-2 text-sm text-slate-600">
+        最初のワークスペースを作成すると、メンバーを追加して共有の可視境界を持てます。
+      </p>
+      <NuxtLink
+        to="/workspaces"
+        class="mt-5 inline-block rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
       >
-        案件を登録
-      </button>
+        ワークスペースを作成
+      </NuxtLink>
     </div>
 
-    <ErrorAlert v-if="error" :message="error" />
-
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="flex flex-wrap gap-2">
+    <template v-else>
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+        <h1 class="text-xl font-semibold tracking-tight text-slate-900">案件一覧</h1>
         <button
-          v-for="chip in chips"
-          :key="chip.key"
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ring-1 transition-colors"
-          :class="
-            statusFilter === chip.key
-              ? 'bg-primary-600 text-white ring-primary-600'
-              : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'
-          "
-          @click="statusFilter = chip.key"
+          class="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
+          @click="openCreateModal"
         >
-          {{ chip.label }}
-          <span
-            class="inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs"
-            :class="statusFilter === chip.key ? 'bg-white/20' : 'bg-slate-100'"
-          >
-            {{ statusCounts[chip.key] }}
-          </span>
+          案件を登録
         </button>
       </div>
 
-      <input
-        v-model="searchText"
-        type="search"
-        placeholder="案件名で絞り込み"
-        class="w-full max-w-xs rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-      />
-    </div>
+      <ErrorAlert v-if="error" :message="error" />
 
-    <p v-if="loaded && cases.length === 0" class="rounded-lg bg-white p-6 text-center text-sm text-slate-600 ring-1 ring-slate-200">
-      案件がまだありません。「案件を登録」から最初の案件を作成してください。
-    </p>
-
-    <p
-      v-else-if="loaded && filteredCases.length === 0"
-      class="rounded-lg bg-white p-6 text-center text-sm text-slate-600 ring-1 ring-slate-200"
-    >
-      条件に一致する案件がありません。検索文字列やステータスの絞り込みを見直してください。
-    </p>
-
-    <div v-else class="overflow-x-auto rounded-lg bg-white ring-1 ring-slate-200">
-      <table class="w-full text-left text-sm">
-        <thead>
-          <tr class="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-            <th class="px-3 py-2 font-medium">案件名</th>
-            <th class="px-3 py-2 font-medium">開始日</th>
-            <th class="px-3 py-2 font-medium">終了日</th>
-            <th class="px-3 py-2 font-medium">完了状態</th>
-            <th class="px-3 py-2 font-medium">必須タスク</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="item in filteredCases"
-            :key="item.id"
-            tabindex="0"
-            role="button"
-            :aria-label="`${item.name} の詳細を開く`"
-            class="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
-            :class="item.progress?.isOverdueWithIncomplete ? 'bg-red-50' : ''"
-            @click="openCaseDetail(item.id)"
-            @keydown.enter="openCaseDetail(item.id)"
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="chip in chips"
+            :key="chip.key"
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ring-1 transition-colors"
+            :class="
+              statusFilter === chip.key
+                ? 'bg-primary-600 text-white ring-primary-600'
+                : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'
+            "
+            @click="statusFilter = chip.key"
           >
-            <td class="px-3 py-2 font-medium text-slate-900">{{ item.name }}</td>
-            <td class="px-3 py-2 text-slate-600">{{ item.startDate ? item.startDate.slice(0, 10) : "-" }}</td>
-            <td class="px-3 py-2 text-slate-600">{{ item.endDate ? item.endDate.slice(0, 10) : "-" }}</td>
-            <td class="px-3 py-2">
-              <Badge v-if="item.isCompleted" tone="success" label="完了" />
-              <Badge v-else-if="item.progress?.isOverdueWithIncomplete" tone="danger" label="期限超過" />
-              <Badge v-else tone="info" label="進行中" />
-            </td>
-            <td class="px-3 py-2">
-              <div class="flex items-center gap-2">
-                <span class="text-slate-700">{{ requiredProgressLabel(item.progress) }}</span>
-                <div class="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    class="h-full rounded-full bg-primary-500"
-                    :style="{ width: `${requiredProgressRatio(item.progress)}%` }"
-                  />
+            {{ chip.label }}
+            <span
+              class="inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs"
+              :class="statusFilter === chip.key ? 'bg-white/20' : 'bg-slate-100'"
+            >
+              {{ statusCounts[chip.key] }}
+            </span>
+          </button>
+        </div>
+
+        <input
+          v-model="searchText"
+          type="search"
+          placeholder="案件名で絞り込み"
+          class="w-full max-w-xs rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+      </div>
+
+      <p v-if="loaded && cases.length === 0" class="rounded-lg bg-white p-6 text-center text-sm text-slate-600 ring-1 ring-slate-200">
+        案件がまだありません。「案件を登録」から最初の案件を作成してください。
+      </p>
+
+      <p
+        v-else-if="loaded && filteredCases.length === 0"
+        class="rounded-lg bg-white p-6 text-center text-sm text-slate-600 ring-1 ring-slate-200"
+      >
+        条件に一致する案件がありません。検索文字列やステータスの絞り込みを見直してください。
+      </p>
+
+      <div v-else class="overflow-x-auto rounded-lg bg-white ring-1 ring-slate-200">
+        <table class="w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+              <th class="px-3 py-2 font-medium">案件名</th>
+              <th class="px-3 py-2 font-medium">開始日</th>
+              <th class="px-3 py-2 font-medium">終了日</th>
+              <th class="px-3 py-2 font-medium">完了状態</th>
+              <th class="px-3 py-2 font-medium">必須タスク</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="item in filteredCases"
+              :key="item.id"
+              tabindex="0"
+              role="button"
+              :aria-label="`${item.name} の詳細を開く`"
+              class="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+              :class="item.progress?.isOverdueWithIncomplete ? 'bg-red-50' : ''"
+              @click="openCaseDetail(item.id)"
+              @keydown.enter="openCaseDetail(item.id)"
+            >
+              <td class="px-3 py-2 font-medium text-slate-900">{{ item.name }}</td>
+              <td class="px-3 py-2 text-slate-600">{{ item.startDate ? item.startDate.slice(0, 10) : "-" }}</td>
+              <td class="px-3 py-2 text-slate-600">{{ item.endDate ? item.endDate.slice(0, 10) : "-" }}</td>
+              <td class="px-3 py-2">
+                <Badge v-if="item.isCompleted" tone="success" label="完了" />
+                <Badge v-else-if="item.progress?.isOverdueWithIncomplete" tone="danger" label="期限超過" />
+                <Badge v-else tone="info" label="進行中" />
+              </td>
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-slate-700">{{ requiredProgressLabel(item.progress) }}</span>
+                  <div class="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      class="h-full rounded-full bg-primary-500"
+                      :style="{ width: `${requiredProgressRatio(item.progress)}%` }"
+                    />
+                  </div>
                 </div>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-    <CaseFormModal :open="showCreateModal" @close="closeCreateModal" @created="onCaseCreated" />
+      <CaseFormModal :open="showCreateModal" @close="closeCreateModal" @created="onCaseCreated" />
 
-    <CaseDetailModal :case-id="activeCaseId" @close="closeCaseDetail" @saved="onCaseSaved" @deleted="onCaseDeleted" />
+      <CaseDetailModal :case-id="activeCaseId" @close="closeCaseDetail" @saved="onCaseSaved" @deleted="onCaseDeleted" />
+    </template>
   </div>
 </template>

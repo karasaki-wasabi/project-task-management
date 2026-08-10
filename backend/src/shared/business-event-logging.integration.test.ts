@@ -1,21 +1,19 @@
-// RED: none of the affected Services emit business event logs yet (task
-// 10.2, Requirement 10.2 — "案件作成、繰り返しタスクインスタンス生成、各
-// エンティティの削除など" broad-impact operations must log operation type +
-// target entity ID). This is a single cross-cutting test file (matching the
-// cross-cutting nature of this Integration task, mirroring how task 10.1's
-// wiring was tested inside delivery.service.test.ts, later renamed to
-// case.service.test.ts in task 3.3) rather than scattering near-identical
-// describe blocks across 6+ module test files.
+// Cross-cutting business event logging (task 10.2, Requirement 10.2 —
+// "案件作成、繰り返しタスクインスタンス生成、各エンティティの削除など"
+// broad-impact operations must log operation type + target entity ID).
+// Updated for workspace-resource-scope: service calls require VerifiedWorkspaceId.
 import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { setBusinessEventLoggerForTests } from "./business-event-logger.js";
 import { createLogger } from "./logger.js";
 import { db } from "./db.js";
+import type { VerifiedWorkspaceId } from "./workspace-scope.js";
 import { tasksService } from "../modules/tasks/task.service.js";
 import { caseService } from "../modules/cases/case.service.js";
 import { holidaysService } from "../modules/holidays/holiday.service.js";
 import { recurrenceService } from "../modules/recurrence/recurrence.service.js";
+import { createUserData } from "../test/user.fixture.js";
 
 function collectingStream() {
   const lines: Record<string, unknown>[] = [];
@@ -37,7 +35,13 @@ function collectingStream() {
   return { stream, lines };
 }
 
+function asVerified(id: string): VerifiedWorkspaceId {
+  return id as VerifiedWorkspaceId;
+}
+
 let lines: Record<string, unknown>[];
+let workspaceId: VerifiedWorkspaceId;
+let userId: string;
 
 beforeEach(() => {
   const collected = collectingStream();
@@ -45,7 +49,18 @@ beforeEach(() => {
   setBusinessEventLoggerForTests(createLogger("debug", collected.stream));
 });
 
+beforeAll(async () => {
+  const user = await db.user.create({ data: createUserData("biz-event-log-ws") });
+  userId = user.id;
+  const workspace = await db.workspace.create({
+    data: { name: `biz-event-log-${randomUUID()}`, createdByUserId: userId },
+  });
+  workspaceId = asVerified(workspace.id);
+});
+
 afterAll(async () => {
+  await db.$executeRawUnsafe(`DELETE FROM workspaces WHERE id = ?`, workspaceId);
+  await db.$executeRawUnsafe(`DELETE FROM users WHERE id = ?`, userId);
   await db.$disconnect();
 });
 
@@ -58,7 +73,12 @@ describe("business event logging (task 10.2)", () => {
     let caseId: string | undefined;
     try {
       const caseEntity = await caseService.create(
-        { name: `c-${randomUUID()}`, endDate: new Date(), templateOperations: [] },
+        {
+          name: `c-${randomUUID()}`,
+          endDate: new Date(),
+          templateOperations: [],
+          workspaceId,
+        },
         "req-case-create",
       );
       caseId = caseEntity.id;
@@ -84,18 +104,25 @@ describe("business event logging (task 10.2)", () => {
         caseAnchor: "case_end",
         caseOffsetDays: 0,
         nonBusinessDayPolicy: "as_is",
+        workspaceId,
       });
       templateId = template.id;
 
+      // Create without apply first so the case is committed before instance
+      // generation (in-TX apply cannot see the uncommitted case via the
+      // default Prisma client used by TaskService related-resource checks).
       const caseEntity = await caseService.create(
         {
           name: `c-log-${randomUUID()}`,
           endDate: new Date("2037-01-01T00:00:00.000Z"),
-          templateOperations: ["end_generate"],
+          templateOperations: [],
+          workspaceId,
         },
-        "req-generate",
+        "req-case-for-generate",
       );
       caseId = caseEntity.id;
+
+      await recurrenceService.applyToCase(caseEntity.id, ["end_generate"], "req-generate");
 
       const tasks = await db.task.findMany({
         where: { caseId: caseEntity.id, sourceTemplateId: template.id, deletedAt: null },
@@ -115,11 +142,15 @@ describe("business event logging (task 10.2)", () => {
   it("logs task.deleted with the deleted task's id", async () => {
     let taskId: string | undefined;
     try {
-      const created = await tasksService.create({ title: "loggable", priority: "low" });
+      const created = await tasksService.create({
+        title: "loggable",
+        priority: "low",
+        workspaceId,
+      });
       if (!created.ok) throw new Error("setup failed");
       taskId = created.value.id;
 
-      await tasksService.delete(created.value.id, "req-task-delete");
+      await tasksService.delete(created.value.id, workspaceId, "req-task-delete");
 
       const logged = findEvent("task.deleted");
       expect(logged?.entityId).toBe(created.value.id);
@@ -132,10 +163,12 @@ describe("business event logging (task 10.2)", () => {
   it("logs case.deleted with the deleted case's id", async () => {
     let caseId: string | undefined;
     try {
-      const caseEntity = await db.case.create({ data: { name: `c-${randomUUID()}`, endDate: new Date() } });
+      const caseEntity = await db.case.create({
+        data: { name: `c-${randomUUID()}`, endDate: new Date(), workspaceId },
+      });
       caseId = caseEntity.id;
 
-      await caseService.delete(caseEntity.id, "req-case-delete");
+      await caseService.delete(caseEntity.id, workspaceId, "req-case-delete");
 
       const logged = findEvent("case.deleted");
       expect(logged?.entityId).toBe(caseEntity.id);
@@ -154,10 +187,11 @@ describe("business event logging (task 10.2)", () => {
         caseAnchor: "case_start",
         caseOffsetDays: 0,
         nonBusinessDayPolicy: "as_is",
+        workspaceId,
       });
       templateId = template.id;
 
-      await recurrenceService.deleteTemplate(template.id, "req-template-delete");
+      await recurrenceService.deleteTemplate(template.id, workspaceId, "req-template-delete");
 
       const logged = findEvent("recurring_task_template.deleted");
       expect(logged?.entityId).toBe(template.id);
@@ -170,10 +204,13 @@ describe("business event logging (task 10.2)", () => {
   it("logs non_business_day.deleted with the deleted record's id", async () => {
     let holidayId: string | undefined;
     try {
-      const holiday = await holidaysService.register({ date: `2037-0${(Math.floor(Math.random() * 8) + 1)}-15` });
+      const holiday = await holidaysService.register({
+        date: `2037-0${Math.floor(Math.random() * 8) + 1}-15`,
+        workspaceId,
+      });
       holidayId = holiday.id;
 
-      await holidaysService.remove(holiday.id, "req-holiday-delete");
+      await holidaysService.remove(holiday.id, workspaceId, "req-holiday-delete");
 
       const logged = findEvent("non_business_day.deleted");
       expect(logged?.entityId).toBe(holiday.id);

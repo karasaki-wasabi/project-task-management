@@ -2,7 +2,7 @@
 // Requirements 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 6.1, 6.3, 7.1, 7.4).
 // Flow: empty → create → header switch → member search/add → settings → creator delete.
 // Requires backend (+MySQL) and frontend via `docker compose up`; see playwright.config.ts.
-import { expect, registerUser, test } from "./fixtures";
+import { authTest as test, expect, registerUser } from "./fixtures";
 
 const ALT_COLOR = "#0f766e";
 

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ref } from "vue";
 import type {
   CaseTemplateApplyOperation,
   CreateCaseInput,
@@ -13,6 +14,7 @@ import type {
 import { joinApiUrl, useApiClient } from "./useApiClient";
 
 const fetchMock = vi.fn();
+const currentId = ref<string | null>(null);
 const clientSource = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "useApiClient.ts"),
   "utf8",
@@ -21,9 +23,13 @@ const clientSource = readFileSync(
 beforeEach(() => {
   fetchMock.mockReset();
   fetchMock.mockResolvedValue(undefined);
+  currentId.value = null;
   vi.stubGlobal("$fetch", fetchMock);
   vi.stubGlobal("useRuntimeConfig", () => ({
     public: { apiBaseUrl: "http://backend:3000" },
+  }));
+  vi.stubGlobal("useCurrentWorkspace", () => ({
+    currentId,
   }));
 });
 
@@ -302,6 +308,92 @@ describe("useApiClient workspace contract (task 5.1)", () => {
     expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/users", {
       query: { q: "bob" },
       credentials: "include",
+    });
+  });
+});
+
+describe("useApiClient workspace scope header (task 7.1)", () => {
+  it("attaches x-workspace-id to scoped paths when currentId is set", async () => {
+    currentId.value = "ws-1";
+    const api = useApiClient();
+
+    await api.listCases();
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/cases", {
+      credentials: "include",
+      headers: { "x-workspace-id": "ws-1" },
+    });
+
+    fetchMock.mockClear();
+    await api.listTasks();
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/tasks", {
+      query: { unassignedCase: undefined },
+      credentials: "include",
+      headers: { "x-workspace-id": "ws-1" },
+    });
+
+    fetchMock.mockClear();
+    await api.listRecurringTemplates();
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/recurring-templates", {
+      credentials: "include",
+      headers: { "x-workspace-id": "ws-1" },
+    });
+
+    fetchMock.mockClear();
+    await api.listHolidays();
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/holidays", {
+      credentials: "include",
+      headers: { "x-workspace-id": "ws-1" },
+    });
+
+    fetchMock.mockClear();
+    await api.listDevelopmentStages();
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/development-stages", {
+      credentials: "include",
+      headers: { "x-workspace-id": "ws-1" },
+    });
+  });
+
+  it("omits x-workspace-id when currentId is null", async () => {
+    currentId.value = null;
+    const api = useApiClient();
+
+    await api.listCases();
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/cases", {
+      credentials: "include",
+    });
+  });
+
+  it("does not attach x-workspace-id to /api/throughput or /api/workspaces", async () => {
+    currentId.value = "ws-1";
+    const api = useApiClient();
+
+    await api.getThroughput("week", 4);
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/throughput", {
+      query: { periodType: "week", rangeCount: 4 },
+      credentials: "include",
+    });
+
+    fetchMock.mockClear();
+    await api.listWorkspaces();
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/workspaces", {
+      credentials: "include",
+    });
+  });
+
+  it("merges x-workspace-id with csrf-token on mutating scoped requests", async () => {
+    currentId.value = "ws-1";
+    fetchMock.mockResolvedValueOnce({ token: "csrf-token" });
+    fetchMock.mockResolvedValueOnce({ id: "task-1" });
+    const api = useApiClient();
+    const input: CreateTaskInput = { title: "Scoped task", priority: "medium" };
+
+    await api.createTask(input);
+
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/tasks", {
+      method: "POST",
+      body: input,
+      credentials: "include",
+      headers: { "csrf-token": "csrf-token", "x-workspace-id": "ws-1" },
     });
   });
 });

@@ -16,12 +16,13 @@
 // board's horizontally-scrolling row alongside the many demo/other-spec
 // stages, and dragCardTo already handles scrolling both the source and
 // target into view before/after picking up the card.
-import { expect, registerUser, test } from "./fixtures";
+import { expect, registerWorkspaceMember, test } from "./fixtures";
 import { dragCardTo } from "./drag";
 
 test("dragging an unassigned backlog card into the focus tray assigns it, and dragging a tray card into a stage column moves it (Requirements 1.2-1.5)", async ({
   page,
   request,
+  workspace,
 }) => {
   const suffix = Date.now();
   const userName = `e2e-trayassign-user-${suffix}`;
@@ -34,7 +35,7 @@ test("dragging an unassigned backlog card into the focus tray assigns it, and dr
   // the chip appear before the actual scenario starts.
   const chipSeedTitle = `e2e-trayassign-seed-${suffix}`;
 
-  await registerUser(request, userName);
+  await registerWorkspaceMember(page, request, workspace.id, userName);
 
   await page.goto("/kanban/stages");
   await page.getByPlaceholder("段階名(例: 仕様未確定)").fill(stageName);
