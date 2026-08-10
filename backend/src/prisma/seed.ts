@@ -5,11 +5,12 @@
  * E2E 実行後の汚れを捨てて手元確認用に戻す用途を想定している。
  *
  * スキーマ・制約・必須カラム・enum・リレーションが変わったら、このファイルも合わせて更新すること。
- * 運用上の注意は `.kiro/steering/local-dev-pitfalls.md` の「手動確認用シード」を参照。
+ * 運用上の注意は `.kiro/steering/local-dev-pitfalls.md` の「11. 手動確認用シードとスキーマ変更の同期」を参照。
  *
  * 投入後のログイン
  * - メール: root@example.com
  * - パスワード: root@example.com
+ * - 現在ワークスペースはクライアント側で自動選択される（通常は手動選択不要）
  *
  * 実行例
  * - docker compose run --rm -T backend npx prisma db seed

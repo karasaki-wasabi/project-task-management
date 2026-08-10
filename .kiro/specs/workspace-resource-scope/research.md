@@ -1,5 +1,7 @@
 # Gap Analysis: workspace-resource-scope
 
+本書の Gap Map（§2）や Effort 見積もりは discovery／設計時点のスナップショットである。実装完了後の正本は `tasks.md`（全タスク完了）とコード、および `.kiro/steering/` の現行記述を参照すること。
+
 ## 1. 前提となる依存関係の状態
 
 （2026-08-10 更新: `main` に `workspace-membership` がマージ済みであることを確認）
@@ -64,7 +66,7 @@
 
 ## 5. Effort & Risk
 
-- **Effort: L（1〜2週間）** — 5リソース×スキーマ/repository/service/routes/テストのフルスタック変更、共有ガード新設、フロント側のワークスペース文脈配線（`workspace-membership`実装分に相乗り）、担当者候補APIの新設、繰り返し生成の整合性チェック追加、既存E2E約15本の改修が全て必要。範囲の広さ次第でXLに寄る可能性あり
+- **Effort: L（1〜2週間）** — 5リソース×スキーマ/repository/service/routes/テストのフルスタック変更、共有ガード新設、フロント側のワークスペース文脈配線（`workspace-membership`実装分に相乗り）、担当者候補を既存`listWorkspaceMembers`へ切替、繰り返し生成の整合性チェック追加、既存E2E約15本の改修が全て必要。範囲の広さ次第でXLに寄る可能性あり
 - Risk: Medium — モジュール構成・Zod検証・`HttpError`パターン・soft-delete拡張という先例があり技術的には既知の延長線上だが、(a) 5モジュール横断でガード漏れが起きやすい構造的リスク、(b) `NonBusinessDay`の一意制約をワークスペース単位へ組み替える migration 手編集、(c) 担当者候補の`WorkspaceUserSummary.userId`と既存`User.id`前提UIの整合、が中リスク要因として残る
 
 ## 6. UIデザインゲート（claude design）の適用判断

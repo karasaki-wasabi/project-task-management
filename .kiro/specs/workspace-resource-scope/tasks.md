@@ -7,7 +7,7 @@
 - 既存Case/Task/RecurringTaskTemplate/NonBusinessDay/DevelopmentStageデータは開発段階のため破棄前提。マイグレーションは保全ではなくスキーマ適合を優先する
 - `forbidden`（403）ヘルパーは`workspace-membership`が追加済み。タスク1.2は存在確認のみで、重複実装しない
 - ワークスペース文脈は`X-Workspace-Id`リクエストヘッダーで伝達する。対象パスは`/api/cases`, `/api/tasks`, `/api/recurring-templates`, `/api/holidays`, `/api/development-stages`の5つ
-- ランタイムの所属判定呼び出し先は`workspaceService`（単数）。design文書中の旧称`workspacesService`／型名`WorkspaceService`に引きずられないこと
+- ランタイムの所属判定呼び出し先は`workspaceService`（単数）
 - 各モジュールの`workspaceId`は`VerifiedWorkspaceId`（branded type）で受け取り、`request.currentWorkspaceId`以外から未検証の値を渡すとコンパイルエラーになるようにする（design.md Critical Issue 1対応）
 - 担当者候補APIの戻り値は`WorkspaceUserSummary.userId`。既存UIの`User.id`前提箇所では`userId`へのマッピング（または呼び出し側での正規化）を忘れないこと
 - `NonBusinessDay`の`date_active_key`グローバルUNIQUEは、`workspaceId`追加時にワークスペース単位の一意制約へ組み替える（据え置くとワークスペース横断で同日登録が衝突する）

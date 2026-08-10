@@ -49,6 +49,8 @@ Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロント
 # フロントエンドテスト: docker compose run --rm --no-deps -T frontend npm run test
 # フロントエンドビルド: docker compose run --rm --no-deps -T frontend npm run generate
 # フロントエンドE2E: frontend/playwright.config.ts (E2E_BASE_URL で対象URL切り替え)
+# 手動確認用シード再投入: docker compose run --rm -T backend npx prisma db seed
+#   （詳細・同期義務は [[local-dev-pitfalls]] §11）
 ```
 
 ## Key Technical Decisions
@@ -58,8 +60,9 @@ Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロント
   1. S3 + CloudFront(フロント)、App Runner または Elastic Beanstalk(バックエンド)
   2. RDS導入、環境分離(dev/prod)
   3. ECS Fargate + Terraform/CDK による IaC 化、GitHub ActionsからのCD
-- 認証は公開自己登録と HttpOnly Cookie セッションによるログイン／ログアウトを提供する。`User`はメールアドレス・表示名・パスワードハッシュを持つアカウントであり、担当者候補は登録済みアカウントから供給する
-- ワークスペースによる可視範囲の分離、RBAC、招待リンク・メール送信、OAuth／外部 IdP、JWT／MCP 等の機械用トークンは後続仕様で扱う
+- 認証は公開自己登録と HttpOnly Cookie セッションによるログイン／ログアウトを提供する。`User`はメールアドレス・表示名・パスワードハッシュを持つアカウントである
+- ワークスペースによる可視範囲の分離は実装済み。対象APIはリクエストヘッダー`x-workspace-id`と所属検証ガードでスコープする。タスク作成・カンバン再割当の担当者候補は現在ワークスペースのメンバー一覧から供給し、担当者フィルタ／カレンダー表示は全ユーザー一覧(`GET /api/users`)を用いる
+- RBAC、招待リンク・メール送信、OAuth／外部 IdP、JWT／MCP 等の機械用トークンは後続仕様で扱う
 - ログはCloudWatch Logsへのstdout/stderr転送までを対象とし、専用のログ集約・可視化基盤(ELK/Datadog等)は構築しない
 
 ### デプロイ範囲: 当面はStage 1まで(2026-07時点の決定)

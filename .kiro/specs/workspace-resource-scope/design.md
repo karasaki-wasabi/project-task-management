@@ -308,7 +308,7 @@ export async function requireWorkspaceMember(request: FastifyRequest): Promise<v
 - `list`/`findById`/`update`/`delete`は`workspaceId`を必須パラメータとして受け取り、`repository`側の`where`句に`withWorkspaceScope`で合成する。対象が別ワークスペース所属の場合は`notFound`（404）とする
 - `assigneeUserId`を指定する`create`/`update`では、`workspaceService.isMember(workspaceId, assigneeUserId)`を検証し、非メンバーの場合は`badRequest`（400、指定値の妥当性エラーとして扱う）とする
 - 関連先リソースの同一ワークスペース検証（Requirement 3.5、実装レビューで落とさないこと）
-  - `caseId`が指定されている場合、当該Caseを現在ワークスペース付きで解決できなければ拒否（存在しない／別WSは区別せず妥当性エラーとして400、または所属外隠蔽方針に合わせ404。モジュール内で一貫させる）
+  - `caseId`が指定されている場合、当該Caseを現在ワークスペース付きで解決できなければ拒否（存在しない／別WSは区別せず妥当性エラーとして400）
   - `parentTaskId`が指定されている場合、親Taskも現在ワークスペースに帰属していなければ拒否
   - `developmentStageId`が指定されている場合、当該DevelopmentStageも現在ワークスペースに帰属していなければ拒否
   - `addChild`／`split`／`updateTaskDevelopmentStage`等の派生エンドポイントでも同じ検証を適用する
@@ -433,7 +433,7 @@ model Task {
 - 400 Bad Request
   - `X-Workspace-Id`ヘッダー欠落・空文字
   - 担当者に非メンバーを指定した場合（指定値の妥当性エラー）
-  - 関連先リソースID（`caseId`／`parentTaskId`／`developmentStageId`等）が現在ワークスペースで解決できない場合。モジュール内で400に統一するか、対象リソース本体と同様に404で隠蔽するかは実装時に一貫方針を選び、テストで固定する
+  - 関連先リソースID（`caseId`／`parentTaskId`／`developmentStageId`等）が現在ワークスペースで解決できない場合。実装は妥当性エラーとして400（`validation_error`）に統一する。操作対象本体が別WSのときは404のまま（所属外隠蔽）
 - 403 Forbidden
   - `X-Workspace-Id`で指定されたワークスペース自体のメンバーではない場合（`requireWorkspaceMember`が検出）
 - 404 Not Found

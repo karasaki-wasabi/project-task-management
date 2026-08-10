@@ -66,6 +66,12 @@ MySQLの`STORED GENERATED COLUMN`+`UNIQUE INDEX`のように、Prismaスキー�
   - または `docker compose run --rm -T backend npm run db:seed`
 - ログイン
   - メール / パスワードとも `root@example.com`
+- 投入内容の目安
+  - ユーザー1・ワークスペース「開発用ワークスペース」1・案件2・タスク4・開発ステージ3・繰り返しテンプレート1・非営業日1
+- ログイン後の現在ワークスペース
+  - サーバーには永続化されない。`useCurrentWorkspace` が `localStorage` キー `currentWorkspaceId` を使う
+  - ヘッダーの `WorkspaceSwitcher` がマウント時に `refresh()` し、保存IDが無効または未設定なら所属一覧の先頭（シード直後は開発用ワークスペース）を自動選択する。通常は手動選択不要
+  - 空状態が一瞬または長く出る場合は、スイッチャー未マウントや `refresh` 完了前の可能性がある
 - 同期義務
   - テーブル追加・削除、必須カラム、enum、ユニーク制約、ワークスペース必須化など DB の形やシード前提が変わったら、同じ変更の実装コミット（または直後の追随コミット）で `seed.ts` も更新する
   - `TABLES_IN_TRUNCATE_ORDER` に新テーブルを忘れると、再シード時に古い行が残るか FK エラーになる
