@@ -58,6 +58,21 @@ MySQLの`STORED GENERATED COLUMN`+`UNIQUE INDEX`のように、Prismaスキー�
 `GET /api/auth/csrf` はトークン発行時に session Cookie を更新する。`app.inject` や手動の Cookie 組み立てで、csrf 取得前の古い Cookie のまま変更系 API を呼ぶと `Missing csrf secret` や 403 になる。
 → csrf レスポンスの `Set-Cookie` を反映した最新 Cookie を、続けて呼ぶ POST / PATCH / DELETE / logout に使う。ブラウザ上の `useApiClient` はこれを自動で扱うが、統合テストヘルパでは明示的に更新する。
 
+### 11. 手動確認用シードとスキーマ変更の同期
+手元のブラウザ確認用データは `backend/src/prisma/seed.ts` で投入する。E2E 実行後など DB が汚れたときは、既存行を TRUNCATE したうえで再投入する。
+
+- 実行
+  - `docker compose run --rm -T backend npx prisma db seed`
+  - または `docker compose run --rm -T backend npm run db:seed`
+- ログイン
+  - メール / パスワードとも `root@example.com`
+- 同期義務
+  - テーブル追加・削除、必須カラム、enum、ユニーク制約、ワークスペース必須化など DB の形やシード前提が変わったら、同じ変更の実装コミット（または直後の追随コミット）で `seed.ts` も更新する
+  - `TABLES_IN_TRUNCATE_ORDER` に新テーブルを忘れると、再シード時に古い行が残るか FK エラーになる
+  - パスワードは `@node-rs/argon2` でハッシュしている。認証方式が変わったらシードのハッシュ処理も合わせる
+
+このシードは本番投入用ではない。E2E 専用の使い捨てデータとは別物として扱う。
+
 ## Playwright(E2E)実行時の注意
 
 `docker compose run` はコマンドごとに使い捨てコンテナを作るため、あるコマンドで `npx playwright install --with-deps chromium` してブラウザバイナリを入れても、**次の `docker compose run` invocationには一切残らない**。実行のたびに毎回インストールするコストを避けたい場合は、ホストにNode.jsがあれば `frontend/node_modules`/`package-lock.json` を汚さないスクラッチディレクトリ(例: `/tmp/.../scratchpad/pw`)に `@playwright/test` を単独インストールし、公開済みポート(`http://localhost:<FRONTEND_PORT>`)に対してホスト側から実行するのが安定する。
