@@ -66,6 +66,63 @@ describe("userRoutes", () => {
     await app.close();
   });
 
+  it("lists all users without q and filters by name or email when q is provided", async () => {
+    const app = await buildTestApp();
+    const marker = randomUUID().replace(/-/g, "").slice(0, 12);
+    const byNameData = createUserData(`RouteAlpha-${marker}`);
+    const byName = await db.user.create({ data: byNameData });
+    const byEmailData = {
+      ...createUserData(`RouteOther-${marker}`),
+      email: `route-match-${marker}@Example.TEST`,
+    };
+    const byEmail = await db.user.create({ data: byEmailData });
+    const unrelatedData = createUserData(`RouteUnrelated-${randomUUID()}`);
+    const unrelated = await db.user.create({ data: unrelatedData });
+
+    const registerResponse = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: {
+        email: `route-search-${randomUUID()}@example.test`,
+        name: "検索ログイン利用者",
+        password: "password-123",
+      },
+    });
+    const registered = registerResponse.json();
+    const setCookie = registerResponse.headers["set-cookie"];
+    const cookie = (Array.isArray(setCookie) ? setCookie : [setCookie])
+      .find((item) => item?.startsWith("session="))
+      ?.split(";")[0];
+
+    const allResponse = await app.inject({
+      method: "GET",
+      url: "/api/users",
+      headers: { cookie },
+    });
+    expect(allResponse.statusCode).toBe(200);
+    const allIds = allResponse.json().map((user: { id: string }) => user.id);
+    expect(allIds).toEqual(expect.arrayContaining([byName.id, byEmail.id, unrelated.id, registered.id]));
+
+    const nameSearchResponse = await app.inject({
+      method: "GET",
+      url: `/api/users?q=routealpha-${marker}`,
+      headers: { cookie },
+    });
+    expect(nameSearchResponse.statusCode).toBe(200);
+    expect(nameSearchResponse.json().map((user: { id: string }) => user.id)).toEqual([byName.id]);
+
+    const emailSearchResponse = await app.inject({
+      method: "GET",
+      url: `/api/users?q=ROUTE-MATCH-${marker}@example.test`,
+      headers: { cookie },
+    });
+    expect(emailSearchResponse.statusCode).toBe(200);
+    expect(emailSearchResponse.json().map((user: { id: string }) => user.id)).toEqual([byEmail.id]);
+
+    await hardDelete([byName.id, byEmail.id, unrelated.id, registered.id]);
+    await app.close();
+  });
+
   it("does not register the legacy create and delete routes", async () => {
     const app = await buildTestApp();
     const registerResponse = await app.inject({
