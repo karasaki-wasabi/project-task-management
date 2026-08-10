@@ -15,6 +15,7 @@
 - 未選択時空状態の対象画面は8つ: `pages/index.vue`・`cases`・`tasks`・`kanban`・`calendar`・`recurrence`・`holidays`・`throughput`。`throughput`はAPIスコープ化を本仕様では行わず空状態のみ（集計スコープは`velocity-dashboard`へ申し送り）
 - タスク1.4以降、対象5パスへの認証済み`buildApp`統合テストは`X-Workspace-Id`なしだと400になる。各モジュールのスコープ適用タスクでテスト側も更新する
 - タスク1.5の休日UNIQUE `(workspace_id, date_active_key)` はSQL手編集。`prisma migrate dev`は生成列driftに注意し、適用は`migrate deploy`を優先する
+- タスク3.1で`tasksService.create/delete`シグネチャ変更に伴い`recurrence.service.ts`へ最小追随あり。共有テスト`business-event-logging.integration.test.ts`は未更新のまま失敗し得る
 
 - [ ] 1. Foundation: 共有ヘルパー・ガード・スキーマ移行
 - [x] 1.1 (P) ワークスペース文脈の共有ヘルパーを実装する
@@ -59,7 +60,7 @@
   - _Depends: 1.4, 1.5_
 
 - [ ] 3. Core: タスクのワークスペーススコープ化と担当者検証
-- [ ] 3.1 (P) タスクの作成・一覧・取得・更新・削除にワークスペーススコープを適用する
+- [x] 3.1 (P) タスクの作成・一覧・取得・更新・削除にワークスペーススコープを適用する
   - 作成時は操作者の現在ワークスペースへ自動的に帰属させ、一覧・取得・更新・削除は現在ワークスペースに帰属するタスクのみを対象とする
   - 観測可能な完了状態: 異なるワークスペースに属するタスクIDを指定した取得・更新・削除が失敗し、一覧には現在ワークスペースのタスクのみが含まれることを単体・統合テストで確認できる
   - _Requirements: 1.1, 1.2, 3.1, 3.2, 3.3_

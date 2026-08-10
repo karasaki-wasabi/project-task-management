@@ -1,12 +1,15 @@
 // TasksService (task 3.1 core + task 3.2 hierarchy/split + task 10.2
 // business event logging, design.md "Backend/tasks", Requirements 1.1-1.6,
 // 2.1-2.4, 7.2, 9.1-9.4, 10.2).
+// workspace-resource-scope task 3.1: create/list/get/update/delete are scoped
+// by VerifiedWorkspaceId; cross-workspace access yields not_found (404).
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { db } from "../../shared/db.js";
 import { err, ok, type Result } from "../../shared/result.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { taskRepository } from "./task.repository.js";
 import type { CreateTaskInput, Task, TaskError, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
 
@@ -36,15 +39,24 @@ export const tasksService = {
     }
   },
 
-  async getById(taskId: string): Promise<Result<Task, TaskError>> {
-    const task = await taskRepository.findById(taskId);
+  async getById(taskId: string, workspaceId: VerifiedWorkspaceId): Promise<Result<Task, TaskError>> {
+    const task = await taskRepository.findById(taskId, workspaceId);
     if (!task) {
       return err({ type: "not_found", taskId });
     }
     return ok(task);
   },
 
-  async updateStatus(taskId: string, status: TaskStatus): Promise<Result<Task, TaskError>> {
+  async updateStatus(
+    taskId: string,
+    workspaceId: VerifiedWorkspaceId,
+    status: TaskStatus,
+  ): Promise<Result<Task, TaskError>> {
+    const current = await taskRepository.findById(taskId, workspaceId);
+    if (!current) {
+      return err({ type: "not_found", taskId });
+    }
+
     if (status === "done") {
       const incompleteChildren = await taskRepository.countIncompleteChildren(taskId);
       if (incompleteChildren > 0) {
@@ -54,7 +66,7 @@ export const tasksService = {
 
     const completedAt = status === "done" ? new Date() : null;
     try {
-      const task = await taskRepository.updateStatus(taskId, status, completedAt);
+      const task = await taskRepository.updateStatus(taskId, workspaceId, status, completedAt);
       return ok(task);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
@@ -71,10 +83,11 @@ export const tasksService = {
   // Enforced here rather than trusted from the client.
   async updateDevelopmentStage(
     taskId: string,
+    workspaceId: VerifiedWorkspaceId,
     developmentStageId: string | null,
     assigneeUserId?: string,
   ): Promise<Result<Task, TaskError>> {
-    const current = await taskRepository.findById(taskId);
+    const current = await taskRepository.findById(taskId, workspaceId);
     if (!current) {
       return err({ type: "not_found", taskId });
     }
@@ -85,7 +98,7 @@ export const tasksService = {
     }
 
     try {
-      const task = await taskRepository.updateDevelopmentStage(taskId, data);
+      const task = await taskRepository.updateDevelopmentStage(taskId, workspaceId, data);
       return ok(task);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
@@ -102,8 +115,12 @@ export const tasksService = {
   // assigneeUserId), distinct from the kanban-move-specific
   // updateDevelopmentStage above: an explicit edit always overwrites
   // assigneeUserId, it doesn't defer to "only if currently unassigned".
-  async update(taskId: string, input: UpdateTaskInput): Promise<Result<Task, TaskError>> {
-    const current = await taskRepository.findById(taskId);
+  async update(
+    taskId: string,
+    workspaceId: VerifiedWorkspaceId,
+    input: UpdateTaskInput,
+  ): Promise<Result<Task, TaskError>> {
+    const current = await taskRepository.findById(taskId, workspaceId);
     if (!current) {
       return err({ type: "not_found", taskId });
     }
@@ -134,7 +151,7 @@ export const tasksService = {
     }
 
     try {
-      const task = await taskRepository.update(taskId, data);
+      const task = await taskRepository.update(taskId, workspaceId, data);
       return ok(task);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
@@ -147,8 +164,12 @@ export const tasksService = {
     }
   },
 
-  async addChild(parentTaskId: string, input: CreateTaskInput): Promise<Result<Task, TaskError>> {
-    const parent = await taskRepository.findById(parentTaskId);
+  async addChild(
+    parentTaskId: string,
+    workspaceId: VerifiedWorkspaceId,
+    input: CreateTaskInput,
+  ): Promise<Result<Task, TaskError>> {
+    const parent = await taskRepository.findById(parentTaskId, workspaceId);
     if (!parent) {
       return err({ type: "not_found", taskId: parentTaskId });
     }
@@ -159,7 +180,7 @@ export const tasksService = {
     }
 
     try {
-      const child = await taskRepository.create({ ...input, title, parentTaskId });
+      const child = await taskRepository.create({ ...input, title, parentTaskId, workspaceId });
       return ok(child);
     } catch (error) {
       if (isForeignKeyViolation(error)) {
@@ -169,7 +190,11 @@ export const tasksService = {
     }
   },
 
-  async splitTask(taskId: string, parts: CreateTaskInput[]): Promise<Result<Task[], TaskError>> {
+  async splitTask(
+    taskId: string,
+    workspaceId: VerifiedWorkspaceId,
+    parts: CreateTaskInput[],
+  ): Promise<Result<Task[], TaskError>> {
     if (parts.length < 2) {
       return err({ type: "validation_error", message: "splitTask requires at least 2 parts" });
     }
@@ -179,7 +204,7 @@ export const tasksService = {
       }
     }
 
-    const original = await taskRepository.findById(taskId);
+    const original = await taskRepository.findById(taskId, workspaceId);
     if (!original) {
       return err({ type: "not_found", taskId });
     }
@@ -192,6 +217,7 @@ export const tasksService = {
       caseId: original.caseId ?? undefined,
       priority: original.priority,
       parentTaskId: taskId,
+      workspaceId,
     }));
 
     try {
@@ -207,11 +233,12 @@ export const tasksService = {
 
   async delete(
     taskId: string,
+    workspaceId: VerifiedWorkspaceId,
     requestId: string = randomUUID(),
     client: DbClient = db,
   ): Promise<Result<void, TaskError>> {
     try {
-      await taskRepository.delete(taskId, client);
+      await taskRepository.delete(taskId, workspaceId, client);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         return err({ type: "not_found", taskId });

@@ -13,6 +13,7 @@ import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { db } from "../../shared/db.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { formatDateOnly, parseDateOnly } from "../holidays/holiday.repository.js";
 import { holidaysService } from "../holidays/holiday.service.js";
 import { tasksService } from "../tasks/task.service.js";
@@ -164,6 +165,9 @@ async function tryCreateInstance(
         sourceTemplateId: template.id,
         sourceAnchor: template.caseAnchor,
         scheduledDate,
+        // Template and generated task share a workspace (Requirement 1.3;
+        // full template scoping lands in workspace-resource-scope 4.1).
+        workspaceId: template.workspaceId as VerifiedWorkspaceId,
       },
       client,
     );
@@ -193,7 +197,12 @@ async function deleteGeneratedForAnchors(
     where: { caseId, sourceAnchor: { in: anchors } },
   });
   for (const task of tasks) {
-    const result = await tasksService.delete(task.id, requestId, client);
+    const result = await tasksService.delete(
+      task.id,
+      task.workspaceId as VerifiedWorkspaceId,
+      requestId,
+      client,
+    );
     if (!result.ok && result.error.type !== "not_found") {
       throw new Error(`recurrence: failed to delete task instance: ${result.error.type}`);
     }
