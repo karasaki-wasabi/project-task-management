@@ -2,9 +2,12 @@
 // renamed/extended from the former deliveries/delivery.routes.ts, task 4.1).
 // Registered into the shared app in this same task; standalone Fastify
 // plugin here so this module stays testable in isolation.
-import type { FastifyInstance } from "fastify";
+// workspace-resource-scope task 2.1: passes request.currentWorkspaceId into
+// CaseService; clients cannot set workspaceId via body.
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { caseService } from "./case.service.js";
 
 const caseTemplateApplyOperationSchema = z.enum([
@@ -47,32 +50,44 @@ function parseOrBadRequest<T>(schema: z.ZodType<T>, data: unknown): T {
   return result.data;
 }
 
+function requireCurrentWorkspaceId(request: FastifyRequest): VerifiedWorkspaceId {
+  if (!request.currentWorkspaceId) {
+    throw badRequest("X-Workspace-Id is required");
+  }
+  return request.currentWorkspaceId;
+}
+
 export async function caseRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/cases", async (request, reply) => {
     const body = parseOrBadRequest(createCaseBodySchema, request.body);
-    const caseEntity = await caseService.create(body, request.id);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    const caseEntity = await caseService.create({ ...body, workspaceId }, request.id);
     reply.status(201).send(caseEntity);
   });
 
   app.patch("/api/cases/:id", async (request, reply) => {
     const params = parseOrBadRequest(caseIdParamsSchema, request.params);
     const body = parseOrBadRequest(updateCaseBodySchema, request.body);
-    const caseEntity = await caseService.update(params.id, body);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    const caseEntity = await caseService.update(params.id, workspaceId, body, request.id);
     reply.status(200).send(caseEntity);
   });
 
   app.get("/api/cases/:id/progress", async (request) => {
     const params = parseOrBadRequest(caseIdParamsSchema, request.params);
-    return caseService.getProgress(params.id);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    return caseService.getProgress(params.id, workspaceId);
   });
 
   app.delete("/api/cases/:id", async (request, reply) => {
     const params = parseOrBadRequest(caseIdParamsSchema, request.params);
-    await caseService.delete(params.id, request.id);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    await caseService.delete(params.id, workspaceId, request.id);
     reply.status(204).send();
   });
 
-  app.get("/api/cases", async () => {
-    return caseService.list();
+  app.get("/api/cases", async (request) => {
+    const workspaceId = requireCurrentWorkspaceId(request);
+    return caseService.list(workspaceId);
   });
 }
