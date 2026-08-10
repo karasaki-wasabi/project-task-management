@@ -15,4 +15,9 @@ describe("navLinks (task 7.2, Requirement 7.4)", () => {
   it("keeps 繰り返し設定 labeled and pointed at /recurrence", () => {
     expect(navLinks).toContainEqual({ to: "/recurrence", label: "繰り返し設定" });
   });
+
+  it("includes /workspaces labeled メンバー for workspace membership nav (task 6.2)", () => {
+    expect(navLinks).toContainEqual({ to: "/workspaces", label: "メンバー" });
+  });
 });
+

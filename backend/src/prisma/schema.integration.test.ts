@@ -227,3 +227,162 @@ describe("physical schema (task 1.2)", () => {
     await prisma.developmentStage.delete({ where: { id: stage.id } });
   });
 });
+
+describe("workspace membership schema (task 1.1)", () => {
+  it("exposes Workspace and WorkspaceMember models with expected scalar fields", () => {
+    expect(Prisma).toHaveProperty("WorkspaceScalarFieldEnum");
+    expect(Prisma).toHaveProperty("WorkspaceMemberScalarFieldEnum");
+
+    expect(Prisma.WorkspaceScalarFieldEnum).toMatchObject({
+      id: "id",
+      name: "name",
+      color: "color",
+      createdByUserId: "createdByUserId",
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      deletedAt: "deletedAt",
+    });
+
+    expect(Prisma.WorkspaceMemberScalarFieldEnum).toMatchObject({
+      id: "id",
+      workspaceId: "workspaceId",
+      userId: "userId",
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      deletedAt: "deletedAt",
+    });
+
+    const schemaPath = resolve(__dirname, "schema.prisma");
+    const schema = readFileSync(schemaPath, "utf8");
+    expect(schema).toMatch(/createdWorkspaces\s+Workspace\[\]\s+@relation\("WorkspaceCreator"\)/);
+    expect(schema).toMatch(/workspaceMemberships\s+WorkspaceMember\[\]/);
+    expect(schema).toMatch(/@@unique\(\[workspaceId,\s*userId\]\)/);
+    expect(schema).toMatch(/@@map\("workspaces"\)/);
+    expect(schema).toMatch(/@@map\("workspace_members"\)/);
+  });
+
+  it("provides workspaces and workspace_members tables with audit columns", async () => {
+    const workspaceColumns = await prisma.$queryRaw<Array<{ Field: string }>>`
+      SHOW COLUMNS FROM workspaces
+    `;
+    const memberColumns = await prisma.$queryRaw<Array<{ Field: string }>>`
+      SHOW COLUMNS FROM workspace_members
+    `;
+
+    expect(workspaceColumns.map((column) => column.Field)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "name",
+        "color",
+        "created_by_user_id",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+      ]),
+    );
+    expect(memberColumns.map((column) => column.Field)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "workspace_id",
+        "user_id",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+      ]),
+    );
+  });
+
+  it("round-trips Workspace with creator and WorkspaceMember relations", async () => {
+    const suffix = randomUUID();
+    const creator = await prisma.user.create({
+      data: {
+        email: `ws-creator-${suffix}@example.test`,
+        name: `ws-creator-${suffix}`,
+        passwordHash: "test-password-hash",
+      },
+    });
+    const memberUser = await prisma.user.create({
+      data: {
+        email: `ws-member-${suffix}@example.test`,
+        name: `ws-member-${suffix}`,
+        passwordHash: "test-password-hash",
+      },
+    });
+
+    const workspace = await prisma.workspace.create({
+      data: {
+        name: `workspace-${suffix}`,
+        color: "#2563eb",
+        createdByUserId: creator.id,
+      },
+    });
+    const membership = await prisma.workspaceMember.create({
+      data: {
+        workspaceId: workspace.id,
+        userId: memberUser.id,
+      },
+    });
+
+    expect(workspace.id).toBeTruthy();
+    expect(workspace.createdByUserId).toBe(creator.id);
+    expect(workspace.deletedAt).toBeNull();
+    expect(membership.workspaceId).toBe(workspace.id);
+    expect(membership.userId).toBe(memberUser.id);
+
+    const creatorWithRelations = await prisma.user.findUniqueOrThrow({
+      where: { id: creator.id },
+      include: { createdWorkspaces: true, workspaceMemberships: true },
+    });
+    expect(creatorWithRelations.createdWorkspaces.map((ws) => ws.id)).toContain(workspace.id);
+
+    const memberWithRelations = await prisma.user.findUniqueOrThrow({
+      where: { id: memberUser.id },
+      include: { workspaceMemberships: true },
+    });
+    expect(memberWithRelations.workspaceMemberships.map((m) => m.id)).toContain(membership.id);
+
+    await prisma.workspaceMember.delete({ where: { id: membership.id } });
+    await prisma.workspace.delete({ where: { id: workspace.id } });
+    await prisma.user.delete({ where: { id: memberUser.id } });
+    await prisma.user.delete({ where: { id: creator.id } });
+  });
+
+  it("rejects duplicate (workspace_id, user_id) membership via unique constraint", async () => {
+    const suffix = randomUUID();
+    const creator = await prisma.user.create({
+      data: {
+        email: `ws-uniq-creator-${suffix}@example.test`,
+        name: `ws-uniq-creator-${suffix}`,
+        passwordHash: "test-password-hash",
+      },
+    });
+    const memberUser = await prisma.user.create({
+      data: {
+        email: `ws-uniq-member-${suffix}@example.test`,
+        name: `ws-uniq-member-${suffix}`,
+        passwordHash: "test-password-hash",
+      },
+    });
+    const workspace = await prisma.workspace.create({
+      data: {
+        name: `workspace-uniq-${suffix}`,
+        createdByUserId: creator.id,
+      },
+    });
+
+    const first = await prisma.workspaceMember.create({
+      data: { workspaceId: workspace.id, userId: memberUser.id },
+    });
+
+    await expect(
+      prisma.workspaceMember.create({
+        data: { workspaceId: workspace.id, userId: memberUser.id },
+      }),
+    ).rejects.toThrow();
+
+    await prisma.workspaceMember.delete({ where: { id: first.id } });
+    await prisma.workspace.delete({ where: { id: workspace.id } });
+    await prisma.user.delete({ where: { id: memberUser.id } });
+    await prisma.user.delete({ where: { id: creator.id } });
+  });
+});

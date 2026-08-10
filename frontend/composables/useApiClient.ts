@@ -177,6 +177,43 @@ export interface DevelopmentStage {
   order: number;
 }
 
+/** design.md WORKSPACE_COLORS — fixed identifier colors for workspaces. */
+export const WORKSPACE_COLORS = [
+  "#2563eb",
+  "#0f766e",
+  "#b45309",
+  "#be123c",
+  "#6d28d9",
+  "#475569",
+] as const;
+
+export type WorkspaceColor = (typeof WORKSPACE_COLORS)[number];
+
+/** Wire shape (ISO date strings), matching other FE entity types. */
+export interface Workspace {
+  id: string;
+  name: string;
+  color: WorkspaceColor;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkspaceUserSummary {
+  userId: string;
+  name: string;
+  email: string;
+}
+
+export interface CreateWorkspaceInput {
+  name: string;
+}
+
+export interface UpdateWorkspaceInput {
+  name?: string;
+  color?: WorkspaceColor;
+}
+
 export function useApiClient() {
   const config = useRuntimeConfig();
   let csrfToken: string | undefined;
@@ -212,7 +249,10 @@ export function useApiClient() {
     request,
 
     // Users (design.md "Backend/users" API Contract)
-    listUsers: () => request<User[]>("/api/users"),
+    listUsers: (q?: string) =>
+      q === undefined
+        ? request<User[]>("/api/users")
+        : request<User[]>("/api/users", { query: { q } }),
 
     // Auth (user-auth design.md API Contract)
     register: async (input: RegisterInput) => {
@@ -293,6 +333,27 @@ export function useApiClient() {
       request<DevelopmentStage[]>("/api/development-stages/reorder", { method: "POST", body: { orderedIds } }),
     deleteDevelopmentStage: (id: string) =>
       request<void>(`/api/development-stages/${id}`, { method: "DELETE" }),
+
+
+    // Workspaces (workspace-membership design.md API Contract)
+    listWorkspaces: () => request<Workspace[]>("/api/workspaces"),
+    createWorkspace: (input: CreateWorkspaceInput) =>
+      request<Workspace>("/api/workspaces", { method: "POST", body: input }),
+    updateWorkspace: (id: string, input: UpdateWorkspaceInput) =>
+      request<Workspace>(`/api/workspaces/${id}`, { method: "PATCH", body: input }),
+    deleteWorkspace: (id: string) =>
+      request<void>(`/api/workspaces/${id}`, { method: "DELETE" }),
+    listWorkspaceMembers: (id: string) =>
+      request<WorkspaceUserSummary[]>(`/api/workspaces/${id}/members`),
+    searchAddableWorkspaceUsers: (id: string, q: string) =>
+      request<WorkspaceUserSummary[]>(`/api/workspaces/${id}/searchable-users`, {
+        query: { q },
+      }),
+    addWorkspaceMember: (id: string, userId: string) =>
+      request<WorkspaceUserSummary>(`/api/workspaces/${id}/members`, {
+        method: "POST",
+        body: { userId },
+      }),
 
     // Client errors (design.md "Backend/client-errors" API Contract)
     reportClientError: (input: { message: string; stack?: string; pageUrl: string; occurredAt: string }) =>

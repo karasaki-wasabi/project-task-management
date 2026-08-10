@@ -7,6 +7,10 @@ const ErrorAlertStub = {
   props: ["message"],
   template: '<p role="alert">{{ message }}</p>',
 };
+const WorkspaceSwitcherStub = {
+  name: "WorkspaceSwitcher",
+  template: '<div data-testid="workspace-switcher-stub">切替</div>',
+};
 const route = reactive({ path: "/", meta: {} as Record<string, unknown> });
 const logout = vi.fn();
 const navigateTo = vi.fn();
@@ -14,6 +18,26 @@ const auth = {
   user: ref<{ name: string } | null>(null),
   logout,
 };
+
+function mountApp(stubs: Record<string, unknown> = {}) {
+  return mount(App, {
+    global: {
+      stubs: {
+        NuxtPage: { template: "<div>業務画面</div>" },
+        NuxtLink: { template: "<a><slot /></a>" },
+        ErrorAlert: ErrorAlertStub,
+        WorkspaceSwitcher: WorkspaceSwitcherStub,
+        ...stubs,
+      },
+    },
+  });
+}
+
+function logoutButton(wrapper: ReturnType<typeof mountApp>) {
+  const button = wrapper.findAll("button").find((b) => b.text().trim() === "ログアウト");
+  if (!button) throw new Error("ログアウト button not found");
+  return button;
+}
 
 beforeEach(() => {
   route.path = "/";
@@ -26,17 +50,11 @@ beforeEach(() => {
   vi.stubGlobal("navigateTo", navigateTo);
 });
 
-describe("App shell (task 6.4)", () => {
+describe("App shell (task 6.4 / 6.2)", () => {
   it.each(["/login", "/register"])("認証画面 %s では業務ナビを表示しない", (path) => {
     route.path = path;
-    const wrapper = mount(App, {
-      global: {
-        stubs: {
-          NuxtPage: { template: "<div>認証フォーム</div>" },
-          NuxtLink: { template: "<a><slot /></a>" },
-          ErrorAlert: ErrorAlertStub,
-        },
-      },
+    const wrapper = mountApp({
+      NuxtPage: { template: "<div>認証フォーム</div>" },
     });
 
     expect(wrapper.find("header").exists()).toBe(false);
@@ -49,21 +67,13 @@ describe("App shell (task 6.4)", () => {
     };
     logout.mockResolvedValue(undefined);
 
-    const wrapper = mount(App, {
-      global: {
-        stubs: {
-          NuxtPage: { template: "<div>業務画面</div>" },
-          NuxtLink: { template: "<a><slot /></a>" },
-          ErrorAlert: ErrorAlertStub,
-        },
-      },
-    });
+    const wrapper = mountApp();
 
     expect(wrapper.text()).toContain("山田 太郎");
-    const logoutButton = wrapper.get("button");
-    expect(logoutButton.text()).toBe("ログアウト");
+    const button = logoutButton(wrapper);
+    expect(button.text()).toBe("ログアウト");
 
-    await logoutButton.trigger("click");
+    await button.trigger("click");
 
     expect(logout).toHaveBeenCalledOnce();
     expect(navigateTo).toHaveBeenCalledWith("/login");
@@ -73,19 +83,27 @@ describe("App shell (task 6.4)", () => {
     const error = new Error("ログアウトに失敗しました");
     logout.mockRejectedValue(error);
 
-    const wrapper = mount(App, {
-      global: {
-        stubs: {
-          NuxtPage: { template: "<div>業務画面</div>" },
-          NuxtLink: { template: "<a><slot /></a>" },
-          ErrorAlert: ErrorAlertStub,
-        },
-      },
-    });
+    const wrapper = mountApp();
 
-    await wrapper.get("button").trigger("click");
+    await logoutButton(wrapper).trigger("click");
 
     expect(wrapper.get('[role="alert"]').text()).toBe("ログアウトに失敗しました");
     expect(navigateTo).not.toHaveBeenCalled();
+  });
+
+  it("ヘッダー右クラスタに WorkspaceSwitcher を置き、ナビと表示名の間に配置する（task 6.2 案B）", () => {
+    auth.user.value = { name: "山田 太郎" };
+    const wrapper = mountApp();
+
+    const header = wrapper.get("header");
+    expect(header.find('[data-testid="workspace-switcher-stub"]').exists()).toBe(true);
+
+    const rightCluster = header.get(".ml-auto");
+    const html = rightCluster.html();
+    const switcherIdx = html.indexOf("workspace-switcher-stub");
+    const nameIdx = html.indexOf("山田 太郎");
+    expect(switcherIdx).toBeGreaterThan(-1);
+    expect(nameIdx).toBeGreaterThan(-1);
+    expect(switcherIdx).toBeLessThan(nameIdx);
   });
 });
