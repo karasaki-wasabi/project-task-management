@@ -59,11 +59,14 @@ MySQLの`STORED GENERATED COLUMN`+`UNIQUE INDEX`のように、Prismaスキー�
 → csrf レスポンスの `Set-Cookie` を反映した最新 Cookie を、続けて呼ぶ POST / PATCH / DELETE / logout に使う。ブラウザ上の `useApiClient` はこれを自動で扱うが、統合テストヘルパでは明示的に更新する。
 
 ### 11. 手動確認用シードとスキーマ変更の同期
-手元のブラウザ確認用データは `backend/src/prisma/seed.ts` で投入する。E2E 実行後など DB が汚れたときは、既存行を TRUNCATE したうえで再投入する。
+手元のブラウザ確認用データは `backend/src/prisma/seed.ts` で投入する。E2E はスイート開始時にアプリテーブルを TRUNCATE するため（`frontend/e2e/global-setup.ts`）、E2E 後に手元確認へ戻すときはシードを再投入する。
 
 - 実行
   - `docker compose run --rm -T backend npx prisma db seed`
   - または `docker compose run --rm -T backend npm run db:seed`
+- E2E だけ空にしたいとき（シードなし）
+  - `docker compose run --rm -T backend npm run db:reset-for-e2e`
+  - Playwright 既定の globalSetup が同じ処理を呼ぶ。スキップは `E2E_SKIP_DB_RESET=1`
 - ログイン
   - メール / パスワードとも `root@example.com`
 - 投入内容の目安
@@ -74,7 +77,7 @@ MySQLの`STORED GENERATED COLUMN`+`UNIQUE INDEX`のように、Prismaスキー�
   - 空状態が一瞬または長く出る場合は、スイッチャー未マウントや `refresh` 完了前の可能性がある
 - 同期義務
   - テーブル追加・削除、必須カラム、enum、ユニーク制約、ワークスペース必須化など DB の形やシード前提が変わったら、同じ変更の実装コミット（または直後の追随コミット）で `seed.ts` も更新する
-  - `TABLES_IN_TRUNCATE_ORDER` に新テーブルを忘れると、再シード時に古い行が残るか FK エラーになる
+  - TRUNCATE 対象は `backend/src/prisma/clear-tables.ts` の `TABLES_IN_TRUNCATE_ORDER` が正本。新テーブルを忘れると、再シード／E2E リセット時に古い行が残るか FK エラーになる
   - パスワードは `@node-rs/argon2` でハッシュしている。認証方式が変わったらシードのハッシュ処理も合わせる
 
 このシードは本番投入用ではない。E2E 専用の使い捨てデータとは別物として扱う。
