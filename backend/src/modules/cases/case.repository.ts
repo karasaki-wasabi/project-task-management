@@ -66,7 +66,10 @@ export const caseRepository = {
 
   countRequiredCompletedTasks(caseId: string, workspaceId: VerifiedWorkspaceId): Promise<number> {
     return db.task.count({
-      where: withWorkspaceScope({ caseId, isRequiredForCase: true, status: "done" }, workspaceId),
+      where: withWorkspaceScope(
+        { caseId, isRequiredForCase: true, status: "done" as const },
+        workspaceId,
+      ),
     });
   },
 };
