@@ -36,6 +36,15 @@ async function hardDelete(table: string, ids: string[]): Promise<void> {
   await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
+async function addWorkspaceMember(workspaceId: string, userId: string): Promise<string> {
+  const row = await db.workspaceMember.create({ data: { workspaceId, userId } });
+  return row.id;
+}
+
+async function hardDeleteMembers(ids: string[]): Promise<void> {
+  await hardDelete("workspace_members", ids);
+}
+
 let workspaceA: VerifiedWorkspaceId;
 let workspaceB: VerifiedWorkspaceId;
 let ownerUserId: string;
@@ -237,6 +246,10 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
   it("updates assigneeUserId, overwriting an existing assignee (Requirement 7.2)", async () => {
     const originalAssignee = await db.user.create({ data: createUserData(`orig-${randomUUID()}`) });
     const newAssignee = await db.user.create({ data: createUserData(`new-${randomUUID()}`) });
+    const membershipIds = await Promise.all([
+      addWorkspaceMember(workspaceA, originalAssignee.id),
+      addWorkspaceMember(workspaceA, newAssignee.id),
+    ]);
     const created = await tasksService.create({
       title: "assign me",
       priority: "low",
@@ -252,6 +265,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(result.value.assigneeUserId).toBe(newAssignee.id);
 
     await hardDeleteTasks([created.value.id]);
+    await hardDeleteMembers(membershipIds);
     await hardDeleteUsers([originalAssignee.id, newAssignee.id]);
   });
 
@@ -309,6 +323,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
       data: { name: `c-${randomUUID()}`, endDate: new Date(), workspaceId: workspaceA },
     });
     const user = await db.user.create({ data: createUserData(`u-${randomUUID()}`) });
+    const membershipId = await addWorkspaceMember(workspaceA, user.id);
 
     const matching = await tasksService.create({
       title: "matches filter",
@@ -332,6 +347,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
 
     await hardDeleteTasks([matching.value.id, nonMatching.value.id]);
     await hardDeleteCases([caseRecord.id]);
+    await hardDeleteMembers([membershipId]);
     await hardDeleteUsers([user.id]);
   });
 
@@ -653,6 +669,7 @@ describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
     });
     if (!created.ok) throw new Error("setup failed");
     const user = await db.user.create({ data: createUserData(`assignee-${randomUUID()}`) });
+    const membershipId = await addWorkspaceMember(workspaceA, user.id);
     const stage = await db.developmentStage.create({
       data: { name: `stage-${randomUUID()}`, order: 0, workspaceId: workspaceA },
     });
@@ -664,6 +681,7 @@ describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
     expect(result.value.assigneeUserId).toBe(user.id);
 
     await hardDeleteTasks([created.value.id]);
+    await hardDeleteMembers([membershipId]);
     await hardDeleteUsers([user.id]);
     await hardDeleteStages([stage.id]);
   });
@@ -671,6 +689,7 @@ describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
   it("does not overwrite the assignee when the task already has one (Requirement 12.8)", async () => {
     const originalAssignee = await db.user.create({ data: createUserData(`original-${randomUUID()}`) });
     const otherUser = await db.user.create({ data: createUserData(`other-${randomUUID()}`) });
+    const membershipId = await addWorkspaceMember(workspaceA, originalAssignee.id);
     const created = await tasksService.create({
       title: "already assigned task",
       priority: "low",
@@ -695,6 +714,7 @@ describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
     expect(result.value.developmentStageId).toBe(stage.id);
 
     await hardDeleteTasks([created.value.id]);
+    await hardDeleteMembers([membershipId]);
     await hardDeleteUsers([originalAssignee.id, otherUser.id]);
     await hardDeleteStages([stage.id]);
   });
@@ -705,5 +725,158 @@ describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toMatchObject({ type: "not_found" });
+  });
+});
+
+describe("tasksService assignee membership (workspace-resource-scope task 3.2, Requirement 4.2)", () => {
+  it("rejects create when assigneeUserId is not a workspace member", async () => {
+    const outsider = await db.user.create({ data: createUserData(`outsider-create-${randomUUID()}`) });
+
+    const result = await tasksService.create({
+      title: "non-member assignee",
+      priority: "low",
+      assigneeUserId: outsider.id,
+      workspaceId: workspaceA,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
+
+    await hardDeleteUsers([outsider.id]);
+  });
+
+  it("rejects update when assigneeUserId is not a workspace member", async () => {
+    const created = await tasksService.create({
+      title: "update assignee later",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    const outsider = await db.user.create({ data: createUserData(`outsider-update-${randomUUID()}`) });
+
+    const result = await tasksService.update(created.value.id, workspaceA, {
+      assigneeUserId: outsider.id,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteUsers([outsider.id]);
+  });
+
+  it("rejects updateDevelopmentStage assignee when user is not a workspace member", async () => {
+    const created = await tasksService.create({
+      title: "stage assign outsider",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    const outsider = await db.user.create({ data: createUserData(`outsider-stage-${randomUUID()}`) });
+    const stage = await db.developmentStage.create({
+      data: { name: `stage-${randomUUID()}`, order: 0, workspaceId: workspaceA },
+    });
+
+    const result = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      workspaceA,
+      stage.id,
+      outsider.id,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteUsers([outsider.id]);
+    await hardDeleteStages([stage.id]);
+  });
+
+  it("accepts create when assigneeUserId is a workspace member", async () => {
+    const member = await db.user.create({ data: createUserData(`member-create-${randomUUID()}`) });
+    const membershipId = await addWorkspaceMember(workspaceA, member.id);
+
+    const result = await tasksService.create({
+      title: "member assignee",
+      priority: "low",
+      assigneeUserId: member.id,
+      workspaceId: workspaceA,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.assigneeUserId).toBe(member.id);
+
+    await hardDeleteTasks([result.value.id]);
+    await hardDeleteMembers([membershipId]);
+    await hardDeleteUsers([member.id]);
+  });
+
+  it("rejects addChild when assigneeUserId is not a workspace member", async () => {
+    const parent = await tasksService.create({
+      title: "parent for outsider child",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!parent.ok) throw new Error("setup failed");
+    const outsider = await db.user.create({ data: createUserData(`outsider-child-${randomUUID()}`) });
+
+    const result = await tasksService.addChild(parent.value.id, workspaceA, {
+      title: "outsider child",
+      priority: "low",
+      assigneeUserId: outsider.id,
+      workspaceId: workspaceA,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
+    }
+
+    const taskIds = [parent.value.id];
+    if (result.ok) taskIds.push(result.value.id);
+    await hardDeleteTasks(taskIds);
+    await hardDeleteUsers([outsider.id]);
+  });
+
+  it("rejects splitTask when a part assigneeUserId is not a workspace member", async () => {
+    const original = await tasksService.create({
+      title: "split with outsider part",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!original.ok) throw new Error("setup failed");
+    const member = await db.user.create({ data: createUserData(`member-split-${randomUUID()}`) });
+    const outsider = await db.user.create({ data: createUserData(`outsider-split-${randomUUID()}`) });
+    const membershipId = await addWorkspaceMember(workspaceA, member.id);
+
+    const result = await tasksService.splitTask(original.value.id, workspaceA, [
+      {
+        title: "part with member",
+        priority: "medium",
+        assigneeUserId: member.id,
+        workspaceId: workspaceA,
+      },
+      {
+        title: "part with outsider",
+        priority: "medium",
+        assigneeUserId: outsider.id,
+        workspaceId: workspaceA,
+      },
+    ]);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
+    }
+
+    const taskIds = [original.value.id];
+    if (result.ok) taskIds.push(...result.value.map((t) => t.id));
+    await hardDeleteTasks(taskIds);
+    await hardDeleteMembers([membershipId]);
+    await hardDeleteUsers([member.id, outsider.id]);
   });
 });
