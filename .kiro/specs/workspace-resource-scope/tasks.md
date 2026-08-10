@@ -21,7 +21,7 @@
   - _Requirements: 3.1, 3.2, 3.3_
   - _Boundary: shared/workspace-scope_
 
-- [ ] 1.2 (P) 403エラーヘルパーの存在を確認する
+- [x] 1.2 (P) 403エラーヘルパーの存在を確認する
   - 既存の`shared/http-errors.ts`に`forbidden`があることを確認する（`workspace-membership`が追加済み。無ければ追加するが、通常は何もしない）
   - 観測可能な完了状態: 403エラーヘルパーを呼び出すと、ステータスコード403のエラーが得られることを単体テストで確認できる（既存テストで足りる場合は追加しない）
   - _Requirements: 3.2_
