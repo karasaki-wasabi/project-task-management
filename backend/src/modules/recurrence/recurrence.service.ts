@@ -122,21 +122,25 @@ export function computeRawScheduledDates(
 
 // Requirements 5.7 / holidays policy: apply NBD after the raw period check.
 // Returns null when policy=skip and the raw date is a non-business day.
-async function resolveScheduledDate(date: Date, policy: NonBusinessDayPolicy): Promise<Date | null> {
+async function resolveScheduledDate(
+  date: Date,
+  policy: NonBusinessDayPolicy,
+  workspaceId: VerifiedWorkspaceId,
+): Promise<Date | null> {
   const dateStr = formatDateOnly(date);
   if (policy === "as_is") {
     return date;
   }
-  if (await holidaysService.isBusinessDay(dateStr)) {
+  if (await holidaysService.isBusinessDay(dateStr, workspaceId)) {
     return date;
   }
   switch (policy) {
     case "skip":
       return null;
     case "next_business_day":
-      return parseDateOnly(await holidaysService.nextBusinessDay(dateStr));
+      return parseDateOnly(await holidaysService.nextBusinessDay(dateStr, workspaceId));
     case "previous_business_day":
-      return parseDateOnly(await holidaysService.previousBusinessDay(dateStr));
+      return parseDateOnly(await holidaysService.previousBusinessDay(dateStr, workspaceId));
   }
 }
 
@@ -282,7 +286,11 @@ export const recurrenceService = {
         caseEntity.endDate,
       );
       for (const raw of rawDates) {
-        const scheduledDate = await resolveScheduledDate(parseDateOnly(raw), template.nonBusinessDayPolicy);
+        const scheduledDate = await resolveScheduledDate(
+          parseDateOnly(raw),
+          template.nonBusinessDayPolicy,
+          workspaceId,
+        );
         if (scheduledDate === null) continue;
         const instance = await tryCreateInstance(template, scheduledDate, caseEntity.id, workspaceId, client);
         if (instance) {

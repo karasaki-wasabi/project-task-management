@@ -1,139 +1,369 @@
-// RED: holidayRoutes does not exist yet (task 6.1). `/api/holidays/sync` is
-// added in task 6.2. Registration into the main app.ts happens in task
-// 10.3; this test mounts the plugin on a throwaway Fastify instance.
+// holidayRoutes workspace scope (workspace-resource-scope task 5.1;
+// Requirements 1.1, 1.2, 3.1, 3.2, 3.3). Uses buildApp so requireUser /
+// CSRF / requireWorkspaceMember apply; injects X-Workspace-Id.
 import { randomUUID } from "node:crypto";
-import Fastify from "fastify";
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { buildApp } from "../../app.js";
 import { db } from "../../shared/db.js";
-import { holidayRoutes } from "./holiday.routes.js";
+import { WORKSPACE_HEADER_NAME } from "../../shared/workspace-scope.js";
+import { withCsrfToken, withSessionCookie } from "../../test/auth.fixture.js";
 
-async function hardDelete(dates: string[]): Promise<void> {
-  if (dates.length === 0) return;
-  await db.$executeRawUnsafe(
-    `DELETE FROM non_business_days WHERE date IN (${dates.map(() => "?").join(",")})`,
-    ...dates,
+const env = {
+  DATABASE_URL: "mysql://user:pass@localhost:3306/db",
+  SESSION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  CORS_ORIGIN: "http://localhost:3001",
+  COOKIE_SECURE: false,
+  LOG_LEVEL: "error" as const,
+  PORT: 3000,
+};
+
+type App = ReturnType<typeof buildApp>;
+
+function sessionCookie(response: { headers: Record<string, string | string[] | undefined> }): string {
+  const setCookie = response.headers["set-cookie"];
+  const session = (Array.isArray(setCookie) ? setCookie : [setCookie]).find((cookie) =>
+    cookie?.startsWith("session="),
   );
+  if (!session) throw new Error("session cookie was not set");
+  return session.split(";")[0];
 }
 
-async function buildTestApp() {
-  const app = Fastify({ logger: false });
-  await app.register(holidayRoutes);
-  return app;
+async function registerUser(app: App, name: string) {
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/register",
+    payload: {
+      email: `holiday-route-${randomUUID()}@example.test`,
+      name,
+      password: "password-123",
+    },
+  });
+  expect(response.statusCode).toBe(201);
+  return {
+    user: response.json() as { id: string; email: string; name: string },
+    cookie: sessionCookie(response),
+  };
 }
 
-afterAll(async () => {
-  await db.$disconnect();
-});
+async function csrfToken(app: App, cookie: string): Promise<{ token: string; cookie: string }> {
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/auth/csrf",
+    headers: { cookie },
+  });
+  expect(response.statusCode).toBe(200);
+  return { token: response.json().token as string, cookie: sessionCookie(response) };
+}
 
-describe("holidayRoutes (task 6.1)", () => {
-  it("POST /api/holidays registers a non-business day and returns 201", async () => {
-    const app = await buildTestApp();
+async function hardDelete(table: string, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
+}
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/holidays",
-      payload: { date: "2032-01-01", label: "元日" },
+async function createWorkspace(app: App, csrf: { token: string; cookie: string }, name: string): Promise<string> {
+  const response = await app.inject(
+    withCsrfToken(
+      withSessionCookie(
+        { method: "POST", url: "/api/workspaces", payload: { name } },
+        csrf.cookie,
+      ),
+      csrf.token,
+    ),
+  );
+  expect(response.statusCode).toBe(201);
+  return response.json().id as string;
+}
+
+function withWorkspace(
+  options: Parameters<App["inject"]>[0],
+  cookie: string,
+  csrf: string | undefined,
+  workspaceId: string,
+) {
+  const withSession = withSessionCookie(
+    {
+      ...options,
+      headers: {
+        ...(options.headers ?? {}),
+        [WORKSPACE_HEADER_NAME]: workspaceId,
+      },
+    },
+    cookie,
+  );
+  return csrf ? withCsrfToken(withSession, csrf) : withSession;
+}
+
+describe("holidayRoutes (task 6.1 + workspace-resource-scope 5.1)", () => {
+  const app = buildApp(env);
+
+  let memberId: string;
+  let memberCsrf: { token: string; cookie: string };
+  let workspaceA: string;
+  let workspaceB: string;
+  const holidayIds: string[] = [];
+
+  beforeAll(async () => {
+    const member = await registerUser(app, "休日ルートメンバー");
+    memberId = member.user.id;
+    memberCsrf = await csrfToken(app, member.cookie);
+    workspaceA = await createWorkspace(app, memberCsrf, `holiday-route-a-${randomUUID()}`);
+    workspaceB = await createWorkspace(app, memberCsrf, `holiday-route-b-${randomUUID()}`);
+  });
+
+  afterEach(async () => {
+    if (holidayIds.length > 0) {
+      await hardDelete("non_business_days", holidayIds.splice(0));
+    }
+  });
+
+  afterAll(async () => {
+    // Soft-deleted rows still hold workspace FK; purge by workspace before teardown.
+    await db.$executeRawUnsafe(
+      `DELETE FROM non_business_days WHERE workspace_id IN (?, ?)`,
+      workspaceA,
+      workspaceB,
+    );
+    const members = await db.workspaceMember.findMany({
+      where: { workspaceId: { in: [workspaceA, workspaceB] } },
     });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspaceA, workspaceB]);
+    await hardDelete("users", [memberId]);
+    await app.close();
+    await db.$disconnect();
+  });
+
+  it("POST /api/holidays registers a non-business day in the current workspace and returns 201", async () => {
+    const response = await app.inject(
+      withWorkspace(
+        { method: "POST", url: "/api/holidays", payload: { date: "2032-01-01", label: "元日" } },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
 
     expect(response.statusCode).toBe(201);
     expect(response.json().date).toBe("2032-01-01");
-
-    await hardDelete(["2032-01-01"]);
-    await app.close();
+    expect(response.json().workspaceId).toBe(workspaceA);
+    holidayIds.push(response.json().id);
   });
 
-  it("POST /api/holidays returns 409 for a duplicate active date", async () => {
-    const app = await buildTestApp();
-    await app.inject({ method: "POST", url: "/api/holidays", payload: { date: "2032-01-02" } });
+  it("POST /api/holidays returns 409 for a duplicate active date in the same workspace", async () => {
+    const first = await app.inject(
+      withWorkspace(
+        { method: "POST", url: "/api/holidays", payload: { date: "2032-01-02" } },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(first.statusCode).toBe(201);
+    holidayIds.push(first.json().id);
 
-    const response = await app.inject({ method: "POST", url: "/api/holidays", payload: { date: "2032-01-02" } });
+    const response = await app.inject(
+      withWorkspace(
+        { method: "POST", url: "/api/holidays", payload: { date: "2032-01-02" } },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
 
     expect(response.statusCode).toBe(409);
-
-    await hardDelete(["2032-01-02"]);
-    await app.close();
   });
 
   it("POST /api/holidays returns 400 for an invalid date", async () => {
-    const app = await buildTestApp();
-
-    const response = await app.inject({ method: "POST", url: "/api/holidays", payload: { date: "bogus" } });
+    const response = await app.inject(
+      withWorkspace(
+        { method: "POST", url: "/api/holidays", payload: { date: "bogus" } },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
 
     expect(response.statusCode).toBe(400);
-    await app.close();
   });
 
-  it("GET /api/holidays lists holidays and excludes removed ones", async () => {
-    const app = await buildTestApp();
-    const created = await app.inject({ method: "POST", url: "/api/holidays", payload: { date: "2032-01-03" } });
+  it("GET /api/holidays lists only current-workspace holidays and excludes removed ones", async () => {
+    const created = await app.inject(
+      withWorkspace(
+        { method: "POST", url: "/api/holidays", payload: { date: "2032-01-03" } },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(created.statusCode).toBe(201);
     const { id } = created.json();
+    holidayIds.push(id);
 
-    const deleteResponse = await app.inject({ method: "DELETE", url: `/api/holidays/${id}` });
+    const foreign = await app.inject(
+      withWorkspace(
+        { method: "POST", url: "/api/holidays", payload: { date: "2032-01-04" } },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceB,
+      ),
+    );
+    expect(foreign.statusCode).toBe(201);
+    holidayIds.push(foreign.json().id);
+
+    const deleteResponse = await app.inject(
+      withWorkspace(
+        { method: "DELETE", url: `/api/holidays/${id}` },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
     expect(deleteResponse.statusCode).toBe(204);
+    holidayIds.splice(holidayIds.indexOf(id), 1);
 
-    const listResponse = await app.inject({ method: "GET", url: "/api/holidays" });
-    expect(listResponse.json().some((h: { id: string }) => h.id === id)).toBe(false);
-
-    await hardDelete(["2032-01-03"]);
-    await app.close();
+    const listResponse = await app.inject(
+      withWorkspace({ method: "GET", url: "/api/holidays" }, memberCsrf.cookie, undefined, workspaceA),
+    );
+    const list = listResponse.json() as { id: string }[];
+    expect(list.some((h) => h.id === id)).toBe(false);
+    expect(list.some((h) => h.id === foreign.json().id)).toBe(false);
   });
 
   it("DELETE /api/holidays/:id returns 404 for a non-existent holiday", async () => {
-    const app = await buildTestApp();
-
-    const response = await app.inject({ method: "DELETE", url: `/api/holidays/${randomUUID()}` });
+    const response = await app.inject(
+      withWorkspace(
+        { method: "DELETE", url: `/api/holidays/${randomUUID()}` },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
 
     expect(response.statusCode).toBe(404);
-    await app.close();
+  });
+
+  it("DELETE /api/holidays/:id returns 404 for a holiday in another workspace (Requirement 3.3)", async () => {
+    const foreign = await app.inject(
+      withWorkspace(
+        { method: "POST", url: "/api/holidays", payload: { date: "2032-01-05" } },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceB,
+      ),
+    );
+    expect(foreign.statusCode).toBe(201);
+    const foreignId = foreign.json().id as string;
+    holidayIds.push(foreignId);
+
+    const response = await app.inject(
+      withWorkspace(
+        { method: "DELETE", url: `/api/holidays/${foreignId}` },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    expect(response.statusCode).toBe(404);
+
+    const stillThere = await app.inject(
+      withWorkspace({ method: "GET", url: "/api/holidays" }, memberCsrf.cookie, undefined, workspaceB),
+    );
+    expect(stillThere.json().some((h: { id: string }) => h.id === foreignId)).toBe(true);
   });
 });
 
-// RED: POST /api/holidays/sync does not exist yet (task 6.2). global.fetch
-// is stubbed rather than hitting the real external API from tests.
-describe("holidayRoutes sync (task 6.2)", () => {
+describe("holidayRoutes sync (task 6.2 + workspace-resource-scope 5.1)", () => {
+  const app = buildApp(env);
+
+  let memberId: string;
+  let memberCsrf: { token: string; cookie: string };
+  let workspaceA: string;
+  const holidayIds: string[] = [];
+
+  beforeAll(async () => {
+    const member = await registerUser(app, "休日同期ルートメンバー");
+    memberId = member.user.id;
+    memberCsrf = await csrfToken(app, member.cookie);
+    workspaceA = await createWorkspace(app, memberCsrf, `holiday-sync-a-${randomUUID()}`);
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("POST /api/holidays/sync adds new holidays returned by the external API", async () => {
+  afterAll(async () => {
+    await db.$executeRawUnsafe(`DELETE FROM non_business_days WHERE workspace_id = ?`, workspaceA);
+    const members = await db.workspaceMember.findMany({ where: { workspaceId: workspaceA } });
+    await hardDelete(
+      "workspace_members",
+      members.map((m) => m.id),
+    );
+    await hardDelete("workspaces", [workspaceA]);
+    await hardDelete("users", [memberId]);
+    await app.close();
+    await db.$disconnect();
+  });
+
+  it("POST /api/holidays/sync adds new holidays into the current workspace", async () => {
     const date = "2033-02-11";
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: true, json: async () => ({ [date]: "建国記念の日" }) })),
     );
-    const app = await buildTestApp();
 
-    const response = await app.inject({ method: "POST", url: "/api/holidays/sync" });
+    const response = await app.inject(
+      withWorkspace(
+        { method: "POST", url: "/api/holidays/sync" },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.skippedExisting).toBe(0);
     expect(body.added.map((h: { date: string }) => h.date)).toContain(date);
-
-    await hardDelete([date]);
-    await app.close();
+    expect(body.added.every((h: { workspaceId: string }) => h.workspaceId === workspaceA)).toBe(true);
+    for (const h of body.added) holidayIds.push(h.id);
   });
 
   it("POST /api/holidays/sync returns 502 and leaves the master unchanged when the external API fails", async () => {
     const survivor = "2033-03-03";
-    const seedApp = await buildTestApp();
-    await seedApp.inject({ method: "POST", url: "/api/holidays", payload: { date: survivor } });
-    await seedApp.close();
+    const seed = await app.inject(
+      withWorkspace(
+        { method: "POST", url: "/api/holidays", payload: { date: survivor } },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(seed.statusCode).toBe(201);
+    holidayIds.push(seed.json().id);
 
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })),
     );
-    const app = await buildTestApp();
 
-    const response = await app.inject({ method: "POST", url: "/api/holidays/sync" });
+    const response = await app.inject(
+      withWorkspace(
+        { method: "POST", url: "/api/holidays/sync" },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
 
     expect(response.statusCode).toBe(502);
 
-    const listResponse = await app.inject({ method: "GET", url: "/api/holidays" });
+    const listResponse = await app.inject(
+      withWorkspace({ method: "GET", url: "/api/holidays" }, memberCsrf.cookie, undefined, workspaceA),
+    );
     expect(listResponse.json().some((h: { date: string }) => h.date === survivor)).toBe(true);
-
-    await hardDelete([survivor]);
-    await app.close();
   });
 });
