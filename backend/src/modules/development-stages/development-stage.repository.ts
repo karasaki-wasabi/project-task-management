@@ -1,31 +1,49 @@
 // Persistence for DevelopmentStages (task 14.1, design.md
 // "Backend/development-stages"). Soft-delete / audit-column behavior comes
 // from the shared `db` client (task 1.4).
+// workspace-resource-scope task 6.1: all queries take VerifiedWorkspaceId and
+// compose where via withWorkspaceScope.
 import type { DevelopmentStage as PrismaDevelopmentStage } from "@prisma/client";
 import { db } from "../../shared/db.js";
+import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import type { DevelopmentStage } from "./development-stage.types.js";
 
 function toDomain(row: PrismaDevelopmentStage): DevelopmentStage {
-  return { id: row.id, name: row.name, order: row.order };
+  return { id: row.id, name: row.name, order: row.order, workspaceId: row.workspaceId };
 }
 
 export const developmentStageRepository = {
-  async create(name: string, order: number): Promise<DevelopmentStage> {
-    const row = await db.developmentStage.create({ data: { name, order } });
+  async create(name: string, order: number, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage> {
+    const row = await db.developmentStage.create({
+      data: { name, order, workspaceId },
+    });
     return toDomain(row);
   },
 
-  async rename(id: string, name: string): Promise<DevelopmentStage> {
-    const row = await db.developmentStage.update({ where: { id }, data: { name } });
+  findById(id: string, workspaceId: VerifiedWorkspaceId): Promise<PrismaDevelopmentStage | null> {
+    return db.developmentStage.findFirst({ where: withWorkspaceScope({ id }, workspaceId) });
+  },
+
+  async rename(id: string, workspaceId: VerifiedWorkspaceId, name: string): Promise<DevelopmentStage> {
+    const row = await db.developmentStage.update({
+      where: withWorkspaceScope({ id }, workspaceId),
+      data: { name },
+    });
     return toDomain(row);
   },
 
-  async reorder(orderedIds: string[]): Promise<DevelopmentStage[]> {
+  async reorder(orderedIds: string[], workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage[]> {
     return db.$transaction(async (tx) => {
       for (const [index, id] of orderedIds.entries()) {
-        await tx.developmentStage.update({ where: { id }, data: { order: index } });
+        await tx.developmentStage.update({
+          where: withWorkspaceScope({ id }, workspaceId),
+          data: { order: index },
+        });
       }
-      const rows = await tx.developmentStage.findMany({ orderBy: { order: "asc" } });
+      const rows = await tx.developmentStage.findMany({
+        where: withWorkspaceScope({}, workspaceId),
+        orderBy: { order: "asc" },
+      });
       return rows.map(toDomain);
     });
   },
@@ -33,15 +51,18 @@ export const developmentStageRepository = {
   // design.md Data Models "Consistency & Integrity": deleting a development
   // stage detaches (does not cascade-delete) linked Task records by nulling
   // their developmentStageId, matching the `deliveries` deletion pattern.
-  delete(id: string): Promise<PrismaDevelopmentStage> {
+  delete(id: string, workspaceId: VerifiedWorkspaceId): Promise<PrismaDevelopmentStage> {
     return db.$transaction(async (tx) => {
       await tx.task.updateMany({ where: { developmentStageId: id }, data: { developmentStageId: null } });
-      return tx.developmentStage.delete({ where: { id } });
+      return tx.developmentStage.delete({ where: withWorkspaceScope({ id }, workspaceId) });
     });
   },
 
-  async list(): Promise<DevelopmentStage[]> {
-    const rows = await db.developmentStage.findMany({ orderBy: { order: "asc" } });
+  async list(workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage[]> {
+    const rows = await db.developmentStage.findMany({
+      where: withWorkspaceScope({}, workspaceId),
+      orderBy: { order: "asc" },
+    });
     return rows.map(toDomain);
   },
 };

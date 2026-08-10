@@ -2,9 +2,12 @@
 // "Backend/development-stages" API Contract). Registered into the shared
 // app in task 16.1; standalone Fastify plugin here so this module stays
 // testable in isolation.
-import type { FastifyInstance } from "fastify";
+// workspace-resource-scope task 6.1: passes request.currentWorkspaceId into
+// DevelopmentStagesService; clients cannot set workspaceId via body.
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { developmentStagesService } from "./development-stage.service.js";
 
 const createBodySchema = z.object({ name: z.string() });
@@ -20,31 +23,43 @@ function parseOrBadRequest<T>(schema: z.ZodType<T>, data: unknown): T {
   return result.data;
 }
 
+function requireCurrentWorkspaceId(request: FastifyRequest): VerifiedWorkspaceId {
+  if (!request.currentWorkspaceId) {
+    throw badRequest("X-Workspace-Id is required");
+  }
+  return request.currentWorkspaceId;
+}
+
 export async function developmentStageRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/development-stages", async (request, reply) => {
     const body = parseOrBadRequest(createBodySchema, request.body);
-    const stage = await developmentStagesService.create(body.name);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    const stage = await developmentStagesService.create(body.name, workspaceId);
     reply.status(201).send(stage);
   });
 
   app.patch("/api/development-stages/:id", async (request) => {
     const params = parseOrBadRequest(stageIdParamsSchema, request.params);
     const body = parseOrBadRequest(renameBodySchema, request.body);
-    return developmentStagesService.rename(params.id, body.name);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    return developmentStagesService.rename(params.id, workspaceId, body.name);
   });
 
   app.post("/api/development-stages/reorder", async (request) => {
     const body = parseOrBadRequest(reorderBodySchema, request.body);
-    return developmentStagesService.reorder(body.orderedIds);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    return developmentStagesService.reorder(body.orderedIds, workspaceId);
   });
 
   app.delete("/api/development-stages/:id", async (request, reply) => {
     const params = parseOrBadRequest(stageIdParamsSchema, request.params);
-    await developmentStagesService.delete(params.id, request.id);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    await developmentStagesService.delete(params.id, workspaceId, request.id);
     reply.status(204).send();
   });
 
-  app.get("/api/development-stages", async () => {
-    return developmentStagesService.list();
+  app.get("/api/development-stages", async (request) => {
+    const workspaceId = requireCurrentWorkspaceId(request);
+    return developmentStagesService.list(workspaceId);
   });
 }
