@@ -13,6 +13,8 @@
 - `NonBusinessDay`の`date_active_key`グローバルUNIQUEは、`workspaceId`追加時にワークスペース単位の一意制約へ組み替える（据え置くとワークスペース横断で同日登録が衝突する）
 - 関連先リソースの同一ワークスペース検証（Requirement 3.5）を落とさないこと。Prisma FKだけでは防げない。Taskの`caseId`／`parentTaskId`／`developmentStageId`、およびrecurrenceのテンプレート⇔案件が対象（design.md TaskService Responsibilities参照）
 - 未選択時空状態の対象画面は8つ: `pages/index.vue`・`cases`・`tasks`・`kanban`・`calendar`・`recurrence`・`holidays`・`throughput`。`throughput`はAPIスコープ化を本仕様では行わず空状態のみ（集計スコープは`velocity-dashboard`へ申し送り）
+- タスク1.4以降、対象5パスへの認証済み`buildApp`統合テストは`X-Workspace-Id`なしだと400になる。各モジュールのスコープ適用タスクでテスト側も更新する
+- タスク1.5の休日UNIQUE `(workspace_id, date_active_key)` はSQL手編集。`prisma migrate dev`は生成列driftに注意し、適用は`migrate deploy`を優先する
 
 - [ ] 1. Foundation: 共有ヘルパー・ガード・スキーマ移行
 - [x] 1.1 (P) ワークスペース文脈の共有ヘルパーを実装する
@@ -40,7 +42,7 @@
   - _Requirements: 2.2, 3.1, 3.2_
   - _Depends: 1.3_
 
-- [ ] 1.5 (P) Case／Task／繰り返しタスクテンプレート／非営業日マスタ／開発ステージ列にワークスペース所属を追加する
+- [x] 1.5 (P) Case／Task／繰り返しタスクテンプレート／非営業日マスタ／開発ステージ列にワークスペース所属を追加する
   - 5つのリソースそれぞれに、いずれか1つのワークスペースへの帰属を必須とする関連を追加する
   - 開発データは破棄前提とし、既存行を削除してから必須の所属列を追加するマイグレーションを行う（外部キー制約の依存順を考慮する）
   - `NonBusinessDay`はあわせて、現行のグローバル一意制約`non_business_days_date_active_key_key`を削除し、`(workspace_id, date_active_key)`相当のワークスペース単位UNIQUEへ組み替える（生成列まわりは既存init migrationと同型の手編集・drift注意）

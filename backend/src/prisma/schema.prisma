@@ -80,8 +80,13 @@ model Workspace {
   updatedAt       DateTime  @updatedAt @map("updated_at")
   deletedAt       DateTime? @map("deleted_at")
 
-  createdBy User              @relation("WorkspaceCreator", fields: [createdByUserId], references: [id])
-  members   WorkspaceMember[]
+  createdBy              User                    @relation("WorkspaceCreator", fields: [createdByUserId], references: [id])
+  members                WorkspaceMember[]
+  cases                  Case[]
+  tasks                  Task[]
+  recurringTaskTemplates RecurringTaskTemplate[]
+  nonBusinessDays        NonBusinessDay[]
+  developmentStages      DevelopmentStage[]
 
   @@index([deletedAt])
   @@map("workspaces")
@@ -109,12 +114,15 @@ model Case {
   startDate   DateTime? @map("start_date") @db.Date
   endDate     DateTime? @map("end_date")
   isCompleted Boolean   @default(false) @map("is_completed")
+  workspaceId String    @map("workspace_id")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
 
-  tasks Task[]
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  tasks     Task[]
 
+  @@index([workspaceId])
   @@index([deletedAt])
   @@map("cases")
 }
@@ -135,6 +143,7 @@ model Task {
   developmentStageId       String?              @map("development_stage_id")
   scheduledDate            DateTime?            @map("scheduled_date") @db.Date
   completedAt              DateTime?            @map("completed_at")
+  workspaceId              String               @map("workspace_id")
   createdAt                DateTime             @default(now()) @map("created_at")
   updatedAt                DateTime             @updatedAt @map("updated_at")
   deletedAt                DateTime?            @map("deleted_at")
@@ -143,6 +152,7 @@ model Task {
   // NULL so the same (sourceTemplateId, caseId, scheduledDate) can be recreated.
   templateCaseDateActiveKey Unsupported("varchar(191)")? @map("template_case_date_active_key")
 
+  workspace        Workspace               @relation(fields: [workspaceId], references: [id])
   case             Case?                   @relation(fields: [caseId], references: [id])
   parentTask       Task?                   @relation("TaskChildren", fields: [parentTaskId], references: [id])
   childTasks       Task[]                  @relation("TaskChildren")
@@ -150,6 +160,7 @@ model Task {
   sourceTemplate   RecurringTaskTemplate?  @relation(fields: [sourceTemplateId], references: [id])
   developmentStage DevelopmentStage?       @relation(fields: [developmentStageId], references: [id])
 
+  @@index([workspaceId])
   @@index([caseId])
   @@index([parentTaskId])
   @@index([completedAt])
@@ -168,12 +179,15 @@ model RecurringTaskTemplate {
   defaultMemo          String?              @db.Text @map("default_memo")
   nonBusinessDayPolicy NonBusinessDayPolicy @map("non_business_day_policy")
   isActive             Boolean              @default(true) @map("is_active")
+  workspaceId          String               @map("workspace_id")
   createdAt            DateTime             @default(now()) @map("created_at")
   updatedAt            DateTime             @updatedAt @map("updated_at")
   deletedAt            DateTime?            @map("deleted_at")
 
+  workspace      Workspace @relation(fields: [workspaceId], references: [id])
   generatedTasks Task[]
 
+  @@index([workspaceId])
   @@index([deletedAt])
   @@map("recurring_task_templates")
 }
@@ -183,24 +197,34 @@ model NonBusinessDay {
   date          DateTime              @db.Date
   label         String?
   source        NonBusinessDaySource
+  workspaceId   String                @map("workspace_id")
+  // Active-date uniqueness is (workspace_id, date_active_key) via hand-edited
+  // UNIQUE INDEX in migration SQL. date_active_key remains a STORED GENERATED
+  // COLUMN; do not recreate via `prisma migrate dev` (drift risk).
   dateActiveKey Unsupported("date")?  @map("date_active_key")
   createdAt     DateTime              @default(now()) @map("created_at")
   updatedAt     DateTime              @updatedAt @map("updated_at")
   deletedAt     DateTime?             @map("deleted_at")
 
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@index([workspaceId])
   @@map("non_business_days")
 }
 
 model DevelopmentStage {
-  id        String    @id @default(uuid())
-  name      String
-  order     Int
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  id          String    @id @default(uuid())
+  name        String
+  order       Int
+  workspaceId String    @map("workspace_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
 
-  tasks Task[]
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  tasks     Task[]
 
+  @@index([workspaceId])
   @@index([deletedAt])
   @@map("development_stages")
 }
