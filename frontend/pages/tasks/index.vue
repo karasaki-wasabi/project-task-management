@@ -2,15 +2,27 @@
   Task list with status/priority at a glance, hierarchy display, and split
   UI (task 11.1, design.md "Frontend/tasks", Requirements 1.1-1.6, 2.1-2.4).
   Assignee filtering reuses AssigneeFilter (task 11.6, Requirement 7.2).
+
+  Explicit Vue / useApiClient imports so vitest can mount without Nuxt
+  auto-import runtime (same approach as pages/holidays/index.vue).
 -->
 <script setup lang="ts">
+import { computed, ref, watch } from "vue";
+import {
+  useApiClient,
+  type Priority,
+  type Task,
+  type TaskStatus,
+  type User,
+} from "../../composables/useApiClient";
+import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
+
 const api = useApiClient();
-const route = useRoute();
 const { currentId } = useCurrentWorkspace();
 
 const tasks = ref<Task[]>([]);
 const assigneeUserId = ref("");
-const caseId = ref((route.query.caseId as string | undefined) ?? "");
+const caseId = ref((useRoute().query.caseId as string | undefined) ?? "");
 
 const newTitle = ref("");
 const newPriority = ref<Priority>("medium");
@@ -101,7 +113,16 @@ watch(
     }
     void (async () => {
       await load();
-      users.value = await api.listUsers();
+      // Requirement 4.1 / design.md: assignee candidates are current
+      // workspace members. Normalize WorkspaceUserSummary.userId → User.id
+      // so existing option :value / :key keep working.
+      const members = await api.listWorkspaceMembers(id);
+      users.value = members.map((member) => ({
+        id: member.userId,
+        name: member.name,
+        createdAt: "",
+        updatedAt: "",
+      }));
     })();
   },
   { immediate: true },

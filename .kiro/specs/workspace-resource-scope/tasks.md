@@ -123,7 +123,7 @@
   - _Boundary: pages/index, cases, tasks, kanban, calendar, recurrence, holidays, throughput_
 
 - [ ] 8. Core: 担当者候補のワークスペース内制限
-- [ ] 8.1 タスク作成画面とカンバン画面の担当者候補を現在ワークスペースのメンバーに限定する
+- [x] 8.1 タスク作成画面とカンバン画面の担当者候補を現在ワークスペースのメンバーに限定する
   - タスク作成時の担当者候補一覧と、カンバン画面上での担当者再割当候補の取得元を、`api.listUsers()`から`api.listWorkspaceMembers(currentWorkspaceId)`に切り替える
   - 戻り値は`WorkspaceUserSummary`（主キー相当は`userId`）なので、既存の`User.id`前提のoption `:value`／`:key`／名前解決を`userId`基準へ合わせて変更する（呼び出し側で`{ id: member.userId, name: member.name }`へ正規化してもよい）
   - 既にアサイン済みのタスクを絞り込むフィルタや、カレンダー画面での担当者表示は本タスクの対象外とし、現状のまま維持する

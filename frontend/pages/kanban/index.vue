@@ -99,7 +99,18 @@
   appears (short window, or a tall board).
 -->
 <script setup lang="ts">
+import { computed, nextTick, reactive, ref, watch } from "vue";
 import { VueDraggable, type DraggableEvent } from "vue-draggable-plus";
+import {
+  useApiClient,
+  type Case,
+  type DevelopmentStage,
+  type Task,
+  type User,
+} from "../../composables/useApiClient";
+import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
+import { useDialogFocusTrap } from "../../composables/useDialogFocusTrap";
+import { preventSameListMove } from "../../composables/useSameListMoveGuard";
 import {
   computeBacklogTasks,
   computeFocusedTasks,
@@ -430,7 +441,16 @@ watch(
     void (async () => {
       await loadStages();
       await loadTasks();
-      users.value = await api.listUsers();
+      // Requirement 4.1 / design.md: reassignment candidates are current
+      // workspace members. Normalize WorkspaceUserSummary.userId → User.id
+      // so TaskDetailModal / AssigneeFocusTray / assignee-picker keep working.
+      const members = await api.listWorkspaceMembers(id);
+      users.value = members.map((member) => ({
+        id: member.userId,
+        name: member.name,
+        createdAt: "",
+        updatedAt: "",
+      }));
       await loadCases();
     })();
   },
