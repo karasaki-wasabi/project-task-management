@@ -214,8 +214,21 @@ export interface UpdateWorkspaceInput {
   color?: WorkspaceColor;
 }
 
+const WORKSPACE_SCOPED_PATH_PREFIXES = [
+  "/api/cases",
+  "/api/tasks",
+  "/api/recurring-templates",
+  "/api/holidays",
+  "/api/development-stages",
+] as const;
+
+function isWorkspaceScopedPath(path: string): boolean {
+  return WORKSPACE_SCOPED_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
 export function useApiClient() {
   const config = useRuntimeConfig();
+  const { currentId } = useCurrentWorkspace();
   let csrfToken: string | undefined;
   let csrfInitialization: Promise<void> | undefined;
 
@@ -226,9 +239,16 @@ export function useApiClient() {
       await csrfInitialization;
     }
 
-    const headers = csrfToken && isMutating
-      ? { ...(options?.headers as Record<string, string> | undefined), "csrf-token": csrfToken }
-      : options?.headers;
+    // Workspace header merge mirrors csrf-token: only for scoped paths when selected.
+    const workspaceId = isWorkspaceScopedPath(path) ? currentId.value : null;
+
+    let headers = options?.headers as Record<string, string> | undefined;
+    if (csrfToken && isMutating) {
+      headers = { ...headers, "csrf-token": csrfToken };
+    }
+    if (workspaceId) {
+      headers = { ...headers, "x-workspace-id": workspaceId };
+    }
 
     return $fetch<T>(joinApiUrl(config.public.apiBaseUrl, path), {
       ...options,
