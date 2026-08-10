@@ -2,12 +2,17 @@
 
 ## Implementation Notes
 
-- **ハードな前提条件**: 本仕様は`workspace-membership`の実コード（`Workspace`／`WorkspaceMember`モデル、`WorkspaceService.isMember`／`listMembers`、フロントの`useCurrentWorkspace`・空状態コンポーネント）が実装済みであることを前提とする。それらが存在しない状態ではタスク1.3以降に着手できない（research.md「1. 前提となる依存関係の状態」参照）
-- ビジュアル正本: なし。画面変更は`workspace-membership`が確定させた空状態パターンをそのまま流用し、新規モックは作成しない（research.md「6. UIデザインゲートの適用判断」）
+- 前提条件は満た済み: `workspace-membership`の実コード（`Workspace`／`WorkspaceMember`モデル、`workspaceService.isMember`／`listMembers`、フロントの`useCurrentWorkspace`、`pages/workspaces/index.vue`の空状態マークアップ、`api.listWorkspaceMembers`）が`main`に存在する（research.md「1. 前提となる依存関係の状態」参照）
+- ビジュアル正本: なし。画面変更は`pages/workspaces/index.vue`の空状態視覚パターン（インラインマークアップ。共有コンポーネントではない）をそのまま流用し、新規モックは作成しない（research.md「6. UIデザインゲートの適用判断」）
 - 既存Case/Task/RecurringTaskTemplate/NonBusinessDay/DevelopmentStageデータは開発段階のため破棄前提。マイグレーションは保全ではなくスキーマ適合を優先する
-- `forbidden`（403）ヘルパーは`workspace-membership`が先に実装していれば既に存在する可能性がある。タスク1.2は「存在しなければ追加」であり、重複実装しない
+- `forbidden`（403）ヘルパーは`workspace-membership`が追加済み。タスク1.2は存在確認のみで、重複実装しない
 - ワークスペース文脈は`X-Workspace-Id`リクエストヘッダーで伝達する。対象パスは`/api/cases`, `/api/tasks`, `/api/recurring-templates`, `/api/holidays`, `/api/development-stages`の5つ
+- ランタイムの所属判定呼び出し先は`workspaceService`（単数）。design文書中の旧称`workspacesService`／型名`WorkspaceService`に引きずられないこと
 - 各モジュールの`workspaceId`は`VerifiedWorkspaceId`（branded type）で受け取り、`request.currentWorkspaceId`以外から未検証の値を渡すとコンパイルエラーになるようにする（design.md Critical Issue 1対応）
+- 担当者候補APIの戻り値は`WorkspaceUserSummary.userId`。既存UIの`User.id`前提箇所では`userId`へのマッピング（または呼び出し側での正規化）を忘れないこと
+- `NonBusinessDay`の`date_active_key`グローバルUNIQUEは、`workspaceId`追加時にワークスペース単位の一意制約へ組み替える（据え置くとワークスペース横断で同日登録が衝突する）
+- 関連先リソースの同一ワークスペース検証（Requirement 3.5）を落とさないこと。Prisma FKだけでは防げない。Taskの`caseId`／`parentTaskId`／`developmentStageId`、およびrecurrenceのテンプレート⇔案件が対象（design.md TaskService Responsibilities参照）
+- 未選択時空状態の対象画面は8つ: `pages/index.vue`・`cases`・`tasks`・`kanban`・`calendar`・`recurrence`・`holidays`・`throughput`。`throughput`はAPIスコープ化を本仕様では行わず空状態のみ（集計スコープは`velocity-dashboard`へ申し送り）
 
 - [ ] 1. Foundation: 共有ヘルパー・ガード・スキーマ移行
 - [ ] 1.1 (P) ワークスペース文脈の共有ヘルパーを実装する
@@ -16,9 +21,9 @@
   - _Requirements: 3.1, 3.2, 3.3_
   - _Boundary: shared/workspace-scope_
 
-- [ ] 1.2 (P) 403エラーヘルパーの存在を確認し、なければ追加する
-  - 既存の`shared/http-errors.ts`を確認し、403を表すエラーヘルパーが無ければ追加する（`workspace-membership`が先に追加済みの場合は何もしない）
-  - 観測可能な完了状態: 403エラーヘルパーを呼び出すと、ステータスコード403のエラーが得られることを単体テストで確認できる
+- [ ] 1.2 (P) 403エラーヘルパーの存在を確認する
+  - 既存の`shared/http-errors.ts`に`forbidden`があることを確認する（`workspace-membership`が追加済み。無ければ追加するが、通常は何もしない）
+  - 観測可能な完了状態: 403エラーヘルパーを呼び出すと、ステータスコード403のエラーが得られることを単体テストで確認できる（既存テストで足りる場合は追加しない）
   - _Requirements: 3.2_
   - _Boundary: shared/http-errors_
 
@@ -38,7 +43,8 @@
 - [ ] 1.5 (P) Case／Task／繰り返しタスクテンプレート／非営業日マスタ／開発ステージ列にワークスペース所属を追加する
   - 5つのリソースそれぞれに、いずれか1つのワークスペースへの帰属を必須とする関連を追加する
   - 開発データは破棄前提とし、既存行を削除してから必須の所属列を追加するマイグレーションを行う（外部キー制約の依存順を考慮する）
-  - 観測可能な完了状態: マイグレーション適用後、5テーブルのいずれの行もいずれかのワークスペースを指すようになっており、所属なしでの行作成がデータベース制約で拒否される
+  - `NonBusinessDay`はあわせて、現行のグローバル一意制約`non_business_days_date_active_key_key`を削除し、`(workspace_id, date_active_key)`相当のワークスペース単位UNIQUEへ組み替える（生成列まわりは既存init migrationと同型の手編集・drift注意）
+  - 観測可能な完了状態: マイグレーション適用後、5テーブルのいずれの行もいずれかのワークスペースを指すようになっており、所属なしでの行作成がデータベース制約で拒否される。別ワークスペースであれば同じ日付の非営業日を共存できる
   - _Requirements: 1.1, 1.2_
 
 - [ ] 2. Core: 案件のワークスペーススコープ化
@@ -63,6 +69,14 @@
   - 観測可能な完了状態: 現在ワークスペースに所属しない利用者を担当者に指定した作成・更新が拒否されることを単体テストで確認できる
   - _Requirements: 4.2_
   - _Depends: 3.1_
+
+- [ ] 3.3 タスクの関連先リソースが同一ワークスペースであることを検証する
+  - 作成・更新および派生操作（子タスク追加・分割・開発ステージ変更等）で`caseId`／`parentTaskId`／`developmentStageId`が指定されたとき、それらを現在ワークスペース付きで解決し、別ワークスペースまたは不存在なら拒否する
+  - PrismaのFK制約だけに依存しない（FKはワークスペース横断の紐付けを許してしまう）
+  - 観測可能な完了状態: 別ワークスペースの案件／親タスク／開発ステージIDを指定した作成・更新が拒否されることを単体テストで確認できる
+  - _Requirements: 3.5_
+  - _Boundary: TaskService_
+  - _Depends: 3.1, 2.1, 6.1_
 
 - [ ] 4. Core: 繰り返しタスクテンプレートのワークスペーススコープ化
 - [ ] 4.1 (P) テンプレートの作成・一覧・停止・再開・削除にワークスペーススコープを適用し、案件との整合性を検証する
@@ -96,18 +110,21 @@
   - _Requirements: 2.1, 2.2, 3.1_
   - _Boundary: useApiClient_
 
-- [ ] 7.2 (P) 現在ワークスペース未選択時の空状態を案件・タスク一覧画面に適用する
-  - 現在ワークスペースが未選択（所属0件、または選択なし）の場合、一覧の内容と作成導線を表示せず、ワークスペース作成を促す空状態を表示する
-  - 新しい見た目は作らず、既に確定しているワークスペース管理画面の空状態パターンをそのまま適用する
-  - 観測可能な完了状態: ブラウザで現在ワークスペース未選択の状態で案件・タスク一覧を開くと、一覧の代わりに空状態が表示され、作成操作に進めないことを確認できる
+- [ ] 7.2 (P) 現在ワークスペース未選択時の空状態を対象画面すべてに適用する
+  - 対象: `pages/index.vue`（ホーム）・`cases`・`tasks`・`kanban`・`calendar`・`recurrence`・`holidays`・`throughput`
+  - 現在ワークスペースが未選択（所属0件、または選択なし）の場合、一覧・集計の内容と作成／同期導線を表示せず、ワークスペース作成を促す空状態を表示する
+  - 新しい見た目は作らず、`pages/workspaces/index.vue`の空状態マークアップ（インライン。「ワークスペースがありません」、作成CTA）と同じ視覚パターンを各ページへ複製する。共有Vueコンポーネントとしては切り出さない
+  - `throughput`は本仕様では`/api/throughput`をスコープ化しない。空状態のみ入れ、選択後の集計スコープは`velocity-dashboard`へ申し送る
+  - 観測可能な完了状態: ブラウザで現在ワークスペース未選択の状態で上記8画面を開くと、一覧／集計の代わりに空状態が表示され、作成等の操作に進めないことを確認できる
   - _Requirements: 2.1, 2.2_
-  - _Boundary: pages/cases, pages/tasks_
+  - _Boundary: pages/index, cases, tasks, kanban, calendar, recurrence, holidays, throughput_
 
 - [ ] 8. Core: 担当者候補のワークスペース内制限
 - [ ] 8.1 タスク作成画面とカンバン画面の担当者候補を現在ワークスペースのメンバーに限定する
-  - タスク作成時の担当者候補一覧と、カンバン画面上での担当者再割当候補の取得元を、全利用者一覧から現在ワークスペースのメンバー一覧に切り替える
+  - タスク作成時の担当者候補一覧と、カンバン画面上での担当者再割当候補の取得元を、`api.listUsers()`から`api.listWorkspaceMembers(currentWorkspaceId)`に切り替える
+  - 戻り値は`WorkspaceUserSummary`（主キー相当は`userId`）なので、既存の`User.id`前提のoption `:value`／`:key`／名前解決を`userId`基準へ合わせて変更する（呼び出し側で`{ id: member.userId, name: member.name }`へ正規化してもよい）
   - 既にアサイン済みのタスクを絞り込むフィルタや、カレンダー画面での担当者表示は本タスクの対象外とし、現状のまま維持する
-  - 観測可能な完了状態: タスク作成画面とカンバン画面の担当者候補に、現在ワークスペースに所属しない利用者が表示されないことを確認できる
+  - 観測可能な完了状態: タスク作成画面とカンバン画面の担当者候補に、現在ワークスペースに所属しない利用者が表示されず、候補選択で正しい利用者IDが送信されることを確認できる
   - _Requirements: 4.1_
   - _Depends: 7.2_
 
@@ -116,7 +133,7 @@
   - ワークスペーススコープ対象の全エンドポイント（案件・タスク・繰り返しタスクテンプレート・非営業日マスタ・開発ステージ）に対し、ワークスペース文脈欠落時・非メンバー時・対象が別ワークスペース所属の場合それぞれで、期待どおり操作が拒否されることを一括で検証する
   - 観測可能な完了状態: 上記の横断統合テストが全エンドポイントに対してgreenになる
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
-  - _Depends: 2.1, 3.1, 3.2, 4.1, 5.1, 6.1_
+  - _Depends: 2.1, 3.1, 3.2, 3.3, 4.1, 5.1, 6.1_
 
 - [ ] 9.2 作成時のワークスペース指定がクライアント入力で上書きされないことを検証する
   - タスク・案件の作成リクエストで、本文中にワークスペースを示す値を紛れ込ませても、実際に帰属するワークスペースは現在ワークスペースの文脈から決まる値になることを確認する
@@ -138,7 +155,7 @@
   - _Depends: 10.1_
 
 - [ ] 10.3 未選択時の空状態と担当者候補制限のE2Eを追加する
-  - 現在ワークスペース未選択状態での空状態表示とワークスペース作成への誘導、およびタスク作成時の担当者候補が現在ワークスペースのメンバーのみに絞り込まれていることを確認する
+  - 現在ワークスペース未選択状態で対象8画面（ホーム・案件・タスク・カンバン・カレンダー・繰り返し・非営業日・消化数）に空状態とワークスペース作成への誘導が出ること、およびタスク作成時の担当者候補が現在ワークスペースのメンバーのみに絞り込まれていることを確認する
   - 観測可能な完了状態: 上記シナリオのE2Eがgreenになる
   - _Requirements: 2.1, 2.2, 4.1, 4.2_
   - _Depends: 10.1_

@@ -11,13 +11,14 @@
 ### Goals
 - Case／Task／RecurringTaskTemplate／NonBusinessDay／DevelopmentStageの5リソースを、作成時に操作者の現在ワークスペースへ帰属させる
 - 上記5リソースのlist／get／update／deleteを、リクエストごとの現在ワークスペース＋メンバーシップ判定で一元的に強制する
+- リソース間参照（Taskの関連ID、テンプレート⇔案件）を同一ワークスペースに限定する
 - タスクの担当者候補・担当者指定を現在ワークスペースのメンバーに制限する
-- 繰り返しタスクテンプレートの適用対象を、テンプレートと同一ワークスペースの案件に限定する
+- 対象リソースを扱う画面および消化数画面で、現在ワークスペース未選択時にワークスペース作成へ誘導する
 
 ### Non-Goals
 - クロスワークスペースでのリソース検索・共有・移動
 - 招待リンク発行、ワークスペース内ロール／RBAC
-- コメント機能、操作ログ、消化ペース可視化（velocity-dashboard）の機能追加
+- コメント機能、操作ログ、消化ペース可視化（velocity-dashboard）の機能追加（`/api/throughput`のスコープ化を含む）
 - 既存グローバルデータの保全付き移行（開発段階につき破棄前提）
 - `workspace-membership`・`user-auth`が提供するメンバーシップ／認証の仕組み自体の実装
 
@@ -30,30 +31,33 @@
 - タスクの担当者指定時のワークスペースメンバーシップ検証（`assigneeUserId`が現在ワークスペースのメンバーであることの確認）
 - 繰り返しタスクテンプレート適用時の、テンプレートと案件のワークスペース一致検証
 - フロントエンドの`useApiClient.ts`へのワークスペース文脈（`X-Workspace-Id`ヘッダー）自動付与
-- Case／Taskの一覧・作成画面における、現在ワークスペース未選択時の空状態表示（`workspace-membership`が確定させる空状態パターンの再利用）
-- タスクの担当者候補（作成時の候補一覧・カンバン上の再割当候補）の参照先を、全ユーザー一覧から現在ワークスペースのメンバー一覧へ切り替え（既存の担当者フィルタ・カレンダー表示は対象外、Out of Boundary参照）
+- ワークスペース所属リソースを扱う画面、およびそれらを集計する消化数画面における、現在ワークスペース未選択時の空状態表示（対象: `pages/index.vue`・`pages/cases`・`pages/tasks`・`pages/kanban`・`pages/calendar`・`pages/recurrence`・`pages/holidays`・`pages/throughput`。`pages/workspaces/index.vue`のインライン空状態マークアップと同じ視覚パターンの再利用。共有コンポーネント抽出はしない）
+- タスクの担当者候補（作成時の候補一覧・カンバン上の再割当候補）の参照先を、全ユーザー一覧から現在ワークスペースのメンバー一覧へ切り替え。戻り値`WorkspaceUserSummary.userId`を既存の`User.id`前提UIの選択値へマッピングする（既存の担当者フィルタ・カレンダー表示の取得元変更は対象外、Out of Boundary参照）
+- リソース間参照の同一ワークスペース検証（Taskの`caseId`／`parentTaskId`／`developmentStageId`、および繰り返しテンプレート適用時のテンプレート⇔案件。別ワークスペースのIDを指定した場合は拒否）
+- `NonBusinessDay`の`date_active_key`一意制約を、グローバル一意からワークスペース単位の一意へ組み替える migration（現行の`non_business_days_date_active_key_key`ではワークスペース横断で同日登録が衝突するため）
 
 ### Out of Boundary
 - `Workspace`／`WorkspaceMember`モデルそのもの、ワークスペースの作成・設定変更・削除・メンバー追加（`workspace-membership`が所有）
-- `WorkspaceService.isMember`／`listMembers`の実装そのもの（本仕様は呼び出し側であり、これらのインターフェースを再定義・変更しない）
+- `workspaceService.isMember`／`listMembers`の実装そのもの（本仕様は呼び出し側であり、これらのインターフェースを再定義・変更しない）
 - ログインセッション・CSRF・`requireUser`の実装（`user-auth`が所有）
 - `User`（アカウント）モデルの一覧・検索範囲の変更
 - 招待・RBAC・クロスワークスペース機能
-- `shared/http-errors.ts`への`forbidden`ヘルパー追加そのもの（`workspace-membership`のBoundary Commitmentであり、実装時点で既に存在する場合はそれを利用する。存在しない場合に限り本仕様が追加する）
+- `shared/http-errors.ts`への`forbidden`ヘルパー追加そのもの（`workspace-membership`が既に追加済み。本仕様は利用のみ）
+- `/api/throughput`のワークスペーススコープ化および消化数集計ロジックの変更（`velocity-dashboard`が所有。本仕様は`pages/throughput`の未選択時空状態のみ先に入れる）
 - 担当者フィルタ（`components/users/AssigneeFilter.vue`）・カレンダー表示（`pages/calendar/index.vue`）のユーザー一覧取得元の変更（Requirement 4.1は担当者「候補」の制限であり、既にアサイン済みのタスクを絞り込むフィルタは対象外。過去にメンバーだった利用者がアサイン済みのタスクを引き続き検索・表示できる状態を維持する）
 
 ### Allowed Dependencies
 - `user-auth`が提供する`requireUser` preHandlerと、それが`request.currentUser`に付与する`PublicUser`（`{ id, email, name, createdAt, updatedAt }`）
-- `workspace-membership`が提供する`WorkspaceService`の公開インターフェース：`isMember(workspaceId, userId): Promise<boolean>`、`listMembers(workspaceId, requestingUserId): Promise<WorkspaceUserSummary[]>`
-- `workspace-membership`が提供するフロントエンドの`useCurrentWorkspace`（所属ワークスペース一覧・現在選択のlocalStorage永続化）、および`pages/workspaces`の空状態コンポーネント・視覚パターン
-- `shared/http-errors.ts`の`badRequest`／`notFound`／`forbidden`、`shared/soft-delete.repository.ts`の論理削除規約
-- **制約**: 本仕様は`workspace-membership`の実コード（`Workspace`／`WorkspaceMember`モデル、`WorkspaceService`）が存在しない状態では実装に着手できない（research.md参照、ハードな順序ゲート）
+- `workspace-membership`が提供する`workspaceService`（`workspace.service.ts`のexport）の公開メソッド：`isMember(id, userId): Promise<boolean>`、`listMembers(id, requestingUserId): Promise<WorkspaceUserSummary[]>`。`WorkspaceUserSummary`は`{ userId, name, email }`（`User.id`ではない点に注意）
+- `workspace-membership`が提供するフロントエンドの`useCurrentWorkspace`（所属ワークスペース一覧・現在選択のlocalStorage永続化）、および`pages/workspaces/index.vue`の空状態マークアップ（インラインの視覚パターン。共有Vueコンポーネントとしては切り出されていない）
+- `shared/http-errors.ts`の`badRequest`／`notFound`／`forbidden`（いずれも実装済み）、`shared/soft-delete.repository.ts`の論理削除規約
+- 前提: `workspace-membership`の実コードは`main`にマージ済み。Upstream待ちのハードゲートは解消済み（research.md参照）
 
 ### Revalidation Triggers
-- `WorkspaceService.isMember`／`listMembers`のシグネチャ変更
+- `workspaceService.isMember`／`listMembers`のシグネチャ変更、または`WorkspaceUserSummary`のフィールド名変更
 - `request.currentUser`の型・付与条件の変更（`user-auth`側）
 - `useCurrentWorkspace`が管理する現在ワークスペースIDの取得手段・永続化方式の変更（クライアント側からサーバー側永続化への変更等）
-- `workspace-membership`が確定させる空状態コンポーネントの見た目・構成の変更（research.md「UIデザインゲートの適用判断」で本仕様が流用を前提にしているため）
+- `pages/workspaces/index.vue`の空状態マークアップの見た目・構成の変更（research.md「UIデザインゲートの適用判断」で本仕様が流用を前提にしているため）
 - ワークスペース文脈の伝達方式（`X-Workspace-Id`ヘッダー）を変更する場合、本仕様の全モジュールが影響を受ける
 
 ## Architecture
@@ -64,7 +68,7 @@
 - `app.ts`は`onRequest`フックでCSRF検証、`preHandler`フックで`requireUser`をパス除外リスト方式（`/health`・`/api/auth/*`・`/api/client-errors`を除く全`/api/*`）で適用済み。同じ「除外リスト方式のグローバルpreHandlerフック」パターンが確立している
 - `shared/soft-delete.repository.ts`のPrisma Client Extensionは`$allModels`の`where`句へ`deletedAt: null`を注入するが、`create`の`data`側には関与しない。同種の仕組みを`workspaceId`に適用する場合も同じ制約を受ける（research.md参照）
 - `case.repository.ts`／`task.repository.ts`の`findById`／`update`／`delete`は`id`のみで`where`を構成しており、スコープ用パラメータを持たない。`task.repository.ts`の`list(filter)`は`caseId`／`assigneeUserId`をwhere句に合成する先例があり、`workspaceId`合成もこの延長で実装できる
-- フロントエンドは`useApiClient.ts`が唯一のHTTP境界で、CSRFトークンを`request()`内でヘッダーへ自動付与する仕組みが既にある（`useApiClient.ts:185-201`）
+- フロントエンドは`useApiClient.ts`が唯一のHTTP境界で、CSRFトークンを`request()`内でヘッダーへ自動付与する仕組みが既にある（`csrf-token`ヘッダー合成。`X-Workspace-Id`付与も同パターンに乗せる）
 - `structure.md`は「`shared/`は全モジュール共通のインフラであり、モジュール固有のロジックはここに置かない」と定めており、現状`shared/`配下のどのファイルも特定の`modules/<domain>/`をimportしていない（依存方向は常にmodules→shared）。一方`app.ts`は合成ルートとして`modules/auth/auth.guard.js`を直接importしている先例がある
 
 ### Architecture Pattern & Boundary Map
@@ -82,7 +86,7 @@ flowchart TB
   subgraph be [Backend Fastify]
     AuthGuard[requireUser from user-auth]
     ScopeGuard[requireWorkspaceMember]
-    WsService[WorkspaceService isMember and listMembers from workspace-membership]
+    WsService[workspaceService isMember and listMembers from workspace-membership]
     CaseM[cases module]
     TaskM[tasks module]
     RecurM[recurrence module]
@@ -111,9 +115,9 @@ flowchart TB
 
 **Architecture Integration**:
 - Selected pattern: 上記の共有ガード＋モジュール個別拡張
-- Domain/feature boundaries: 「メンバーか否か」の判定と「どのワークスペースを対象にするか」の解決は`requireWorkspaceMember`に一本化。各モジュールは`request.currentWorkspaceId`を受け取ってクエリに反映するだけで、`WorkspaceService`を直接呼び出さない
+- Domain/feature boundaries: 「メンバーか否か」の判定と「どのワークスペースを対象にするか」の解決は`requireWorkspaceMember`に一本化。各モジュールは`request.currentWorkspaceId`を受け取ってクエリに反映するだけで、`workspaceService`を直接呼び出さない（担当者検証を行う`TaskService`のみ例外的に`isMember`を呼ぶ）
 - Existing patterns preserved: `routes → service → repository`の依存方向、Zod検証＋`parseOrBadRequest`、`HttpError`throw、soft-delete規約、`preHandler`フックによる横断的ガードの配線方式
-- New components rationale: 新規コンポーネントは2つに分離する。(1) `shared/workspace-scope.ts` — ヘッダー名定数・`VerifiedWorkspaceId`型・`withWorkspaceScope`のみを持つ、モジュール非依存の汎用ヘルパー。(2) `backend/src/workspace-scope.guard.ts` — `workspacesService.isMember`と`request.currentUser`を組み合わせる`requireWorkspaceMember`本体。`structure.md`は「`shared/`にモジュール固有のロジックを置かない」と定めており、`workspaces`モジュールへの依存を持つ判定ロジックを`shared/`に置くとこの原則に反するため分離した。`app.ts`は既に`modules/auth/auth.guard.js`を直接importする合成ルートであり、`workspace-scope.guard.ts`も同じ立ち位置（`app.ts`と同階層、特定モジュールの実装詳細を組み合わせてよい層）に置く
+- New components rationale: 新規コンポーネントは2つに分離する。(1) `shared/workspace-scope.ts` — ヘッダー名定数・`VerifiedWorkspaceId`型・`withWorkspaceScope`のみを持つ、モジュール非依存の汎用ヘルパー。(2) `backend/src/workspace-scope.guard.ts` — `workspaceService.isMember`と`request.currentUser`を組み合わせる`requireWorkspaceMember`本体。`structure.md`は「`shared/`にモジュール固有のロジックを置かない」と定めており、`workspaces`モジュールへの依存を持つ判定ロジックを`shared/`に置くとこの原則に反するため分離した。`app.ts`は既に`modules/auth/auth.guard.js`を直接importする合成ルートであり、`workspace-scope.guard.ts`も同じ立ち位置（`app.ts`と同階層、特定モジュールの実装詳細を組み合わせてよい層）に置く
 - Steering compliance: `structure.md`の「モジュール間はサービスの公開インターフェース経由でのみ依存する」原則、および「`shared/`にモジュール固有ロジックを置かない」原則の双方を維持
 
 ### Technology Stack
@@ -131,7 +135,7 @@ Build vs Adopt の詳細根拠は`research.md`「8. Design Decisions」を参照
 ### Directory Structure
 ```
 backend/src/
-├── workspace-scope.guard.ts        # 新設: requireWorkspaceMember（workspacesServiceに依存する検証本体）
+├── workspace-scope.guard.ts        # 新設: requireWorkspaceMember（workspaceServiceに依存する検証本体）
 ├── shared/
 │   └── workspace-scope.ts          # 新設: WORKSPACE_HEADER_NAME, VerifiedWorkspaceId型, withWorkspaceScope（モジュール非依存）
 ├── modules/cases/                  # 既存4点セットを拡張（workspaceId追加）
@@ -143,23 +147,29 @@ backend/src/
 frontend/
 ├── composables/
 │   └── useApiClient.ts             # 既存。X-Workspace-Idヘッダー自動付与を追加
-├── pages/cases/index.vue           # 既存。現在ワークスペース未選択時の空状態を追加
+├── pages/index.vue                 # 既存。未選択時の空状態を追加（案件進捗サマリ）
+├── pages/cases/index.vue           # 既存。未選択時の空状態を追加
 ├── pages/tasks/index.vue           # 既存。空状態 + 担当者候補の参照先切替
+├── pages/kanban/index.vue          # 既存。空状態 + 担当者候補の参照先切替
+├── pages/calendar/index.vue        # 既存。未選択時の空状態を追加（担当者一覧取得元は変更しない）
+├── pages/recurrence/index.vue      # 既存。未選択時の空状態を追加
+├── pages/holidays/index.vue        # 既存。未選択時の空状態を追加
+└── pages/throughput/index.vue      # 既存。未選択時の空状態のみ追加（APIスコープ化はvelocity-dashboard）
 ```
 recurrence/holidays/development-stagesの3モジュールは、cases/tasksと同じ「schema.prisma追加 → repository/service/routesへworkspaceId param追加」パターンに従うため、個別のファイル列挙は省略する。
 
 ### Modified Files
 - `backend/src/prisma/schema.prisma` — `Case`/`Task`/`RecurringTaskTemplate`/`NonBusinessDay`/`DevelopmentStage`の5モデルへ`workspaceId String @map("workspace_id")`（NOT NULL）と`Workspace`への`@relation`を追加。`Workspace`モデル自体は`workspace-membership`が追加する前提（本仕様は追加しない）
-- `backend/src/shared/http-errors.ts` — `forbidden(message: string): HttpError`（403）が存在しない場合のみ追加（Boundary Commitments参照）
+- `backend/src/shared/http-errors.ts` — `forbidden`は実装済みのため変更しない（存在確認のみ）
 - `backend/src/app.ts` — `requireUser`の`preHandler`フックの後段に、`requireWorkspaceMember`（`workspace-scope.guard.ts`からimport）を対象パス（`/api/cases`, `/api/tasks`, `/api/recurring-templates`, `/api/holidays`, `/api/development-stages`のいずれかで始まる）に適用する2つ目の`preHandler`フックを追加
-- `backend/src/modules/cases/{case.types,case.repository,case.service,case.routes}.ts` — `workspaceId`（`VerifiedWorkspaceId`型）をCreateCaseInput/クエリ条件へ追加。`case.repository.ts:list()`の`client`引数無視も合わせて修正
-- `backend/src/modules/tasks/{task.types,task.repository,task.service,task.routes}.ts` — `workspaceId`（`VerifiedWorkspaceId`型）追加に加え、`assigneeUserId`指定時に`workspacesService.isMember(workspaceId, assigneeUserId)`を検証
+- `backend/src/modules/cases/{case.types,case.repository,case.service,case.routes}.ts` — `workspaceId`（`VerifiedWorkspaceId`型）をCreateCaseInput/クエリ条件へ追加。`case.repository.ts`の`list()`の`client`引数無視も合わせて修正
+- `backend/src/modules/tasks/{task.types,task.repository,task.service,task.routes}.ts` — `workspaceId`（`VerifiedWorkspaceId`型）追加に加え、`assigneeUserId`指定時に`workspaceService.isMember(workspaceId, assigneeUserId)`を検証
 - `backend/src/modules/recurrence/{recurrence.types,recurrence.repository,recurrence.service,recurrence.routes}.ts` — `workspaceId`追加。`applyToCase`が参照するテンプレート一覧を、対象案件と同一`workspaceId`のものに限定
-- `backend/src/modules/holidays/{holiday.types,holiday.repository,holiday.service,holiday.routes}.ts` — `workspaceId`追加
+- `backend/src/modules/holidays/{holiday.types,holiday.repository,holiday.service,holiday.routes}.ts` — `workspaceId`追加。`NonBusinessDay`の一意制約をワークスペース単位へ組み替える
 - `backend/src/modules/development-stages/{development-stage.types,development-stage.repository,development-stage.service,development-stage.routes}.ts` — `workspaceId`追加
-- `frontend/composables/useApiClient.ts` — `request()`内で、対象パスへのリクエストに`useCurrentWorkspace().currentId`を`X-Workspace-Id`ヘッダーとして付与
-- `frontend/pages/cases/index.vue`, `frontend/pages/tasks/index.vue` — `useCurrentWorkspace().currentId`が`null`の場合、`workspace-membership`の空状態パターンを表示し一覧取得・作成導線を出さない
-- `frontend/pages/tasks/index.vue`, `frontend/pages/kanban/index.vue` — `api.listUsers()`の呼び出しを`api.listWorkspaceMembers(currentWorkspaceId)`へ置換（`kanban/index.vue`の置換により、props経由でユーザー一覧を受け取る`TaskDetailModal.vue`／`AssigneeFocusTray.vue`の担当者候補も連動して現在ワークスペースのメンバーに限定される）。`components/users/AssigneeFilter.vue`と`pages/calendar/index.vue`は担当者「候補選択」ではなくフィルタ／表示用途のため変更しない（Boundary Commitments「Out of Boundary」参照）
+- `frontend/composables/useApiClient.ts` — `request()`内で、対象パスへのリクエストに`useCurrentWorkspace().currentId`を`X-Workspace-Id`ヘッダーとして付与（既存の`csrf-token`ヘッダー合成と同型）
+- `frontend/pages/index.vue`および`frontend/pages/{cases,tasks,kanban,calendar,recurrence,holidays,throughput}/index.vue` — `useCurrentWorkspace().currentId`が`null`の場合、`pages/workspaces/index.vue`と同じ空状態の視覚パターンを表示し、一覧取得・作成・同期・集計の導線を出さない
+- `frontend/pages/tasks/index.vue`, `frontend/pages/kanban/index.vue` — `api.listUsers()`の呼び出しを`api.listWorkspaceMembers(currentWorkspaceId)`へ置換し、戻り値の`userId`を既存の`User.id`前提のoption value／名前解決にマッピングする（`kanban/index.vue`の置換により、props経由でユーザー一覧を受け取る`TaskDetailModal.vue`／`AssigneeFocusTray.vue`の担当者候補も連動して現在ワークスペースのメンバーに限定される）。`components/users/AssigneeFilter.vue`と`pages/calendar/index.vue`のユーザー一覧取得元は担当者「候補選択」ではなくフィルタ／表示用途のため変更しない（Boundary Commitments「Out of Boundary」参照）
 
 ## System Flows
 
@@ -170,7 +180,7 @@ sequenceDiagram
   participant U as Frontend
   participant Guard1 as requireUser
   participant Guard2 as requireWorkspaceMember
-  participant WS as WorkspaceService
+  participant WS as workspaceService
   participant M as モジュール Service
   participant DB as MySQL
   U->>Guard1: リクエスト + セッションCookie + X-Workspace-Id
@@ -208,22 +218,22 @@ sequenceDiagram
 |-------------|---------|------------|------------|-------|
 | 1.1, 1.2 | 作成時の現在ワークスペースへの帰属、5リソース全てに帰属必須 | CaseService, TaskService, RecurrenceService, HolidayService, DevelopmentStageService | POST各エンドポイント（`request.currentWorkspaceId`から付与） | スコープ検証付きリクエスト処理 |
 | 1.3 | テンプレート生成の同一ワークスペース整合性 | RecurrenceService | `applyToCase`内部のテンプレート選択 | — |
-| 2.1, 2.2 | 現在ワークスペース未選択時の一覧・作成アクセス制限 | pages/cases, pages/tasks, WorkspaceScopeGuard | `useCurrentWorkspace().currentId`判定、`requireWorkspaceMember`の400 | スコープ検証付きリクエスト処理 |
-| 3.1, 3.2, 3.3, 3.4 | 現在ワークスペース＋メンバーシップに基づく読み書き制御 | WorkspaceScopeGuard, 各モジュールRepository/Service | `requireWorkspaceMember`, 各`list`/`findById`/`update`/`delete`のwhere句 | スコープ検証付きリクエスト処理 |
+| 2.1, 2.2 | 現在ワークスペース未選択時の一覧・作成アクセス制限 | 対象8画面, WorkspaceScopeGuard | `useCurrentWorkspace().currentId`判定、`requireWorkspaceMember`の400 | スコープ検証付きリクエスト処理 |
+| 3.1, 3.2, 3.3, 3.4, 3.5 | 現在ワークスペース＋メンバーシップに基づく読み書き制御、関連先の同一WS検証 | WorkspaceScopeGuard, 各モジュールRepository/Service | `requireWorkspaceMember`, 各`list`/`findById`/`update`/`delete`のwhere句, 関連IDのスコープ付き解決 | スコープ検証付きリクエスト処理 |
 | 4.1, 4.2 | 担当者候補（作成・カンバン再割当）・指定のワークスペース内制限 | TaskService, 担当者候補呼び出し箇所（pages/tasks, pages/kanban） | `GET /api/workspaces/:id/members`（workspace-membership提供）, TaskServiceの`assigneeUserId`検証 | — |
 
 ## Components and Interfaces
 
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies | Contracts |
 |-----------|---------------|--------|---------------|-------------------|-----------|
-| WorkspaceScopeGuard | Backend/root（`workspace-scope.guard.ts`） | ワークスペース文脈の解決とメンバーシップ検証を一元化 | 1.1, 2.2, 3.1, 3.2, 3.3, 3.4 | WorkspaceService.isMember (P0), user-auth requireUser (P0), shared/workspace-scope.ts (P0) | Service |
+| WorkspaceScopeGuard | Backend/root（`workspace-scope.guard.ts`） | ワークスペース文脈の解決とメンバーシップ検証を一元化 | 1.1, 2.2, 3.1, 3.2, 3.3, 3.4 | workspaceService.isMember (P0), user-auth requireUser (P0), shared/workspace-scope.ts (P0) | Service |
 | CaseService (拡張) | Backend/cases | Case CRUD へのワークスペーススコープ適用 | 1.1, 1.2, 3.1, 3.2, 3.3 | WorkspaceScopeGuard (P0), case.repository (P0) | Service, API |
-| TaskService (拡張) | Backend/tasks | Task CRUD へのワークスペーススコープ適用 + 担当者検証 | 1.1, 1.2, 3.1, 3.2, 3.3, 4.2 | WorkspaceScopeGuard (P0), WorkspaceService.isMember (P0), task.repository (P0) | Service, API |
+| TaskService (拡張) | Backend/tasks | Task CRUD へのワークスペーススコープ適用 + 担当者検証 | 1.1, 1.2, 3.1, 3.2, 3.3, 4.2 | WorkspaceScopeGuard (P0), workspaceService.isMember (P0), task.repository (P0) | Service, API |
 | RecurrenceService (拡張) | Backend/recurrence | テンプレートCRUDへのスコープ適用 + 案件との一致検証 | 1.1, 1.2, 1.3, 3.1, 3.2, 3.3 | WorkspaceScopeGuard (P0), recurrence.repository (P0) | Service, API |
 | HolidayService (拡張) | Backend/holidays | 非営業日マスタへのスコープ適用 | 1.1, 1.2, 3.1, 3.2, 3.3 | WorkspaceScopeGuard (P0), holiday.repository (P0) | Service, API |
 | DevelopmentStageService (拡張) | Backend/development-stages | 開発ステージ列へのスコープ適用 | 1.1, 1.2, 3.1, 3.2, 3.3 | WorkspaceScopeGuard (P0), development-stage.repository (P0) | Service, API |
 | useApiClient (拡張) | Frontend | 全リクエストへの`X-Workspace-Id`自動付与 | 2.1, 2.2, 3.1 | useCurrentWorkspace (P0, workspace-membership提供) | State |
-| pages/cases, pages/tasks (拡張) | Frontend | 未選択時の空状態表示 | 2.1, 2.2 | useCurrentWorkspace (P0) | — |
+| 対象画面群 (拡張) | Frontend | 未選択時の空状態表示（index/cases/tasks/kanban/calendar/recurrence/holidays/throughput） | 2.1, 2.2 | useCurrentWorkspace (P0) | — |
 | 担当者候補呼び出し箇所 (拡張) | Frontend | タスク作成・カンバン再割当の担当者候補を現在ワークスペースのメンバーに限定 | 4.1 | useApiClient.listWorkspaceMembers (P0, workspace-membership提供) | — |
 
 ### Backend/shared（`shared/workspace-scope.ts`）
@@ -259,14 +269,14 @@ export function withWorkspaceScope<T extends object>(
 
 **Responsibilities & Constraints**
 - `X-Workspace-Id`ヘッダーを読み取り、欠落または空文字は`badRequest`（400）とする
-- `workspacesService.isMember(workspaceId, request.currentUser.id)`を呼び出し、非メンバーは`forbidden`（403）とする
+- `workspaceService.isMember(workspaceId, request.currentUser.id)`を呼び出し、非メンバーは`forbidden`（403）とする
 - 検証成功時、`request.currentWorkspaceId`（`VerifiedWorkspaceId`型）にワークスペースIDを付与する（`requireUser`が`request.currentUser`を付与するのと同じ方式）
 - `app.ts`にて、`requireUser`の後段・対象パス（`/api/cases`, `/api/tasks`, `/api/recurring-templates`, `/api/holidays`, `/api/development-stages`のいずれかで始まるパス）にのみ適用する。`/api/workspaces`, `/api/users`, `/api/auth/*`, `/api/throughput`, `/api/client-errors`, `/health`は対象外
 - `shared/workspace-scope.ts`とは異なり、`modules/workspaces`（`workspace-membership`所有）への依存を持つのはこのファイルのみに限定する。`app.ts`と同階層（`backend/src/`直下）に置くことで、「特定モジュールの実装詳細を組み合わせる合成ロジックはapp.ts周辺に置く」という既存の先例（`app.ts`が`modules/auth/auth.guard.js`を直接importしている）と一貫させる
 
 **Dependencies**
 - Inbound: `app.ts`のグローバル`preHandler`フック (P0)
-- Outbound: `workspace-membership`の`WorkspaceService.isMember` (P0), `shared/workspace-scope.ts`の`VerifiedWorkspaceId`/`WORKSPACE_HEADER_NAME` (P0)
+- Outbound: `workspace-membership`の`workspaceService.isMember` (P0), `shared/workspace-scope.ts`の`VerifiedWorkspaceId`/`WORKSPACE_HEADER_NAME` (P0)
 - External: なし
 
 **Contracts**: Service [x]
@@ -296,11 +306,17 @@ export async function requireWorkspaceMember(request: FastifyRequest): Promise<v
 **Responsibilities & Constraints**
 - `create`は`workspaceId`を`request.currentWorkspaceId`から受け取り、`CreateTaskInput`に含めて`repository.create`へ渡す（クライアントからの`workspaceId`指定は受け付けない）
 - `list`/`findById`/`update`/`delete`は`workspaceId`を必須パラメータとして受け取り、`repository`側の`where`句に`withWorkspaceScope`で合成する。対象が別ワークスペース所属の場合は`notFound`（404）とする
-- `assigneeUserId`を指定する`create`/`update`では、`workspacesService.isMember(workspaceId, assigneeUserId)`を検証し、非メンバーの場合は`badRequest`（400、指定値の妥当性エラーとして扱う）とする
+- `assigneeUserId`を指定する`create`/`update`では、`workspaceService.isMember(workspaceId, assigneeUserId)`を検証し、非メンバーの場合は`badRequest`（400、指定値の妥当性エラーとして扱う）とする
+- 関連先リソースの同一ワークスペース検証（Requirement 3.5、実装レビューで落とさないこと）
+  - `caseId`が指定されている場合、当該Caseを現在ワークスペース付きで解決できなければ拒否（存在しない／別WSは区別せず妥当性エラーとして400、または所属外隠蔽方針に合わせ404。モジュール内で一貫させる）
+  - `parentTaskId`が指定されている場合、親Taskも現在ワークスペースに帰属していなければ拒否
+  - `developmentStageId`が指定されている場合、当該DevelopmentStageも現在ワークスペースに帰属していなければ拒否
+  - `addChild`／`split`／`updateTaskDevelopmentStage`等の派生エンドポイントでも同じ検証を適用する
+  - PrismaのFKだけではワークスペース横断の紐付けを防げないため、サービス層で必ずスコープ付き`findById`相当を通す
 
 **Dependencies**
 - Inbound: `task.routes.ts` (P0)
-- Outbound: `task.repository.ts` (P0), `workspace-membership`の`WorkspaceService.isMember` (P0)
+- Outbound: `task.repository.ts` (P0), Case／DevelopmentStageのスコープ付き解決（P0）, `workspace-membership`の`workspaceService.isMember` (P0)
 - External: なし
 
 **Contracts**: Service [x] / API [x]
@@ -328,8 +344,8 @@ export interface TasksService {
 }
 ```
 - Preconditions: `workspaceId`は呼び出し元（routes層）が`request.currentWorkspaceId`から解決済みであること
-- Postconditions: `findById`/`update`/`delete`は、対象が`workspaceId`に帰属しない場合`notFound`をthrowする
-- Invariants: `Task.workspaceId`は作成後不変（ワークスペース間移動は本仕様の対象外）
+- Postconditions: `findById`/`update`/`delete`は、対象が`workspaceId`に帰属しない場合`notFound`をthrowする。関連先IDが別ワークスペースの場合は作成・更新を拒否する
+- Invariants: `Task.workspaceId`は作成後不変（ワークスペース間移動は本仕様の対象外）。`caseId`／`parentTaskId`／`developmentStageId`が非nullのとき、それらは常に同一`workspaceId`を指す
 
 ##### API Contract
 | Method | Endpoint | Request | Response | Errors |
@@ -345,7 +361,11 @@ export interface TasksService {
 
 ### Backend/cases, recurrence, holidays, development-stages（拡張、summary）
 
-上記TaskServiceと同一パターンを適用する。担当者検証に相当する固有ロジックはrecurrenceの「テンプレートと案件のワークスペース一致」のみで、`applyToCase`内部のテンプレート選択クエリに`workspaceId = 対象案件のworkspaceId`を合成することで実現する（新しい検証関数は不要、既存の`withWorkspaceScope`を再利用）。
+上記TaskServiceと同一パターンを適用する。担当者検証に相当する固有ロジックに加え、モジュールをまたぐ参照がある箇所では同様に同一ワークスペース検証を入れる。
+
+- recurrence: `applyToCase`内部のテンプレート選択クエリに`workspaceId = 対象案件のworkspaceId`を合成する（既存の`withWorkspaceScope`を再利用）
+- cases: テンプレート適用や進捗計算でTaskを触る場合も、案件と同一`workspaceId`の範囲に限定する
+- holidays / development-stages: 他モジュールからID参照される側として、スコープ付き`findById`を公開し、TaskService等から再利用できるようにする
 
 ### Frontend
 
@@ -358,7 +378,8 @@ export interface TasksService {
 
 **Responsibilities & Constraints**
 - `request()`内で、パスが`/api/cases`, `/api/tasks`, `/api/recurring-templates`, `/api/holidays`, `/api/development-stages`のいずれかで始まる場合、`useCurrentWorkspace().currentId`の値を`X-Workspace-Id`ヘッダーとして付与する（CSRFトークンの既存付与パターンと同じ実装形）
-- `currentId`が`null`の場合はヘッダーを付与せず送信する（バックエンドが400を返し、UIは`pages/cases`・`pages/tasks`の空状態判定によって通常はこのリクエスト自体が発生しない）
+- `currentId`が`null`の場合はヘッダーを付与せず送信する（バックエンドが400を返し、UIは対象画面の空状態判定によって通常はこのリクエスト自体が発生しない）
+- `/api/throughput`は本仕様ではガード対象外のためヘッダー付与対象にも含めない（空状態は画面側のみ。APIスコープ化は`velocity-dashboard`）
 
 **Contracts**: State [x]
 
@@ -367,10 +388,12 @@ export interface TasksService {
 - Persistence & consistency: `useCurrentWorkspace`に委譲
 - Concurrency strategy: 対象外（`useCurrentWorkspace`側の方針に従う）
 
-#### pages/cases, pages/tasks（拡張）／担当者一覧呼び出し箇所（拡張）
+#### 対象画面の空状態／担当者一覧呼び出し箇所（拡張）
 
-- `pages/cases/index.vue`・`pages/tasks/index.vue`: `useCurrentWorkspace().currentId`が`null`の場合、一覧取得・作成ボタンを表示せず、`workspace-membership`の空状態コンポーネント（`pages/workspaces`の「ワークスペースがありません」相当）と同一の視覚パターンを表示する。新規の見た目は作らない（research.md「6. UIデザインゲートの適用判断」）
-- `pages/tasks/index.vue`・`pages/kanban/index.vue`: `api.listUsers()`の呼び出しを`api.listWorkspaceMembers(currentWorkspaceId)`（`workspace-membership`が`useApiClient.ts`に追加する予定のメソッド）に置換する。`kanban/index.vue`はユーザー一覧をpropsで`TaskDetailModal.vue`／`AssigneeFocusTray.vue`へ渡しているため、この1箇所の置換でカンバン上の再割当候補も連動して制限される。`components/users/AssigneeFilter.vue`・`pages/calendar/index.vue`は担当者「候補選択」ではなくフィルタ／表示用途のため変更しない（Boundary Commitments「Out of Boundary」参照）。新規のUIコンポーネントは追加しない
+- 空状態対象: `pages/index.vue`・`pages/cases/index.vue`・`pages/tasks/index.vue`・`pages/kanban/index.vue`・`pages/calendar/index.vue`・`pages/recurrence/index.vue`・`pages/holidays/index.vue`・`pages/throughput/index.vue`
+- いずれも`useCurrentWorkspace().currentId`が`null`の場合、一覧取得・作成・同期・集計を行わず、`pages/workspaces/index.vue`内の空状態マークアップ（`data-testid="workspace-empty-state"`、「ワークスペースがありません」、作成CTA）と同じ視覚パターンを表示する。共有Vueコンポーネントとしては切り出されていないため、マークアップを各ページへ複製してよい。新規の見た目は作らない（research.md「6. UIデザインゲートの適用判断」）
+- `pages/throughput/index.vue`は本仕様ではAPIをスコープ化しないが、未選択時空状態だけ先に入れる。選択済みでも集計は当面グローバルのまま残りうる点は`velocity-dashboard`で解消する（Downstreamへの申し送り）
+- `pages/tasks/index.vue`・`pages/kanban/index.vue`: `api.listUsers()`の呼び出しを`api.listWorkspaceMembers(currentWorkspaceId)`（実装済み）に置換する。戻り値は`WorkspaceUserSummary`（`userId`／`name`／`email`）であり、既存UIは`User.id`前提のため、optionの`:value`・`:key`・名前解決（`users.find((u) => u.id === ...)`等）を`userId`基準へ合わせて変更する。必要なら呼び出し側で`{ id: member.userId, name: member.name }`へ正規化してもよい。`kanban/index.vue`はユーザー一覧をpropsで`TaskDetailModal.vue`／`AssigneeFocusTray.vue`へ渡しているため、取得元と形の正規化をこの1箇所で揃えればカンバン上の再割当候補も連動して制限される。`components/users/AssigneeFilter.vue`・`pages/calendar/index.vue`のユーザー一覧取得元は担当者「候補選択」ではなくフィルタ／表示用途のため変更しない（Boundary Commitments「Out of Boundary」参照）。新規のUIコンポーネントは追加しない
 
 ## Data Models
 
@@ -392,21 +415,36 @@ model Task {
 ```
 同様の`workspaceId`列・`@relation`・インデックスを`Case`／`RecurringTaskTemplate`／`NonBusinessDay`／`DevelopmentStage`にも追加する。`Workspace`側には`cases Case[]`／`tasks Task[]`等の逆リレーション配列を追加する（`workspace-membership`が定義した`Workspace`モデルへの追記）。
 
+`NonBusinessDay`については列追加に加え、現行のグローバル一意制約をワークスペース単位へ組み替える。
+
+- 現行
+  - `date_active_key`（soft-delete中はNULLになるSTORED GENERATED COLUMN）に対するUNIQUE INDEX `non_business_days_date_active_key_key`がテーブル全体で一意
+- 変更後
+  - 同一ワークスペース内でのみ日付が一意になるよう、`(workspace_id, date_active_key)`相当のUNIQUEへ置き換える（生成列の手編集は既存migrationと同型の注意が必要）
+- 理由
+  - 据え置くと、ワークスペースAとBが同じ日付の非営業日を持てず、可視境界の意図に反する
+
 ## Error Handling
 
 ### Error Strategy
-既存の`HttpError`（`badRequest`/`notFound`/`unauthorized`、`forbidden`を追加利用）パターンをそのまま適用する。
+既存の`HttpError`（`badRequest`／`notFound`／`unauthorized`／`forbidden`）パターンをそのまま適用する。`forbidden`は新規追加しない。
 
 ### Error Categories and Responses
-- **400 Bad Request**: `X-Workspace-Id`ヘッダー欠落・空文字。担当者に非メンバーを指定した場合も、指定値の妥当性エラーとして400とする
-- **403 Forbidden**: `X-Workspace-Id`で指定されたワークスペース自体のメンバーではない場合（`requireWorkspaceMember`が検出）
-- **404 Not Found**: 操作者は現在ワークスペースのメンバーだが、対象リソースIDが別のワークスペースに帰属する場合（各モジュールのService層が検出）。403ではなく404とすることで、所属外リソースの存在を利用者に開示しない
+- 400 Bad Request
+  - `X-Workspace-Id`ヘッダー欠落・空文字
+  - 担当者に非メンバーを指定した場合（指定値の妥当性エラー）
+  - 関連先リソースID（`caseId`／`parentTaskId`／`developmentStageId`等）が現在ワークスペースで解決できない場合。モジュール内で400に統一するか、対象リソース本体と同様に404で隠蔽するかは実装時に一貫方針を選び、テストで固定する
+- 403 Forbidden
+  - `X-Workspace-Id`で指定されたワークスペース自体のメンバーではない場合（`requireWorkspaceMember`が検出）
+- 404 Not Found
+  - 操作者は現在ワークスペースのメンバーだが、操作対象リソースIDが別のワークスペースに帰属する場合（各モジュールのService層が検出）。403ではなく404とすることで、所属外リソースの存在を利用者に開示しない
 
 ## Testing Strategy
 
 ### Unit Tests
 - `WorkspaceScopeGuard.requireWorkspaceMember`: ヘッダー欠落時に400、非メンバー時に403、メンバー時に`currentWorkspaceId`付与を確認
 - `TaskService.create`/`update`: `assigneeUserId`が現在ワークスペースの非メンバーの場合に400で拒否されることを確認
+- `TaskService.create`/`update`: 別ワークスペースの`caseId`／`parentTaskId`／`developmentStageId`を指定した場合に拒否されることを確認（Requirement 3.5）
 - `RecurrenceService.applyToCase`: 対象案件と異なる`workspaceId`のテンプレートが適用候補から除外されることを確認
 - 各モジュール（Case/Task/RecurringTaskTemplate/NonBusinessDay/DevelopmentStage）の`repository`: `workspaceId`を指定した`list`/`findById`が他ワークスペースのレコードを返さないことを確認
 
@@ -417,7 +455,7 @@ model Task {
 
 ### E2E/UI Tests
 - ワークスペースA・Bを作成し、Aのメンバーとしてログインした状態でBの案件・タスクが一覧に表示されないこと、直接URL操作でも到達できないことを確認
-- 現在ワークスペース未選択の状態で`/cases`・`/tasks`にアクセスすると空状態が表示され、作成導線がワークスペース作成へ誘導されることを確認
+- 現在ワークスペース未選択の状態で対象8画面（`/`・`/cases`・`/tasks`・`/kanban`・`/calendar`・`/recurrence`・`/holidays`・`/throughput`）にアクセスすると空状態が表示され、作成導線がワークスペース作成へ誘導されることを確認
 - タスク作成時・カンバン上の再割当時の担当者候補が、現在ワークスペースのメンバーのみに絞り込まれていることを確認
 - 既存の`kanban*.spec.ts`等、単一グローバルデータ前提だったE2Eを「ワークスペース作成・参加」を含む共有fixture経由に更新した上でgreenになることを確認
 
@@ -427,9 +465,11 @@ model Task {
 flowchart LR
   A[開発DBの既存Case/Task等データ] -->|破棄前提| B[DELETE FROM: Task, Case, RecurringTaskTemplate, NonBusinessDay, DevelopmentStage をFK順に削除]
   B --> C[workspace_id列をNOT NULLで追加 + Workspaceへの外部キー + インデックス]
-  C --> D[アプリケーションコードをworkspaceId必須の新シグネチャへ切替]
+  C --> D[NonBusinessDayのグローバルUNIQUEをworkspace単位へ組み替え]
+  D --> E[アプリケーションコードをworkspaceId必須の新シグネチャへ切替]
 ```
 
 - `user-auth`のUserスキーマ拡張migration（`DELETE FROM users`を`ALTER`前に配置）と同じ考え方を踏襲する
 - 削除順序はFK依存関係を考慮する（`Task`は`Case`／`RecurringTaskTemplate`／`DevelopmentStage`を参照するため先に削除）
+- `NonBusinessDay`は`workspace_id`追加後に、既存の`non_business_days_date_active_key_key`を削除し、`(workspace_id, date_active_key)`相当のUNIQUEへ作り直す（生成列まわりはinit migrationと同型の手編集・drift注意）
 - 本migrationは`workspace-membership`のmigration（`Workspace`／`WorkspaceMember`テーブル作成）が適用済みであることが前提

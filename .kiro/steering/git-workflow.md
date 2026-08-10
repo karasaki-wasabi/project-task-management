@@ -35,5 +35,6 @@
 ## push / PR
 
 - pushはユーザーからの明示的な指示があるまで行わない
-- push後、PR作成用のGitHub URL(`.../pull/new/<branch>`)を提示する
-- PRの実際の作成(`Create pull request`のクリック)はユーザーが行う。Claude側では代行しない
+- push後、または「PRを作成」「PRを作って」等の依頼があった場合は、PR作成用のGitHub URL(`.../pull/new/<branch>`)だけを提示する
+- PRの実際の作成(`Create pull request`のクリック、`gh pr create` 等)はユーザーが行う。Claude側では代行しない
+- あわせて、`.github/pull_request_template.md` のテンプレートに沿って埋めたPRタイトルと本文を必ずユーザーに提示する（作成画面へ貼り付けられる形で）
