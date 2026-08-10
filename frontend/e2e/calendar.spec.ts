@@ -50,7 +50,13 @@
 // - Active templates registered in the marker test are stopped afterward
 //   so later case creates in this file are not contaminated.
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
-import { csrfHeaders, expect, registerUser, test } from "./fixtures";
+import {
+  expect,
+  registerWorkspaceMember,
+  test,
+  workspaceScopedHeaders,
+  type WorkspaceInfo,
+} from "./fixtures";
 
 // Backend URL for setup/teardown helpers. Mirrors events-removed.spec.ts;
 // this project's compose publishes the API on BACKEND_PORT (see .env).
@@ -68,21 +74,31 @@ type ApiCase = {
 // - open-ended (only startDate or only endDate): clip to every week from
 //   their anchor to ±infinity in `buildWeekCaseLanes`
 // - prior `e2e-cal-*` fixtures: accumulate on the same next-month weeks
-async function purgePollutingCalendarCases(request: APIRequestContext) {
-  const response = await request.get(`${API_BASE_URL}/api/cases`);
+// Uses the page's authenticated request + workspace header (task 10.1).
+async function purgePollutingCalendarCases(request: APIRequestContext, workspaceId: string) {
+  const response = await request.get(`${API_BASE_URL}/api/cases`, {
+    headers: { "x-workspace-id": workspaceId },
+  });
   expect(response.ok()).toBeTruthy();
   const cases = (await response.json()) as ApiCase[];
   for (const item of cases) {
     const openEnded = item.startDate === null || item.endDate === null;
     const e2eCalendarFixture = item.name.startsWith("e2e-cal-");
     if (!openEnded && !e2eCalendarFixture) continue;
-    const del = await request.delete(`${API_BASE_URL}/api/cases/${item.id}`, { headers: await csrfHeaders(request) });
+    const del = await request.delete(`${API_BASE_URL}/api/cases/${item.id}`, {
+      headers: await workspaceScopedHeaders(request, workspaceId),
+    });
     expect([204, 404]).toContain(del.status());
   }
 }
 
-async function createUser(request: APIRequestContext, name: string) {
-  await registerUser(request, name);
+async function createUser(
+  page: Page,
+  request: APIRequestContext,
+  workspace: WorkspaceInfo,
+  name: string,
+) {
+  await registerWorkspaceMember(page, request, workspace.id, name);
 }
 
 type ApiTemplate = {
@@ -109,15 +125,21 @@ async function registerCaseStartTemplate(page: Page, title: string, priorityLabe
   await expect(page.locator("tbody tr", { hasText: title })).toBeVisible();
 }
 
-async function stopTemplatesByTitle(request: APIRequestContext, titles: string[]) {
-  const response = await request.get(`${API_BASE_URL}/api/recurring-templates`);
+async function stopTemplatesByTitle(
+  request: APIRequestContext,
+  workspaceId: string,
+  titles: string[],
+) {
+  const response = await request.get(`${API_BASE_URL}/api/recurring-templates`, {
+    headers: { "x-workspace-id": workspaceId },
+  });
   expect(response.ok()).toBeTruthy();
   const templates = (await response.json()) as ApiTemplate[];
   const wanted = new Set(titles);
   for (const template of templates) {
     if (!wanted.has(template.title) || !template.isActive) continue;
     const stop = await request.post(`${API_BASE_URL}/api/recurring-templates/${template.id}/stop`, {
-      headers: await csrfHeaders(request),
+      headers: await workspaceScopedHeaders(request, workspaceId),
     });
     expect([204, 200, 404]).toContain(stop.status());
   }
@@ -264,11 +286,12 @@ async function createCaseApplyingTemplates(
 // templates on the shared DB cannot inject scheduled tasks into bar tests.
 async function createCaseFixture(
   request: APIRequestContext,
+  workspaceId: string,
   name: string,
   opts: { startDate?: string; endDate?: string } = {},
 ) {
   const response = await request.post(`${API_BASE_URL}/api/cases`, {
-    headers: await csrfHeaders(request),
+    headers: await workspaceScopedHeaders(request, workspaceId),
     data: {
       name,
       ...(opts.startDate ? { startDate: opts.startDate } : {}),
@@ -282,6 +305,7 @@ async function createCaseFixture(
 test("期限日を持つタスクの表示・開発段階バッジ・担当者絞り込み・詳細モーダル (Requirements 1.1-1.3, 2.1-2.5, 5.1-5.3, 6.1)", async ({
   page,
   request,
+  workspace,
 }) => {
   test.setTimeout(90_000);
   const suffix = Date.now();
@@ -292,8 +316,8 @@ test("期限日を持つタスクの表示・開発段階バッジ・担当者�
   const noDateTaskTitle = `e2e-cal-nodate-${suffix}`;
   const seedCaseName = `e2e-cal-seed-${suffix}`;
 
-  await createUser(request, userAName);
-  await createUser(request, userBName);
+  await createUser(page, request, workspace, userAName);
+  await createUser(page, request, workspace, userBName);
 
   // Requirement 2.2: a task with no scheduledDate is created (via the
   // ordinary /tasks form, which has no scheduledDate field at all) and
@@ -313,7 +337,7 @@ test("期限日を持つタスクの表示・開発段階バッジ・担当者�
   await registerCaseStartTemplate(page, taskATitle, "高");
   await registerCaseStartTemplate(page, taskBTitle, "低");
   await createCaseApplyingTemplates(page, seedCaseName, { startDate: today, endDate: today });
-  await stopTemplatesByTitle(request, [taskATitle, taskBTitle]);
+  await stopTemplatesByTitle(page.request, workspace.id, [taskATitle, taskBTitle]);
 
   await assignViaKanbanBacklog(page, taskATitle, userAName);
   await assignViaKanbanBacklog(page, taskBTitle, userBName);
@@ -399,9 +423,11 @@ test("期限日を持つタスクの表示・開発段階バッジ・担当者�
 test("案件期間バー・片側日付・完了状態・詳細モーダル・月移動 (Requirements 1.1, 3.1-3.5, 4.1-4.3, 5.3, 6.2)", async ({
   page,
   request,
+  workspace,
 }) => {
   test.setTimeout(90_000);
-  await purgePollutingCalendarCases(request);
+  const api = page.request;
+  await purgePollutingCalendarCases(api, workspace.id);
 
   const suffix = Date.now();
   const periodCaseName = `e2e-cal-case-period-${suffix}`;
@@ -409,7 +435,7 @@ test("案件期間バー・片側日付・完了状態・詳細モーダル・�
   const noDateCaseName = `e2e-cal-case-nodate-${suffix}`;
   const filterUserName = `e2e-cal-case-filter-user-${suffix}`;
 
-  await createUser(request, filterUserName);
+  await createUser(page, request, workspace, filterUserName);
 
   const now = new Date();
   const currentLabel = monthLabel(now.getFullYear(), now.getMonth() + 1);
@@ -425,16 +451,16 @@ test("案件期間バー・片側日付・完了状態・詳細モーダル・�
 
   // Requirement 3.1: a case with both startDate/endDate set becomes a
   // period bar.
-  await createCaseFixture(request, periodCaseName, { startDate: periodStart, endDate: periodEnd });
+  await createCaseFixture(api, workspace.id, periodCaseName, { startDate: periodStart, endDate: periodEnd });
 
   // Requirement 3.2: a case with only one of startDate/endDate set becomes
   // an open-ended lane bar (fade + ›/‹) anchored on that date. Deleted at
   // the end of this test so it does not re-pollute future weeks.
-  await createCaseFixture(request, pointCaseName, { startDate: pointDate });
+  await createCaseFixture(api, workspace.id, pointCaseName, { startDate: pointDate });
 
   // Requirement 3.3: a case with neither date set never appears on the
   // calendar.
-  await createCaseFixture(request, noDateCaseName);
+  await createCaseFixture(api, workspace.id, noDateCaseName);
 
   await page.goto("/calendar");
   await expect(monthHeading(page)).toHaveText(currentLabel);
@@ -502,19 +528,24 @@ test("案件期間バー・片側日付・完了状態・詳細モーダル・�
 
   // Soft-delete the open-ended point case so later tests in this file keep
   // a clean lane budget (see purgePollutingCalendarCases).
-  const listed = (await (await request.get(`${API_BASE_URL}/api/cases`)).json()) as ApiCase[];
+  const listed = (await (
+    await api.get(`${API_BASE_URL}/api/cases`, { headers: { "x-workspace-id": workspace.id } })
+  ).json()) as ApiCase[];
   const point = listed.find((item) => item.name === pointCaseName);
   if (point) {
-    await request.delete(`${API_BASE_URL}/api/cases/${point.id}`, { headers: await csrfHeaders(request) });
+    await api.delete(`${API_BASE_URL}/api/cases/${point.id}`, {
+      headers: await workspaceScopedHeaders(api, workspace.id),
+    });
   }
 });
 
 test("案件が3件を超える週の「他N件」から一覧ポップアップ経由で案件詳細へ (Requirement 3.6)", async ({
   page,
-  request,
+  workspace,
 }) => {
   test.setTimeout(90_000);
-  await purgePollutingCalendarCases(request);
+  const api = page.request;
+  await purgePollutingCalendarCases(api, workspace.id);
 
   const suffix = Date.now();
   const now = new Date();
@@ -530,7 +561,7 @@ test("案件が3件を超える週の「他N件」から一覧ポップアップ
   // chip-aware second pass keeps 2 bars and overflows the rest → 「他2件」.
   const caseNames = [0, 1, 2, 3].map((i) => `e2e-cal-overflow-${i}-${suffix}`);
   for (const name of caseNames) {
-    await createCaseFixture(request, name, { startDate: rangeStart, endDate: rangeEnd });
+    await createCaseFixture(api, workspace.id, name, { startDate: rangeStart, endDate: rangeEnd });
   }
 
   await page.goto("/calendar");
@@ -563,10 +594,11 @@ test("案件が3件を超える週の「他N件」から一覧ポップアップ
 
 test("案件バー表示切替スイッチでバーの表示・非表示が切り替わる (Requirements 9.1, 9.2)", async ({
   page,
-  request,
+  workspace,
 }) => {
   test.setTimeout(60_000);
-  await purgePollutingCalendarCases(request);
+  const api = page.request;
+  await purgePollutingCalendarCases(api, workspace.id);
 
   const suffix = Date.now();
   const caseName = `e2e-cal-toggle-${suffix}`;
@@ -578,7 +610,7 @@ test("案件バー表示切替スイッチでバーの表示・非表示が切�
   const rangeStart = isoDate(targetYear, targetMonth, weekMondayDay);
   const rangeEnd = isoDate(targetYear, targetMonth, weekMondayDay + 2);
 
-  await createCaseFixture(request, caseName, { startDate: rangeStart, endDate: rangeEnd });
+  await createCaseFixture(api, workspace.id, caseName, { startDate: rangeStart, endDate: rangeEnd });
 
   await page.goto("/calendar");
   await goToMonth(page, targetYear, targetMonth);

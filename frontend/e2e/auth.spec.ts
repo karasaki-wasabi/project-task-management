@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { registerUser, type RegisteredUser } from "./fixtures";
+import { createAndSelectWorkspace, registerUser, type RegisteredUser } from "./fixtures";
 
 function uniqueUser(name: string): RegisteredUser {
   const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
   return {
+    id: "",
     email: `auth-e2e-${unique}@example.test`,
     name,
     password: "e2e-password-123",
@@ -66,13 +67,15 @@ test("未ログインで tasks へアクセス後、ログインすると元の�
   await page.getByRole("button", { name: "ログイン", exact: true }).click();
 
   await expect(page).toHaveURL("/tasks");
-  await expect(page.getByRole("heading", { name: "タスク一覧" })).toBeVisible();
+  // No workspace yet: empty state replaces the task list (workspace-resource-scope).
+  await expect(page.getByTestId("workspace-empty-state")).toBeVisible();
 });
 
 test("担当者候補に自己登録アカウントの表示名を表示する", async ({ page }) => {
   const user = uniqueUser("E2E 担当者候補ユーザー");
 
   await registerFromPage(page, user);
+  await createAndSelectWorkspace(page, `e2e-auth-ws-${Date.now()}`);
   await page.goto("/tasks");
 
   await expect(page.locator("select").filter({ hasText: "すべて" })).toContainText(user.name);

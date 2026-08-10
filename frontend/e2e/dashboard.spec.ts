@@ -33,6 +33,15 @@
 //     rather than clicking a same-row dashboard link.
 import { expect, test } from "./fixtures";
 
+// CaseFormModal opens CaseTemplateApplyConfirm (Screen A) when start and/or
+// end date is unset; approve with 「作成する」 to finish create.
+async function approveMissingDatesConfirm(page: import("@playwright/test").Page) {
+  const confirm = page.getByRole("dialog", { name: "案件を作成しますか?" });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "作成する", exact: true }).click();
+  await expect(confirm).toBeHidden();
+}
+
 // Drives shared/DatePicker.vue (task 11.2/14.1) to an exact date via its
 // real UI (month nav + day-cell click + 決定) — same helper as
 // cases.spec.ts's setDateViaPicker; duplicated here rather than shared
@@ -105,11 +114,12 @@ test("dashboard shows an overdue case and drills down to the task list (Requirem
   // one thing that lets us drill down to `/tasks?caseId=` without relying
   // on a same-row dashboard link (which does not exist for this test's
   // purposes) or the capped/unsorted overdue list.
+  await formModal.getByRole("button", { name: "登録", exact: true }).click();
   const [createCaseResponse] = await Promise.all([
     page.waitForResponse(
       (res) => res.request().method() === "POST" && /\/api\/cases$/.test(res.url()) && res.ok(),
     ),
-    formModal.getByRole("button", { name: "登録", exact: true }).click(),
+    approveMissingDatesConfirm(page),
   ]);
   const createdCase: { id: string } = await createCaseResponse.json();
 

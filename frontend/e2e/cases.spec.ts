@@ -55,6 +55,15 @@ async function createUnassignedTask(page: import("@playwright/test").Page, title
   await expect(page.locator("li", { hasText: title }).first()).toBeVisible();
 }
 
+// CaseFormModal opens CaseTemplateApplyConfirm (Screen A) when start and/or
+// end date is unset; approve with 「作成する」 to finish create.
+async function approveMissingDatesConfirm(page: import("@playwright/test").Page) {
+  const confirm = page.getByRole("dialog", { name: "案件を作成しますか?" });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "作成する", exact: true }).click();
+  await expect(confirm).toBeHidden();
+}
+
 test("案件を登録すると進捗が反映され、名称検索とステータスチップで絞り込める (Requirements 2.1, 2.2, 3.1-3.3, 7.1-7.3)", async ({
   page,
 }) => {
@@ -156,6 +165,7 @@ test("終了日超過かつ必須タスク未完了の案件は期限超過表�
   await overdueRow.getByRole("switch", { name: `${overdueTaskTitle} を必須タスクにする` }).click();
 
   await formModal.getByRole("button", { name: "登録", exact: true }).click();
+  await approveMissingDatesConfirm(page);
   await expect(formModal).toBeHidden();
 
   const caseRow = page.locator("tbody tr", { hasText: overdueCaseName });
@@ -286,6 +296,7 @@ test("開始日・終了日を未入力のまま案件を登録できる (Requir
   // 開始日・終了日 are both left untouched — Requirement 2.4 permits
   // registering with neither date set.
   await formModal.getByRole("button", { name: "登録", exact: true }).click();
+  await approveMissingDatesConfirm(page);
   await expect(formModal).toBeHidden();
 
   const caseRow = page.locator("tbody tr", { hasText: caseName });
