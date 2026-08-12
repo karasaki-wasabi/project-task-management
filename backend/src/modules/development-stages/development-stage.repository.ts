@@ -19,11 +19,19 @@ function toDomain(row: PrismaDevelopmentStage): DevelopmentStage {
 }
 
 export const developmentStageRepository = {
+  // Inserts at `order` and shifts later stages up by 1 so a new normal stage
+  // can sit before terminal stages (task-status-model 2.2 / design.md).
   async create(name: string, order: number, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage> {
-    const row = await db.developmentStage.create({
-      data: { name, order, workspaceId },
+    return db.$transaction(async (tx) => {
+      await tx.developmentStage.updateMany({
+        where: withWorkspaceScope({ order: { gte: order } }, workspaceId),
+        data: { order: { increment: 1 } },
+      });
+      const row = await tx.developmentStage.create({
+        data: { name, order, kind: "normal", workspaceId },
+      });
+      return toDomain(row);
     });
-    return toDomain(row);
   },
 
   async findById(id: string, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage | null> {

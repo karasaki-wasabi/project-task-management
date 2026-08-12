@@ -3,6 +3,8 @@
 // workspace-resource-scope task 6.1: create/list/rename/reorder/delete/getById
 // are scoped by VerifiedWorkspaceId; cross-workspace access yields 404.
 // task-status-model 2.1: domain responses include kind; getById resolves a stage by id.
+// task-status-model 2.2: create always assigns normal and inserts after normals;
+// delete rejects terminal kinds; rename/reorder stay available (no kind-change path).
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
@@ -21,16 +23,21 @@ function assertValidName(name: string): void {
   }
 }
 
+function isTerminalKind(kind: DevelopmentStage["kind"]): boolean {
+  return kind === "completed" || kind === "cancelled";
+}
+
 export const developmentStagesService = {
   async create(name: string, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage> {
     assertValidName(name);
     const existing = await developmentStageRepository.list(workspaceId);
-    // Use max(order)+1, not existing.length: a prior delete leaves a gap in
-    // the order sequence (soft-deleted rows are excluded from `list()` but
-    // their `order` value was already consumed), so counting live rows can
-    // reassign an `order` that collides with a remaining stage.
-    const nextOrder = Math.max(-1, ...existing.map((stage) => stage.order)) + 1;
-    return developmentStageRepository.create(name, nextOrder, workspaceId);
+    // Insert after the max order among normal stages (design.md Implementation
+    // Notes). Using max(all orders)+1 would place new normals behind terminals.
+    // Prefer max over counting live rows: soft-deleted orders leave gaps that
+    // must not be reused for uniqueness collisions.
+    const normalOrders = existing.filter((stage) => stage.kind === "normal").map((stage) => stage.order);
+    const insertOrder = Math.max(-1, ...normalOrders) + 1;
+    return developmentStageRepository.create(name, insertOrder, workspaceId);
   },
 
   getById(id: string, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage | null> {
@@ -68,6 +75,13 @@ export const developmentStagesService = {
     workspaceId: VerifiedWorkspaceId,
     requestId: string = randomUUID(),
   ): Promise<void> {
+    const existing = await developmentStageRepository.findById(id, workspaceId);
+    if (!existing) {
+      throw notFound(`Development stage not found: ${id}`);
+    }
+    if (isTerminalKind(existing.kind)) {
+      throw badRequest("terminal development stages cannot be deleted");
+    }
     try {
       await developmentStageRepository.delete(id, workspaceId);
     } catch (error) {
