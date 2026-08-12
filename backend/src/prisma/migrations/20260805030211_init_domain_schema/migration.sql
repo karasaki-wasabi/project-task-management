@@ -123,6 +123,37 @@ CREATE TABLE `tasks` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `comments` (
+    `id` VARCHAR(191) NOT NULL,
+    `task_id` VARCHAR(191) NOT NULL,
+    `author_user_id` VARCHAR(191) NOT NULL,
+    `body` TEXT NOT NULL,
+    `edited_at` DATETIME(3) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+    `deleted_at` DATETIME(3) NULL,
+
+    INDEX `comments_task_id_created_at_idx`(`task_id`, `created_at`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `activity_logs` (
+    `id` VARCHAR(191) NOT NULL,
+    `task_id` VARCHAR(191) NOT NULL,
+    `actor_user_id` VARCHAR(191) NULL,
+    `actor_source_label` VARCHAR(191) NULL,
+    `operation_type` ENUM('task_created', 'task_deleted', 'field_changed', 'comment_created', 'comment_edited', 'comment_deleted') NOT NULL,
+    `field_name` ENUM('title', 'status', 'priority', 'detail', 'assignee', 'case', 'isRequiredForCase', 'developmentStage', 'parentTask', 'scheduledEndDate') NULL,
+    `before_value` TEXT NULL,
+    `after_value` TEXT NULL,
+    `occurred_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `activity_logs_task_id_occurred_at_idx`(`task_id`, `occurred_at`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `recurring_task_templates` (
     `id` VARCHAR(191) NOT NULL,
     `title` VARCHAR(191) NOT NULL,
@@ -209,6 +240,18 @@ ALTER TABLE `tasks` ADD CONSTRAINT `tasks_source_template_id_fkey` FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE `tasks` ADD CONSTRAINT `tasks_development_stage_id_fkey` FOREIGN KEY (`development_stage_id`) REFERENCES `development_stages`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `comments` ADD CONSTRAINT `comments_task_id_fkey` FOREIGN KEY (`task_id`) REFERENCES `tasks`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `comments` ADD CONSTRAINT `comments_author_user_id_fkey` FOREIGN KEY (`author_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `activity_logs` ADD CONSTRAINT `activity_logs_task_id_fkey` FOREIGN KEY (`task_id`) REFERENCES `tasks`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `activity_logs` ADD CONSTRAINT `activity_logs_actor_user_id_fkey` FOREIGN KEY (`actor_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `recurring_task_templates` ADD CONSTRAINT `recurring_task_templates_workspace_id_fkey` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
