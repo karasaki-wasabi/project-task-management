@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. Foundation: 基盤・データモデル・共通インフラ
+- [x] 1. Foundation: 基盤・データモデル・共通インフラ
 - [x] 1.1 Docker開発環境の基盤構築
   - `docker-compose.yml`にbackend/frontend/mysqlの3サービスを定義する
   - mysqlサービス(MySQL 8.x)にnamed volumeを設定しデータを永続化する
@@ -45,7 +45,7 @@
   - _Requirements: 10.6_
   - _Boundary: Frontend scaffolding_
 
-- [ ] 2. Users: 担当ユーザー管理
+- [x] 2. Users: 担当ユーザー管理
 - [x] 2.1 (P) UsersServiceの実装
   - ユーザーの登録・一覧・論理削除を行うServiceとRepositoryを実装する
   - 認証・ログイン機能を持たせず、登録済みユーザーの一覧からの選択のみをサポートする
@@ -54,7 +54,7 @@
   - _Requirements: 7.1, 7.3, 9.1, 9.2, 9.3, 9.4_
   - _Boundary: UsersService_
 
-- [ ] 3. Tasks: タスク管理
+- [x] 3. Tasks: タスク管理
 - [x] 3.1 (P) TasksServiceコア機能の実装
   - タスクの登録・一覧・状態更新(未着手/進行中/完了/保留)・優先度(高/中/低)・自由記述メモ(1件)・論理削除を実装する
   - `deliveryId`・`assigneeUserId`によるフィルタ付き一覧取得を実装する
@@ -77,7 +77,7 @@
   - _Boundary: TasksService, kanban/index.vue_
   - _Boundary: TasksService_
 
-- [ ] 4. Deliveries: 納品管理
+- [x] 4. Deliveries: 納品管理
 - [x] 4.1 (P) DeliveriesServiceの実装
   - 納品(名前・納品期日)の登録・納品日更新・一覧・論理削除を実装する(この時点ではRecurrenceServiceへの通知は行わない)
   - タスクを納品に紐付け、必須フラグを設定できるようにする
@@ -85,14 +85,14 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 9.1, 9.2, 9.3, 9.4_
   - _Boundary: DeliveriesService_
 
-- [ ] 5. Events: 非タスクイベント
+- [x] 5. Events: 非タスクイベント
 - [x] 5.1 (P) EventsServiceの実装
   - イベント(名前・日時)の登録・一覧・論理削除を実装する
   - `assigneeUserId`によるフィルタ付き一覧取得を実装し、イベントに完了/未完了などのタスク用ステータスを持たせないことを確認できる状態にする
   - _Requirements: 4.1, 4.2, 4.3, 7.2, 9.1, 9.2, 9.3, 9.4_
   - _Boundary: EventsService_
 
-- [ ] 6. Holidays: 非営業日マスタ
+- [x] 6. Holidays: 非営業日マスタ
 - [x] 6.1 (P) HolidaysServiceの手動管理機能
   - 非営業日(日付・ラベル)の手動登録・削除(論理削除)・一覧を実装する
   - 指定日が非営業日かどうかの判定、および直後/直前の非営業日でない日を返す関数を実装する
@@ -107,7 +107,7 @@
   - _Requirements: 8.8, 8.9_
   - _Boundary: HolidaysService_
 
-- [ ] 7. Throughput: 消化数集計
+- [x] 7. Throughput: 消化数集計
 - [x] 7.1 (P) ThroughputServiceの実装
   - 指定期間(週/月)ごとの完了タスク数集計を実装する
   - 直近4期間の単純移動平均によるフォーキャストを算出し、有効な過去期間が2未満の場合は`null`を返すロジックを実装する
@@ -115,14 +115,14 @@
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 9.5_
   - _Boundary: ThroughputService_
 
-- [ ] 8. Client Errors: フロントエンドエラー受信
+- [x] 8. Client Errors: フロントエンドエラー受信
 - [x] 8.1 (P) ClientErrorsServiceの実装
   - フロントエンドから送信されたエラー情報(メッセージ・スタックトレース・発生ページURL)を受け取るServiceを実装する
   - `POST /api/client-errors`エンドポイントを実装し、受信内容がLogging Infrastructure経由でバックエンドと同じ形式のエラーログとして出力されることを確認できる状態にする
   - _Requirements: 10.4_
   - _Boundary: ClientErrorsService_
 
-- [ ] 9. Recurrence: 繰り返しタスク生成ロジック
+- [x] 9. Recurrence: 繰り返しタスク生成ロジック
 - [x] 9.1 RecurrenceServiceのテンプレート管理
   - 固定間隔(`fixed_interval`)・納品連動(`delivery_relative`)のテンプレート登録、停止(`isActive=false`)、論理削除を実装する
   - テンプレートに全インスタンス共通の既定メモと、非営業日該当時の扱い(そのまま登録/登録しない/次営業日/前営業日)を設定できるようにする
@@ -148,7 +148,7 @@
   - _Depends: 9.2_
   - _Boundary: RecurrenceService_
 
-- [ ] 10. Integration: モジュール間結線とログ計測の組み込み
+- [x] 10. Integration: モジュール間結線とログ計測の組み込み
 - [x] 10.1 納品作成・納品日変更からのRecurrenceService呼び出し結線
   - `DeliveriesService.create`実行時に`RecurrenceService.onDeliveryCreated`を呼び出し、納品連動テンプレートに基づくタスクインスタンスが自動生成されるようにする
   - `DeliveriesService.updateDueDate`実行時に`RecurrenceService.onDeliveryDueDateChanged`を呼び出し、未完了の自動生成タスクの予定日が新しい納品日を基準に再計算され、完了済みタスクは変更されないことを確認できる状態にする
@@ -168,7 +168,7 @@
   - _Requirements: 10.1, 10.3, 10.5_
   - _Depends: 2.1, 3.2, 4.1, 5.1, 6.2, 7.1, 8.1, 9.3_
 
-- [ ] 11. Frontend: 画面実装
+- [x] 11. Frontend: 画面実装
 - [x] 11.1 (P) タスク一覧・階層表示・分割UI
   - タスク一覧画面で状態・優先度がひと目でわかる表示と、保留タスクが一覧に残り続けることを実装する
   - 子タスクの階層表示(折りたたみ可能)とタスク分割操作のUIを実装する
@@ -217,7 +217,7 @@
   - _Depends: 8.1_
   - _Boundary: Frontend/plugins_
 
-- [ ] 12. Validation: 結合・E2E検証
+- [x] 12. Validation: 結合・E2E検証
 - [x] 12.1 タスク一覧の状態・優先度表示と保留タスク保持のE2E検証
   - タスク一覧で状態・優先度がひと目でわかること、保留タスクが一覧から消えないことをE2Eテストで確認する
   - _Requirements: 1.2, 1.4_
@@ -254,7 +254,7 @@
   - _Requirements: 10.3, 10.4, 10.5_
   - _Depends: 10.3, 11.7_
 
-- [ ] 13. Foundation: 開発段階マスタのデータモデル拡張
+- [x] 13. Foundation: 開発段階マスタのデータモデル拡張
 - [x] 13.1 Prisma schema拡張
   - Prisma schemaに開発段階マスタ(名称・並び順・共通監査カラム)のテーブル定義を追加する
   - タスクに開発段階への任意の紐付け(null許容の外部キー)を追加する
@@ -262,7 +262,7 @@
   - マイグレーション適用後、`development_stages`テーブルと`tasks.development_stage_id`カラムが実際にDBへ反映されていることを確認できる状態にする
   - _Requirements: 12.1, 12.3_
 
-- [ ] 14. Development Stages: 開発段階マスタ管理
+- [x] 14. Development Stages: 開発段階マスタ管理
 - [x] 14.1 (P) DevelopmentStagesServiceの実装
   - 開発段階の登録・名称変更・一覧取得・削除を行う
   - 並び替え操作(登録済み全段階のIDを渡すことで並び順を一括更新)を実装する
@@ -272,7 +272,7 @@
   - _Boundary: Backend/development-stages_
   - _Depends: 13.1_
 
-- [ ] 15. Tasks: 開発段階紐付けの拡張
+- [x] 15. Tasks: 開発段階紐付けの拡張
 - [x] 15.1 (P) タスクへの開発段階設定機能の追加
   - タスクの開発段階を、タスクの状態(未着手/進行中/完了/保留)とは独立して更新できるようにする
   - 担当者が未設定のタスクに対しては、開発段階の更新と同時に担当者を設定できるようにする
@@ -282,14 +282,14 @@
   - _Boundary: Backend/tasks_
   - _Depends: 13.1_
 
-- [ ] 16. Integration: 開発段階関連ルートの結線確認
+- [x] 16. Integration: 開発段階関連ルートの結線確認
 - [x] 16.1 development-stagesルートとtasks開発段階ルートの登録確認
   - development-stagesモジュールと、タスクの開発段階更新エンドポイントをアプリ全体(app.ts)に登録する
   - 実際にサーバーを起動し、両エンドポイントが200番台の応答を返すことを確認できる状態にする
   - _Requirements: 12.1, 12.3_
   - _Depends: 14.1, 15.1_
 
-- [ ] 17. Frontend: 画面実装(ダッシュボード・カンバン)
+- [x] 17. Frontend: 画面実装(ダッシュボード・カンバン)
 - [x] 17.1 (P) ダッシュボード画面の実装
   - アプリを開いた際にタスク一覧画面ではなく、状況把握用のダッシュボード画面を表示する
   - 納品期日を過ぎても未完了の必須タスクが存在する納品の一覧を表示する
@@ -318,7 +318,7 @@
   - _Boundary: Frontend/kanban_
   - _Depends: 14.1, 15.1, 16.1, 17.2_
 
-- [ ] 18. Validation: 結合・E2E検証
+- [x] 18. Validation: 結合・E2E検証
 - [x] 18.1 開発段階マスタ削除時のタスク参照解除の統合検証
   - 開発段階を設定したタスクを作成し、その開発段階をマスタから削除した後、当該タスクの開発段階が未設定に戻ることを実HTTP経路で確認する
   - マスタの一覧取得から削除済みの段階が除外されることをあわせて確認する
