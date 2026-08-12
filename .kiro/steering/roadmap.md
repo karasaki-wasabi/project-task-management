@@ -6,6 +6,8 @@
 
 認証方式は HttpOnly Cookie セッション（Approach A）。細かい RBAC・招待リンク・メール送信・JWT／MCP トークンは後続とする。認証とワークスペースが揃った後に、タスク詳細（コメント・操作ログ）へ進み、その後に消化ペース可視化（velocity-dashboard）へ進む。
 
+タスク詳細の検討過程で、ステータスと開発段階に軸が混在しており、タスク全体の完了をシステムが判定できない（＝消化数を自動集計できない）ことが判明した。完了判定を開発段階の種別へ移す task-status-model を切り出し、操作ログがステータス語彙を永続化し始める前に先行させる。
+
 ## Approach Decision
 
 - Chosen
@@ -60,6 +62,13 @@
 
 - [x] user-auth -- User をアカウントへ拡張し、公開自己登録と Cookie セッション認証を入れる。Dependencies: none
 - [x] workspace-membership -- ワークスペース作成・所属・ユーザー検索でのメンバー追加・現在ワークスペース選択。Dependencies: user-auth
-- [ ] workspace-resource-scope -- 案件・タスク等をワークスペース配下へ移行し、所属外アクセスを拒否する。Dependencies: workspace-membership
-- [ ] task-detail -- モーダルは簡易表示のまま、詳細画面でコメント・操作ログ・CRUD を提供する。Dependencies: workspace-resource-scope
-- [ ] velocity-dashboard -- ストーリーポイントと消化ペース／案件見通しのダッシュボード。Dependencies: workspace-resource-scope, task-detail
+- [x] workspace-resource-scope -- 案件・タスク等をワークスペース配下へ移行し、所属外アクセスを拒否する。Dependencies: workspace-membership
+- [ ] task-status-model -- 開発段階に種別（通常/完了/中止）を持たせ、完了判定と `completedAt` 打刻をステータスから段階到達へ移す。ステータスは段階内の作業状態へ再定義する。Dependencies: none（ワークスペース系とは独立。操作ログが記録するステータス語彙を確定させるため task-detail より先行させる）
+- [ ] task-detail -- モーダルは簡易表示のまま、詳細画面でコメント・操作ログ・CRUD を提供する。Dependencies: workspace-resource-scope, task-status-model
+- [ ] velocity-dashboard -- ストーリーポイントと消化ペース／案件見通しのダッシュボード。Dependencies: workspace-resource-scope, task-detail, task-status-model
+
+## Phase: Frontend workspace URL
+
+ワークスペース導入後も画面 URL がフラットなままなので、業務画面を `/workspaces/:workspaceId/...` に移し、URL を現在ワークスペースの正本にする。旧フラット URL と非所属 ID は 404。API パス変更はしない。
+
+- [ ] workspace-url-routing -- 業務画面 URL のワークスペース配下化、`/` の last-used／一覧分岐、Switcher の同一画面種付け替え、URL 一覧の確定。Dependencies: workspace-membership, workspace-resource-scope
