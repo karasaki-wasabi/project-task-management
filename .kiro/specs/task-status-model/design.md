@@ -22,7 +22,8 @@
 | `frontend/pages/workspaces/[workspaceId]/kanban/index.helpers.ts` `computeFocusedTasks` | `status !== "done"` | クローズ済みでない（8.7） |
 | `frontend/pages/workspaces/[workspaceId]/kanban/index.helpers.ts` `computeWorkloadCounts` | `status === "done"` | クローズ済みでない（8.7） |
 | `frontend/pages/workspaces/[workspaceId]/kanban/index.helpers.ts` `computeTaskProgressById` | `status === "done"` | 完了段階の子を数え、中止段階の子を母数から除外（8.6） |
-| `backend/src/prisma/seed.ts` | `status: "done"` | 新しい列挙値へ追従。シードが作るワークスペースでも終端段階を種別つきでちょうど 1 つずつ作る（後述） |
+| `backend/src/prisma/seed.ts`（実体は `seed-manual-data.ts`） | `status: "done"` | 新しい列挙値へ追従。シードが作るワークスペースでも終端段階を種別つきでちょうど 1 つずつ作る（後述） |
+| `backend/src/modules/workspaces/workspace.service.ts` | 終端段階なしで WS を作成 | 作成時に完了・中止段階を種別つきでちょうど 1 つずつ投入する（1.2, 1.3） |
 
 ### Goals
 
@@ -61,9 +62,14 @@
 
 - `tasks` → `development-stages`（サービスの公開インターフェース経由で段階の種別を解決する）
 - `cases` → `tasks`（クローズ判定の述語を参照する。後述の「クローズ述語の共有」を参照）
+- `workspaces` → `development_stages`（ワークスペース作成時に終端段階を Prisma で直接投入する。後述）
 - 既存の共有インフラ（`shared/db.ts`、`shared/http-errors.ts`、ソフトデリート拡張、`Result` 型）
 
-**制約**: `throughput` は新しい概念に依存させない。同モジュールは `completedAt` のみを見る現在の実装を維持する。
+制約: `throughput` は新しい概念に依存させない。同モジュールは `completedAt` のみを見る現在の実装を維持する。
+
+#### ワークスペース作成時の終端投入（意図的な例外）
+
+`DevelopmentStagesService.create` は常に通常種別のみを割り当てる（1.4）。そのため API/UI で新規ワークスペースを作るとき、終端段階の初回投入は `workspaceService.create` が同一トランザクション内で `developmentStage.createMany` により行う。seed（`seed-manual-data.ts`）とマイグレーション（既存 WS）と合わせ、不変条件 1.2 / 1.3 を満たす第三の経路である。
 
 ### Revalidation Triggers
 
@@ -99,16 +105,21 @@ graph TB
     subgraph CasesModule
         CaseRepo[caseRepository]
     end
+    subgraph WorkspacesModule
+        WorkspaceService[WorkspaceService]
+    end
     subgraph ThroughputModule
         ThroughputRepo[throughputRepository]
     end
     CompletedAt[Task completedAt column]
+    StagesTable[development_stages rows]
 
     TaskService --> StageService
     TaskService --> TaskRepo
     TaskService --> CompletedAt
     TaskRepo --> Closure
     CaseRepo --> Closure
+    WorkspaceService --> StagesTable
     ThroughputRepo --> CompletedAt
 ```
 
@@ -154,10 +165,14 @@ backend/src/
 │   │   ├── task.repository.ts              # 子タスク判定をクローズ基準へ
 │   │   ├── task.service.ts                 # 完了日時の打刻責務を段階変更へ移動
 │   │   └── task.routes.ts                  # ステータス列挙値の更新
-│   └── cases/
-│       └── case.repository.ts              # 必須タスクの数え方をクローズ基準へ
+│   ├── cases/
+│   │   └── case.repository.ts              # 必須タスクの数え方をクローズ基準へ
+│   └── workspaces/
+│       └── workspace.service.ts            # 作成時に終端段階を投入（1.2, 1.3）
 └── prisma/
     ├── schema.prisma                       # 種別列挙型・kind 列・ステータス改称
+    ├── seed.ts                             # 入口（実体は seed-manual-data.ts）
+    ├── seed-manual-data.ts                 # 終端段階・ステータス語彙の投入
     └── migrations/<ts>_add_development_stage_kind/migration.sql  # 新規
 
 frontend/
@@ -165,13 +180,14 @@ frontend/
 │   ├── useApiClient.ts                     # TaskStatus 型・DevelopmentStage 型の更新
 │   └── useTaskClosure.ts                   # 新規: クライアント側クローズ判定の唯一の定義
 ├── components/
-│   ├── shared/StatusBadge.vue              # ラベル追従
+│   ├── shared/StatusBadge.vue              # ラベル追従（引継待ち=handoff）
+│   ├── shared/StageBadge.vue               # 新規: 開発段階バッジ
+│   ├── shared/StageBadge.helpers.ts        # StageBadge の variant／接頭辞
 │   ├── tasks/TaskNode.vue                  # 選択肢追従
 │   ├── kanban/TaskDetailModal.vue          # 終端段階でステータスを出さない
-│   └── cases/CaseDetailModal.vue           # 必須タスクの完了表示をクローズ基準へ
+│   └── cases/CaseDetailModal.vue           # 必須タスクの完了表示＋段階一覧取得
 └── pages/workspaces/[workspaceId]/
     ├── calendar/index.helpers.ts           # 期限超過判定をクローズ基準へ（段階一覧は取得済み）
-    ├── cases/index.vue                     # 段階一覧の取得を追加
     ├── tasks/index.vue                     # 段階一覧の取得を追加
     ├── kanban/index.helpers.ts             # 進捗・トレイ・負荷をクローズ基準へ
     ├── kanban/index.vue                    # 完了列へのドラッグ拒否を復旧・通知する
@@ -189,6 +205,8 @@ frontend/
 | `case.repository.ts` | `countRequiredTasks` が中止を除外、`countRequiredCompletedTasks` がクローズ基準で完了を数える |
 | `useApiClient.ts` | `TaskStatus` の値を更新、`DevelopmentStage` に `kind` を追加 |
 | `pages/workspaces/[workspaceId]/kanban/index.vue` | `onDropOnStage` に失敗時の復旧を追加する。完了列へのドラッグが `incomplete_children` で拒否されうるようになるため |
+| `workspace.service.ts` | ワークスペース作成時に完了・中止段階を種別つきでちょうど 1 つずつ投入する |
+| `seed-manual-data.ts` | シードが作るワークスペース向けに終端段階を投入し、タスクのステータス語彙を追従させる |
 
 ## System Flows
 
@@ -224,7 +242,8 @@ flowchart TD
 | Requirement | Summary | Components | Interfaces |
 |-------------|---------|------------|------------|
 | 1.1 | 種別の保持 | DevelopmentStage モデル / ドメイン型 | `DevelopmentStage.kind` |
-| 1.2, 1.3 | 各ワークスペースで完了・中止は常に 1 つ | マイグレーション（既存 WS への初期投入） / DevelopmentStagesService / seed | 1.4〜1.6 の複合で維持 |
+| 1.2, 1.3 | 各ワークスペースで完了・中止は常に 1 つ | マイグレーション（既存 WS） / `seed-manual-data.ts` / `workspaceService.create`。維持は 1.4〜1.6 | 初期投入 3 経路＋通常 create／削除拒否／種別変更経路なし |
+| 1.9 | 新規 WS 作成時に終端を用意する | WorkspaceService | `create`（`developmentStage.createMany`） |
 | 1.4 | 新規は通常種別 | DevelopmentStagesService | `create` |
 | 1.5 | 終端段階の削除拒否 | DevelopmentStagesService | `delete` |
 | 1.6 | 種別変更の拒否 | development-stage.routes | 変更経路を設けない |
@@ -618,13 +637,21 @@ flowchart LR
 | 2 | 名称が「完了」など完了相当とみなせる既存段階がある場合は、新規行を足さず当該行の `kind` を `completed` に昇格してよい |
 | 3 | 中止相当の既存段階が無い場合は、中止種別の段階を新規投入する |
 
-リポジトリには seed 機構が存在する（`backend/src/prisma/seed.ts` ＋ `db:seed`）が、seed は開発用データであり本番では実行されない。マイグレーション適用時点で存在するワークスペースについて、不変条件（1.2, 1.3）を成立させる責務はマイグレーションが負う。
+リポジトリには seed 機構が存在する（入口 `backend/src/prisma/seed.ts`、実体 `seed-manual-data.ts` ＋ `db:seed`）が、seed は開発用データであり本番では実行されない。マイグレーション適用時点で存在するワークスペースについて、不変条件（1.2, 1.3）を成立させる責務はマイグレーションが負う。
 
-#### seed.ts の修正（必須）
+#### seed / ワークスペース作成時の終端投入（必須）
 
-seed はマイグレーション後に新しいワークスペースを作るため、マイグレーションが投入した終端段階を参照できない。当該ワークスペース向けに、完了種別・中止種別の段階を種別つきでちょうど 1 つずつ作成する。
+不変条件 1.2 / 1.3 を満たす初期投入経路は次の 3 つである。
 
-既存の seed は完了相当の段階（`STAGE_DONE_ID`）を種別なしで作っている。種別導入後も通常種別のまま残すと、同じワークスペースに完了種別が足りない／余分な通常の「完了」段階が残る、のいずれかで不変条件が破れる。
+| 経路 | 対象 | 実装 |
+|---|---|---|
+| マイグレーション | 適用時点で存在する各ワークスペース | 手書き SQL |
+| seed | シードが新規に作るワークスペース | `seed-manual-data.ts`（`SEED_STAGE_DONE_ID` / 中止段階を種別つきで投入） |
+| API/UI 作成 | `POST /api/workspaces` 等で作るワークスペース | `workspaceService.create` が同一 TX で `createMany` |
+
+`DevelopmentStagesService.create` は通常種別のみのため、終端の初回投入は上記のいずれかに限る。
+
+既存の seed は完了相当の段階を種別なしで作っていた。種別導入後も通常種別のまま残すと、同じワークスペースに完了種別が足りない／余分な通常の「完了」段階が残る、のいずれかで不変条件が破れる。
 
 タスクのステータス値も新しい列挙値へ追従させ、完了済みとして置くタスクは当該ワークスペースの完了段階へ紐づける。
 
@@ -671,6 +698,8 @@ seed はマイグレーション後に新しいワークスペースを作るた
 
 同一ファイル内の `handleFocusTrayAssign` が、`revertOptimisticMove()` による復旧と共有 `ErrorAlert` への提示という同じ形をすでに実装している。この既存パターンを踏襲し、新しい復旧機構は設けない。
 
+提示文言は API が返すメッセージをそのまま表示する（例: `Task has incomplete children: <taskId>`）。claude design で検討した日本語定型文は採用せず、`error-handling.md` の「バックエンドメッセージを画面に出す」方針に揃える。
+
 ### Monitoring
 
 既存の `businessEventLogger` の粒度を維持する。本仕様では新しい業務イベントを追加しない。段階遷移の記録は task-detail の管掌である。
@@ -711,10 +740,10 @@ seed はマイグレーション後に新しいワークスペースを作るた
 ## Risks
 
 1. **既存テストの改修量**: ステータスを参照するテストはバックエンド 20 ファイル・フロントエンド 6 ファイルに及ぶ。多くは列挙値の機械的置換だが、`task.service.test.ts`・`case.service.test.ts`・`kanban/index.helpers.test.ts`・`TaskCard.helpers.test.ts` は判定基準そのものが変わるため書き換えが必要
-5. **seed.ts の修正漏れ**: seed は新規ワークスペースを作るため、終端段階を種別つきでちょうど 1 つずつ作らないと不変条件が破れる。マイグレーションと同一タスクで扱う
-2. **新しい通常段階の挿入位置**: `create` の挙動を変更する。既存の `reorder` の事前条件（現存集合との完全一致）には影響しない
-3. **不変条件の担保範囲**: 各ワークスペースで完了・中止がそれぞれ 1 つであることはアプリケーション層で維持する（後述の決定を参照）。データベースへ直接 SQL を実行した場合は不変条件が破れうる。運用上これを許容する
-4. **マイグレーション適用時の操作ミス**: `prisma migrate dev` を誤って実行すると生成列と一意インデックスが失われる。マイグレーション SQL 自体にコメントを残すことで緩和する
+5. seed / ワークスペース作成の修正漏れ: seed（`seed-manual-data.ts`）と `workspaceService.create` のどちらで終端段階を作らないと不変条件が破れる。マイグレーションと同一タスク群で扱う
+2. 新しい通常段階の挿入位置: `create` の挙動を変更する。既存の `reorder` の事前条件（現存集合との完全一致）には影響しない
+3. 不変条件の担保範囲: 各ワークスペースで完了・中止がそれぞれ 1 つであることはアプリケーション層で維持する（後述の決定を参照）。データベースへ直接 SQL を実行した場合は不変条件が破れうる。運用上これを許容する
+4. マイグレーション適用時の操作ミス: `prisma migrate dev` を誤って実行すると生成列と一意インデックスが失われる。マイグレーション SQL 自体にコメントを残すことで緩和する
 
 ## Design Decisions（確認済み）
 
@@ -725,8 +754,9 @@ seed はマイグレーション後に新しいワークスペースを作るた
 | 仕組み | 対応する要件 |
 |---|---|
 | マイグレーションでの、既存各ワークスペースへの初期投入 | 1.2, 1.3 |
-| seed が新規ワークスペースに終端段階を種別つきでちょうど 1 つずつ作る | 1.2, 1.3 |
-| `create` が常に通常種別を割り当てる | 1.4 |
+| seed（`seed-manual-data.ts`）がデモ用ワークスペースに終端段階を種別つきでちょうど 1 つずつ作る | 1.2, 1.3 |
+| `workspaceService.create` が API/UI 新規ワークスペースに終端段階を種別つきでちょうど 1 つずつ作る | 1.2, 1.3, 1.9 |
+| `DevelopmentStagesService.create` が常に通常種別を割り当てる | 1.4 |
 | 種別を変更する API 経路が存在しない | 1.6 |
 | 終端種別の削除を拒否する | 1.5 |
 

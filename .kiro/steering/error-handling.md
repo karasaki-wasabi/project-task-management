@@ -7,8 +7,10 @@
 `backend/src/shared/http-errors.ts` の `HttpError`(`statusCode`を持つ`Error`のサブクラス)を、サービス層が業務ルール違反時に直接throwする。ヘルパー関数(`badRequest(message)`, `notFound(message)`など)を使い、文字列や裸のstatusCodeを直接扱わない。
 
 ```typescript
+// 例: 未クローズの子がある親を完了段階へ移すとき（実際の TasksService は Result で incomplete_children を返し、
+// ルート層が 409 + "Task has incomplete children: <taskId>" に変換する）
 if (incompleteChildren > 0) {
-  throw new HttpError(409, "未完了の子タスクが存在するため完了にできません");
+  throw new HttpError(409, "Task has incomplete children");
 }
 ```
 

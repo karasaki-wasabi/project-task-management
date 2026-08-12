@@ -63,7 +63,7 @@
 - [x] user-auth -- User をアカウントへ拡張し、公開自己登録と Cookie セッション認証を入れる。Dependencies: none
 - [x] workspace-membership -- ワークスペース作成・所属・ユーザー検索でのメンバー追加・現在ワークスペース選択。Dependencies: user-auth
 - [x] workspace-resource-scope -- 案件・タスク等をワークスペース配下へ移行し、所属外アクセスを拒否する。Dependencies: workspace-membership
-- [ ] task-status-model -- 開発段階に種別（通常/完了/中止）を持たせ、完了判定と `completedAt` 打刻をステータスから段階到達へ移す。ステータスは段階内の作業状態へ再定義する。Dependencies: none（ワークスペース系とは独立。操作ログが記録するステータス語彙を確定させるため task-detail より先行させる）
+- [x] task-status-model -- 開発段階に種別（通常/完了/中止）を持たせ、完了判定と `completedAt` 打刻をステータスから段階到達へ移す。ステータスは段階内の作業状態へ再定義する。Dependencies: none（ワークスペース系とは独立。操作ログが記録するステータス語彙を確定させるため task-detail より先行させる）
 - [ ] task-detail -- モーダルは簡易表示のまま、詳細画面でコメント・操作ログ・CRUD を提供する。Dependencies: workspace-resource-scope, task-status-model
 - [ ] velocity-dashboard -- ストーリーポイントと消化ペース／案件見通しのダッシュボード。Dependencies: workspace-resource-scope, task-detail, task-status-model
 

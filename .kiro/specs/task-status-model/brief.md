@@ -91,8 +91,8 @@
 
 ## Constraints
 
-- 本番データがないため、スキーマ変更はマイグレーション削除＋DB リセットで対応する
-- `.kiro/steering/product.md` の記述（「状態変更(未着手/進行中/完了/保留)」「子タスクが未完了のまま親を完了にはできない」）の更新が必要
+- スキーマ変更は手書きマイグレーション SQL を追加し `prisma migrate deploy` で適用する（差分生成を伴う `migrate dev` は使わない。詳細は design.md）
+- `.kiro/steering/product.md` のステータス／完了語彙は本仕様の実装に合わせて更新済み
 - 画面変更を含むため `.kiro/steering/ui-design.md` の claude design ゲート対象
 
 ## Resolved Decisions

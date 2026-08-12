@@ -87,7 +87,7 @@ Restrained戦略: 中立色(スレート系グレー)が画面の大半を占め
 - **ボーダー**(`#e2e8f0`): カード・テーブルの輪郭線
 
 ### Named Rules
-**The Badge-Only Color Rule.** 意味を持つ色(赤=危険/優先度高、黄=保留/優先度中、緑=完了、青=進行中)は、常にバッジ(pill形状)としてのみ使う。行全体やセクション全体を状態色で塗りつぶすのは、期限超過の納品を強調する場合(`danger-bg`の淡い背景)のみの例外とする。
+The Badge-Only Color Rule. 意味を持つ色(赤=危険/優先度高、黄=保留/優先度中、緑=完了段階、青=作業中、ティール=引継待ち)は、常にバッジとしてのみ使う。ステータスは塗りピル、開発段階は枠線つき角丸矩形（`StageBadge`）で形を分ける。行全体やセクション全体を状態色で塗りつぶすのは、期限超過の納品を強調する場合(`danger-bg`の淡い背景)のみの例外とする。
 
 ## Typography
 
@@ -117,9 +117,18 @@ Restrained戦略: 中立色(スレート系グレー)が画面の大半を占め
 - 状態: `disabled:opacity-50 disabled:cursor-not-allowed`、フォーカス時は`focus:ring-2 focus:ring-blue-500`
 
 ### Badges(`components/shared/Badge.vue`)
-- **形状:** pill(`rounded-full px-2 py-0.5 text-xs font-medium`)
-- **トーン:** `neutral`(スレート)/`info`(青、進行中)/`success`(緑、完了)/`warning`(黄、保留・優先度中)/`danger`(赤、優先度高・期限超過)
-- `StatusBadge`/`PriorityBadge`はこの`Badge`の薄いラッパーで、値→トーン+日本語ラベルのマッピングのみを持つ
+- 形状
+  - ステータス・優先度: pill(`rounded-full px-2 py-0.5 text-xs font-medium`)
+  - 開発段階（`StageBadge`）: 角丸 6px・枠線・接頭辞つき（塗りピルではない）
+- トーン
+  - `neutral`（スレート、未着手）
+  - `info`（青、作業中）
+  - `handoff`（ティール `#ccfbf1` / `#0f766e`、引継待ち）
+  - `warning`（黄、保留・優先度中）
+  - `danger`（赤、優先度高・期限超過）
+  - `success`（緑）はステータスには使わず、完了種別の段階バッジに予約する
+- `StatusBadge` / `PriorityBadge` はこの `Badge` の薄いラッパーで、値→トーン+日本語ラベルのマッピングのみを持つ
+- ステータス語彙: 未着手 / 作業中 / 引継待ち / 保留（タスク全体の完了は開発段階の種別で表す）
 
 ### Inputs / Fields
 - **Style:** `rounded-md border border-slate-300 px-2.5 py-1.5 text-sm`
@@ -154,5 +163,5 @@ Restrained戦略: 中立色(スレート系グレー)が画面の大半を占め
 
 ### Don't:
 - **Don't** side-stripe border(`border-left`等の色付きアクセント線)を強調表現に使わない。背景色の面かバッジで表現する
-- **Don't** アクセントの青を状態表現(進行中以外)に使わない。青は「操作」を意味する色として予約する
+- Don't アクセントの青を状態表現(作業中以外)に使わない。青は「操作」と作業中ステータスに限って使う
 - **Don't** 新しいコンポーネントのために新しい角丸値・枠線スタイルを追加しない。`rounded-md`/`rounded-lg`と`ring-1 ring-slate-200`の2パターンで統一する
