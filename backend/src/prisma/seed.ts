@@ -178,7 +178,7 @@ async function main(): Promise<void> {
     data: {
       id: TASK_DONE_ID,
       title: "完了済みタスク",
-      status: "done",
+      status: "ready_for_handoff",
       priority: "medium",
       caseId: CASE_DONE_ID,
       isRequiredForCase: true,

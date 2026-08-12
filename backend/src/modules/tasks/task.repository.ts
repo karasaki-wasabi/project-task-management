@@ -82,7 +82,7 @@ export const taskRepository = {
   // Soft-deleted children are excluded by the shared `db` client's default
   // filter, so a deleted (rather than done) child never blocks completion.
   countIncompleteChildren(parentTaskId: string): Promise<number> {
-    return db.task.count({ where: { parentTaskId, status: { not: "done" } } });
+    return db.task.count({ where: { parentTaskId, status: { not: "ready_for_handoff" } } });
   },
 
   // Interactive-transaction callback form; equivalent to the `$transaction([...])`

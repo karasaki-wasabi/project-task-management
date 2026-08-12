@@ -144,7 +144,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     const created = await tasksService.create({ title: "finish me", priority: "high", workspaceId: workspaceA });
     if (!created.ok) throw new Error("setup failed");
 
-    const done = await tasksService.updateStatus(created.value.id, workspaceA, "done");
+    const done = await tasksService.updateStatus(created.value.id, workspaceA, "ready_for_handoff");
     expect(done.ok).toBe(true);
     if (done.ok) {
       expect(done.value.completedAt).toBeInstanceOf(Date);
@@ -160,7 +160,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
   });
 
   it("returns not_found when updating status of a non-existent task", async () => {
-    const result = await tasksService.updateStatus(randomUUID(), workspaceA, "done");
+    const result = await tasksService.updateStatus(randomUUID(), workspaceA, "ready_for_handoff");
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -586,7 +586,7 @@ describe("tasksService hierarchy (task 3.2)", () => {
     });
     if (!child.ok) throw new Error("setup failed");
 
-    const result = await tasksService.updateStatus(parent.value.id, workspaceA, "done");
+    const result = await tasksService.updateStatus(parent.value.id, workspaceA, "ready_for_handoff");
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -608,10 +608,10 @@ describe("tasksService hierarchy (task 3.2)", () => {
       workspaceId: workspaceA,
     });
     if (!child.ok) throw new Error("setup failed");
-    const childDone = await tasksService.updateStatus(child.value.id, workspaceA, "done");
+    const childDone = await tasksService.updateStatus(child.value.id, workspaceA, "ready_for_handoff");
     if (!childDone.ok) throw new Error("setup failed");
 
-    const result = await tasksService.updateStatus(parent.value.id, workspaceA, "done");
+    const result = await tasksService.updateStatus(parent.value.id, workspaceA, "ready_for_handoff");
 
     expect(result.ok).toBe(true);
 
@@ -634,7 +634,7 @@ describe("tasksService hierarchy (task 3.2)", () => {
     const deleted = await tasksService.delete(child.value.id, workspaceA);
     if (!deleted.ok) throw new Error("setup failed");
 
-    const result = await tasksService.updateStatus(parent.value.id, workspaceA, "done");
+    const result = await tasksService.updateStatus(parent.value.id, workspaceA, "ready_for_handoff");
 
     expect(result.ok).toBe(true);
 

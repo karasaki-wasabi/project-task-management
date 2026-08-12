@@ -551,7 +551,7 @@ describe("12.6: 論理削除の一覧除外と消化数実績不変の統合検�
         data: {
           title: `e2e-throughput-${randomUUID()}`,
           priority: "low",
-          status: "done",
+          status: "ready_for_handoff",
           completedAt,
           workspaceId,
         },

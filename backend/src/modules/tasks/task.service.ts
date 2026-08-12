@@ -143,14 +143,14 @@ export const tasksService = {
       return err({ type: "not_found", taskId });
     }
 
-    if (status === "done") {
+    if (status === "ready_for_handoff") {
       const incompleteChildren = await taskRepository.countIncompleteChildren(taskId);
       if (incompleteChildren > 0) {
         return err({ type: "incomplete_children", taskId });
       }
     }
 
-    const completedAt = status === "done" ? new Date() : null;
+    const completedAt = status === "ready_for_handoff" ? new Date() : null;
     try {
       const task = await taskRepository.updateStatus(taskId, workspaceId, status, completedAt);
       return ok(task);

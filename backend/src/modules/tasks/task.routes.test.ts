@@ -198,7 +198,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
         {
           method: "PATCH",
           url: `/api/tasks/${randomUUID()}/status`,
-          payload: { status: "done" },
+          payload: { status: "ready_for_handoff" },
         },
         memberCsrf.cookie,
         memberCsrf.token,
@@ -699,7 +699,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
         {
           method: "PATCH",
           url: `/api/tasks/${parentId}/status`,
-          payload: { status: "done" },
+          payload: { status: "ready_for_handoff" },
         },
         memberCsrf.cookie,
         memberCsrf.token,

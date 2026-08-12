@@ -244,7 +244,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
           priority: "low",
           caseId: created.id,
           isRequiredForCase: true,
-          status: "done",
+          status: "ready_for_handoff",
           workspaceId: workspaceA,
         },
       }),
@@ -292,7 +292,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
           priority: "low",
           caseId: created.id,
           isRequiredForCase: true,
-          status: "done",
+          status: "ready_for_handoff",
           workspaceId: workspaceA,
         },
       });
@@ -304,7 +304,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
           priority: "low",
           caseId: created.id,
           isRequiredForCase: true,
-          status: "done",
+          status: "ready_for_handoff",
           workspaceId: workspaceB,
         },
       });

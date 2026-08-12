@@ -9,8 +9,10 @@ import { resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   CaseRelativeAnchor,
+  DevelopmentStageKind,
   Prisma,
   PrismaClient,
+  TaskStatus,
 } from "@prisma/client";
 import * as PrismaClientModule from "@prisma/client";
 
@@ -610,4 +612,196 @@ describe("workspace resource scope schema (task 1.5)", () => {
     await prisma.user.delete({ where: { id: a.creator.id } });
     await prisma.user.delete({ where: { id: b.creator.id } });
   });
+});
+
+describe("task-status-model schema (task 1.1)", () => {
+  async function createWorkspaceFixture(suffix: string) {
+    const creator = await prisma.user.create({
+      data: {
+        email: `tsm-creator-${suffix}@example.test`,
+        name: `tsm-creator-${suffix}`,
+        passwordHash: "test-password-hash",
+      },
+    });
+    const workspace = await prisma.workspace.create({
+      data: {
+        name: `tsm-ws-${suffix}`,
+        createdByUserId: creator.id,
+      },
+    });
+    return { creator, workspace };
+  }
+
+  it("exposes DevelopmentStageKind and renames TaskStatus.done to ready_for_handoff", () => {
+    expect(DevelopmentStageKind).toEqual({
+      normal: "normal",
+      completed: "completed",
+      cancelled: "cancelled",
+    });
+    expect(TaskStatus).toEqual({
+      not_started: "not_started",
+      in_progress: "in_progress",
+      ready_for_handoff: "ready_for_handoff",
+      on_hold: "on_hold",
+    });
+    expect(TaskStatus).not.toHaveProperty("done");
+
+    expect(Prisma.DevelopmentStageScalarFieldEnum).toMatchObject({
+      kind: "kind",
+    });
+    expect(Prisma.TaskScalarFieldEnum).not.toHaveProperty("cancelledAt");
+
+    const schemaPath = resolve(__dirname, "schema.prisma");
+    const schema = readFileSync(schemaPath, "utf8");
+    expect(schema).toMatch(/enum DevelopmentStageKind \{[\s\S]*normal[\s\S]*completed[\s\S]*cancelled/);
+    expect(schema).toMatch(/kind\s+DevelopmentStageKind\s+@default\(normal\)/);
+    expect(schema).toMatch(/ready_for_handoff/);
+    expect(schema).not.toMatch(/^\s*done\s*$/m);
+    expect(schema).not.toMatch(/cancelledAt|cancelled_at/);
+  });
+
+  it("provides development_stages.kind and omits cancelled-at on tasks", async () => {
+    const stageColumns = await prisma.$queryRaw<
+      Array<{ Field: string; Type: string; Default: string | null }>
+    >`SHOW COLUMNS FROM development_stages LIKE 'kind'`;
+    expect(stageColumns).toHaveLength(1);
+    expect(stageColumns[0]?.Type).toMatch(/enum/i);
+    expect(stageColumns[0]?.Default).toBe("normal");
+
+    const cancelledColumns = await prisma.$queryRaw<Array<{ Field: string }>>`
+      SHOW COLUMNS FROM tasks LIKE 'cancelled_at'
+    `;
+    expect(cancelledColumns).toHaveLength(0);
+
+    const statusColumn = await prisma.$queryRaw<Array<{ Type: string }>>`
+      SHOW COLUMNS FROM tasks LIKE 'status'
+    `;
+    expect(statusColumn[0]?.Type).toContain("ready_for_handoff");
+    expect(statusColumn[0]?.Type).not.toContain("'done'");
+  });
+
+  it("keeps a migrate-dev warning in the hand-written migration SQL", () => {
+    const migrationPath = resolve(
+      __dirname,
+      "migrations/20260812000000_add_development_stage_kind/migration.sql",
+    );
+    const sql = readFileSync(migrationPath, "utf8");
+    expect(sql).toMatch(/prisma migrate dev/);
+    expect(sql).toMatch(/STORED GENERATED COLUMN|生成列/);
+    expect(sql).toMatch(/prisma migrate deploy/);
+  });
+
+  it("ensures each workspace has one completed and one cancelled stage; completedAt tasks sit on completed", async () => {
+    const suffix = randomUUID();
+    const a = await createWorkspaceFixture(`a-${suffix}`);
+    const b = await createWorkspaceFixture(`b-${suffix}`);
+
+    const completedA = await prisma.developmentStage.create({
+      data: {
+        name: "完了",
+        order: 10,
+        workspaceId: a.workspace.id,
+        kind: "completed",
+      },
+    });
+    const cancelledA = await prisma.developmentStage.create({
+      data: {
+        name: "中止",
+        order: 11,
+        workspaceId: a.workspace.id,
+        kind: "cancelled",
+      },
+    });
+    await prisma.developmentStage.create({
+      data: {
+        name: "未着手",
+        order: 0,
+        workspaceId: a.workspace.id,
+        kind: "normal",
+      },
+    });
+
+    const completedB = await prisma.developmentStage.create({
+      data: {
+        name: "完了",
+        order: 10,
+        workspaceId: b.workspace.id,
+        kind: "completed",
+      },
+    });
+    await prisma.developmentStage.create({
+      data: {
+        name: "中止",
+        order: 11,
+        workspaceId: b.workspace.id,
+        kind: "cancelled",
+      },
+    });
+
+    const completedAt = new Date("2033-01-15T00:00:00.000Z");
+    const taskA = await prisma.task.create({
+      data: {
+        title: `tsm-done-a-${suffix}`,
+        priority: "medium",
+        status: "not_started",
+        workspaceId: a.workspace.id,
+        developmentStageId: completedA.id,
+        completedAt,
+      },
+    });
+    const taskB = await prisma.task.create({
+      data: {
+        title: `tsm-done-b-${suffix}`,
+        priority: "medium",
+        status: "not_started",
+        workspaceId: b.workspace.id,
+        developmentStageId: completedB.id,
+        completedAt,
+      },
+    });
+
+    try {
+      for (const workspaceId of [a.workspace.id, b.workspace.id]) {
+        const kinds = await prisma.developmentStage.groupBy({
+          by: ["kind"],
+          where: { workspaceId, deletedAt: null },
+          _count: { _all: true },
+        });
+        const countByKind = Object.fromEntries(
+          kinds.map((row) => [row.kind, row._count._all]),
+        );
+        expect(countByKind.completed).toBe(1);
+        expect(countByKind.cancelled).toBe(1);
+      }
+
+      expect(completedA.id).not.toBe(completedB.id);
+      expect(cancelledA.id).not.toBe(completedA.id);
+
+      const completedAtTasks = await prisma.task.findMany({
+        where: {
+          id: { in: [taskA.id, taskB.id] },
+          completedAt: { not: null },
+        },
+        include: { developmentStage: true },
+      });
+      expect(completedAtTasks).toHaveLength(2);
+      for (const task of completedAtTasks) {
+        expect(task.developmentStage?.kind).toBe("completed");
+        expect(task.developmentStage?.workspaceId).toBe(task.workspaceId);
+        expect(task.status).toBe("not_started");
+        expect(task.completedAt).toEqual(completedAt);
+      }
+    } finally {
+      await prisma.$executeRaw`DELETE FROM tasks WHERE id IN (${taskA.id}, ${taskB.id})`;
+      await prisma.$executeRaw`
+        DELETE FROM development_stages
+        WHERE workspace_id IN (${a.workspace.id}, ${b.workspace.id})
+      `;
+      await prisma.workspace.delete({ where: { id: a.workspace.id } });
+      await prisma.workspace.delete({ where: { id: b.workspace.id } });
+      await prisma.user.delete({ where: { id: a.creator.id } });
+      await prisma.user.delete({ where: { id: b.creator.id } });
+    }
+  });
+
 });

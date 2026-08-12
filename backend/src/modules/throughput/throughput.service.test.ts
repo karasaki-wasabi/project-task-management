@@ -27,7 +27,7 @@ async function completedTask(completedAt: Date): Promise<string> {
     data: {
       title: `task-${randomUUID()}`,
       priority: "low",
-      status: "done",
+      status: "ready_for_handoff",
       completedAt,
       workspaceId,
     },

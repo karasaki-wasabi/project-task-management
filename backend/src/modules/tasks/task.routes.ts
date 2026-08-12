@@ -12,7 +12,7 @@ import { tasksService } from "./task.service.js";
 import type { TaskError } from "./task.types.js";
 
 const priority = z.enum(["high", "medium", "low"]);
-const taskStatus = z.enum(["not_started", "in_progress", "done", "on_hold"]);
+const taskStatus = z.enum(["not_started", "in_progress", "ready_for_handoff", "on_hold"]);
 
 const createTaskBodySchema = z.object({
   title: z.string(),
