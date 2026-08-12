@@ -148,3 +148,4 @@
   - _Requirements: 1.4, 2.1, 2.2, 4.1, 4.3, 4.5, 6.1, 6.7, 6.8, 7.3_
 ## Implementation Notes
 - ActivityLog は deletedAt を持たないため、ソフトデリート拡張は対象モデルに限定する必要がある（task 2）
+- タイムラインの操作者・関連値は詳細ページの候補一覧（users/cases/stages/tasks）から表示名解決する（validate-impl 指摘）
