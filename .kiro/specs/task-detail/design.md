@@ -2,17 +2,17 @@
 
 ## Overview
 
-**Purpose**: タスクの専用詳細ページを新設し、既存の `TaskDetailModal` だけでは扱えないコメント・操作ログ・タイムラインを1画面に統合する。既存の `TaskDetailModal` は軽微編集専用に縮小し、詳細ページへの導線を追加する。
+**Purpose**: タスクの専用詳細ページを新設し、既存の `TaskDetailModal` だけでは扱えないコメント・操作ログ・タイムラインを1画面に統合する。既存の `TaskDetailModal` は簡易表示を基本とし、ステータス以外の軽微編集と詳細ページへの導線を残す。
 
 **Users**: ワークスペースのメンバーが、カンバン/カレンダーからの簡易確認では足りない場面（経緯の確認、コメントでの議論、変更履歴の追跡）で利用する。
 
-**Impact**: `tasks` モジュールの更新API（`PATCH /api/tasks/:id`）が `parentTaskId` と `scheduledEndDate`（終了予定日）を受け付けるよう拡張される。作成API（`POST /api/tasks`）も任意の `scheduledEndDate` を受け付け、複製（Requirement 2.9）を1回の POST で完結できるようにする（現状は recurrence 内部経路のみが当該フィールドを設定可能）。`TasksService` の書き込み系メソッド（`create`/`update`/`updateStatus`/`updateDevelopmentStage`/`addChild`/`splitTask`/`delete`）すべてに操作ログ記録が追加される。`comments`・`activity-logs` という2つの新規ドメインモジュールが追加される。フィールド語彙は先行仕様 `task-field-rename` 完了後の `detail` / `scheduledEndDate` を前提とする。
+**Impact**: `tasks` モジュールの更新API（`PATCH /api/tasks/:id`）が `parentTaskId` と `scheduledEndDate`（終了予定日）を受け付けるよう拡張される。作成API（`POST /api/tasks`）も任意の `scheduledEndDate` を受け付け、複製（Requirement 2.9）を1回の POST で完結できるようにする。`TasksService` の書き込み系メソッド（`create`/`update`/`updateStatus`/`updateDevelopmentStage`/`addChild`/`splitTask`/`delete`）すべてに操作ログ記録が追加される。`comments`・`activity-logs` という2つの新規ドメインモジュールが追加される。フィールド語彙は先行仕様 `task-field-rename` 完了後の `detail` / `scheduledEndDate` を前提とする。
 
 ### Goals
 - タスク詳細ページで CRUD・コメント・タイムラインを1画面に統合する
 - タスクへの操作（作成・削除・フィールド変更・コメント操作）を漏れなくドメインイベントとして永続化する
-- 既存 `TaskDetailModal` を軽微編集専用に縮小し、詳細ページへの導線を追加する
-
+- 既存 `TaskDetailModal` を簡易表示（ステータス編集なしの軽微編集）に整理し、詳細ページへの導線を追加する
+- 論理削除済みタスクを詳細ページ／モーダルで参照専用表示する（`deletedAt` 判定）
 ### Non-Goals
 - タスクのフィールド定義そのものの変更・改名（`task-field-rename` / 凍結済み `task-delivery-management` の管掌）
 - 開発段階・ステータスの語彙定義（`task-status-model` の管掌）
@@ -30,7 +30,7 @@
 - タスク作成API（`POST /api/tasks`）への任意 `scheduledEndDate` 受付の追加（複製で終了予定日を引き継ぐため。専用の複製エンドポイントは持たない）
 - タスク一覧API（`GET /api/tasks`）への `titleContains` / `excludeSubtreeOf` / `excludeClosed` の追加（親タスク候補のサーバー側絞り込み）
 - タスクの複製（拡張後の作成APIをクライアント側で合成する形で提供し、新規バックエンドAPIは持たない）
-- 既存 `TaskDetailModal` の縮小（コメント・タイムラインを持たせず、詳細ページへの導線を追加）
+- 既存 `TaskDetailModal` の縮小（簡易表示・ステータス以外の軽微編集、コメント・タイムラインなし、詳細ページへの導線、削除済みは `deletedAt` で参照専用）
 
 ### Out of Boundary
 - タスクの基本フィールド（タイトル・優先度・案件関連付け等）の定義自体（凍結済み `task-delivery-management`）
@@ -70,10 +70,9 @@
 
 したがって Requirement 5.4（起点画面によらず記録する）は、`updateStatus` / `updateDevelopmentStage` / `update` へのフックで満たせる。繰り返しテンプレートの自動生成（`recurrence.service.ts`）も `TasksService.create`/`delete` を経由しているため、追加のフックは不要。
 
-`PATCH /api/tasks/:id` は現状（`task-field-rename` 完了後）`title`/`priority`/`detail`/`caseId`/`isRequiredForCase`/`assigneeUserId` 等を受け付け、`parentTaskId`（親タスク）と `scheduledEndDate`（終了予定日）は編集対象になっていない。Requirement 2.1 を満たすには、この更新APIの入力型を拡張し、親タスク変更時の循環検出（2.5）・クローズ済み親の拒否（2.6）を追加する必要がある。`caseId` 解除時の `isRequiredForCase` 自動オフ（2.8）は既存の `TasksService.update` に実装済みであり、本仕様の追加作業は操作ログへの `field_changed(isRequiredForCase)` 記録である。
+本仕様の実装により、`PATCH /api/tasks/:id` は `parentTaskId`（親タスク）と `scheduledEndDate`（終了予定日）を編集対象に含め、親タスク変更時の循環検出（2.5）・クローズ済み親の拒否（2.6）を行う。`caseId` 解除時の `isRequiredForCase` 自動オフ（2.8）は既存の `TasksService.update` に実装済みであり、本仕様の追加作業は操作ログへの `field_changed(isRequiredForCase)` 記録である。
 
-`POST /api/tasks` の公開 Zod も現状は `scheduledEndDate` を受け付けない（service の `CreateTaskInput` にはあるが、呼び出しは recurrence 内部が主）。Requirement 2.9 の複製で終了予定日を引き継ぐため、本仕様で公開 create スキーマへ任意 `scheduledEndDate` を追加する。
-
+`POST /api/tasks` の公開 Zod も任意の `scheduledEndDate` を受け付ける（Requirement 2.9 の複製で終了予定日を引き継ぐため）。
 ### Architecture Pattern & Boundary Map
 
 ```mermaid
@@ -154,7 +153,7 @@ frontend/
 ├── components/comments/
 │   └── CommentComposer.vue         # 投稿・編集フォーム（新規）
 ├── components/kanban/
-│   └── TaskDetailModal.vue         # 変更: 詳細ページへの導線リンクを追加。既存の軽微編集フィールドは維持
+│   └── TaskDetailModal.vue         # 変更: 詳細ページ導線、削除済みは参照専用。ステータス以外の軽微編集は維持
 └── composables/
     └── useApiClient.ts             # 変更: getTaskTimeline, createComment, updateComment, deleteComment を追加
 ```
@@ -206,8 +205,8 @@ sequenceDiagram
 |---|---|---|---|
 | 1.1 | 表示項目一覧 | TaskDetailPage, TaskFieldCard | GET /api/tasks/:id |
 | 1.2 | タスクが存在しない場合の表示 | TaskDetailPage（404ハンドリング） | GET /api/tasks/:id（404） |
-| 1.3 | 非所属ワークスペースのアクセス拒否 | task routes（既存 `workspace-scope.guard.ts` を再利用） | GET /api/tasks/:id（403） |
-| 1.4 | 論理削除済みタスクの参照専用表示 | TaskDetailPage, TasksService.getById（`includeDeleted`） | GET /api/tasks/:id（削除済みも返す）、GET /api/tasks/:id/timeline |
+| 1.3 | 非所属ワークスペースのアクセス拒否 | task routes（既存 `workspace-scope.guard.ts` を再利用） | GET /api/tasks/:id（404。存在有無を漏らさない） |
+| 1.4 | 論理削除済みの参照専用 | TaskDetailPage, TaskDetailModal, TasksService.getById（`includeDeleted`） | GET /api/tasks/:id（削除済みも返す）、GET /api/tasks/:id/timeline |
 | 1.5, 2.7 | クローズ時のステータス非表示 | TaskFieldCard | `DevelopmentStage.kind` |
 | 1.6, 1.7 | 期限超過バッジ | TaskFieldCard | クライアント側計算（`scheduledEndDate` + `kind`） |
 | 2.1, 2.2, 2.3, 2.5, 2.6 | フィールド編集、親タスク検証 | InlineEditableField, ParentTaskCombobox, TasksService.update | PATCH /api/tasks/:id |
@@ -220,9 +219,10 @@ sequenceDiagram
 | 4.1, 4.2, 4.3, 4.4, 4.5 | コメントCRUD | CommentService, CommentComposer | POST/PATCH/DELETE /api/tasks/:id/comments |
 | 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9 | 操作ログ記録 | ActivityLogService, TasksService（全書き込みメソッド）, CommentService | ActivityLogService.record() |
 | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8 | タイムライン表示・絞り込み | TaskTimeline, task routes（集約） | GET /api/tasks/:id/timeline |
-| 7.1 | モーダルの軽微編集維持 | TaskDetailModal（変更なし） | 既存API |
-| 7.2 | モーダルがコメント・タイムラインを持たない | TaskDetailModal（元々未実装のため、今回追加もしない） | — |
-| 7.3 | モーダルから詳細ページへの導線 | TaskDetailModal | フロントルーティング |
+| 7.1 | モーダルの簡易表示と軽微編集（ステータス編集なし） | TaskDetailModal | 既存API |
+| 7.2 | モーダルがコメント・タイムラインを持たない | TaskDetailModal | — |
+| 7.3 | 詳細ページへの導線 | TaskDetailModal | フロントルーティング |
+| 7.4 | 削除済みモーダルの参照専用 | TaskDetailModal（`deletedAt`） | GET /api/tasks/:id |
 
 ## Components and Interfaces
 
@@ -238,7 +238,7 @@ sequenceDiagram
 | TaskDetailPage | Frontend/Page | ページ全体の構成、404/削除済み/権限エラーの分岐、複製フロー | 1.1, 1.2, 1.4, 2.9, 2.10, 2.11 | InlineEditableField (P0), TaskFieldCard (P0), TaskTimeline (P0) | — |
 | TaskFieldCard | Frontend/UI | フィールドのグルーピング表示（状態/担当・日程・案件/親子タスク/詳細） | 1.1, 1.5, 1.6, 1.7 | InlineEditableField (P0) | — |
 | CommentComposer | Frontend/UI | コメント投稿・編集フォーム | 4.1, 4.2, 4.3 | POST/PATCH /api/tasks/:id/comments (P0) | — |
-| TaskDetailModal（縮小） | Frontend/UI | 軽微編集の維持、詳細ページへの導線追加 | 7.1, 7.2, 7.3 | 既存API（変更なし） | — |
+| TaskDetailModal（縮小） | Frontend/UI | 簡易表示・ステータス以外の軽微編集、削除済み参照専用、詳細ページ導線 | 7.1, 7.2, 7.3, 7.4 | 既存API | — |
 
 ### Backend / activity-logs
 
@@ -351,7 +351,7 @@ interface CommentService {
 ##### API Contract
 | Method | Endpoint | Request | Response | Errors |
 |--------|----------|---------|----------|--------|
-| GET | /api/tasks/:id | - | Task（`deletedAt` 含む。削除済みも 200） | 404（未存在）, 403 |
+| GET | /api/tasks/:id | - | Task（`deletedAt` 含む。削除済みも 200） | 404（未存在、または現在ワークスペースに属さない／権限がない場合も同じ。存在有無を漏らさない） |
 
 #### TasksService.create / POST /api/tasks（拡張、複製用）
 

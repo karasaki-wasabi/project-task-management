@@ -96,6 +96,7 @@ const stage = computed(() => {
 });
 
 const closed = computed(() => (task.value ? isTaskClosed(task.value, props.stages) : false));
+const deleted = computed(() => task.value?.deletedAt != null);
 
 function resetForm(loaded: Task) {
   title.value = loaded.title;
@@ -137,7 +138,8 @@ watch(
 );
 
 function startEdit() {
-  if (task.value) resetForm(task.value);
+  if (!task.value || deleted.value) return;
+  resetForm(task.value);
   mode.value = "edit";
 }
 
@@ -147,7 +149,7 @@ function cancelEdit() {
 }
 
 async function save() {
-  if (!props.taskId || !task.value) return;
+  if (!props.taskId || !task.value || deleted.value) return;
   error.value = null;
   saving.value = true;
   try {
@@ -174,7 +176,7 @@ async function save() {
 }
 
 async function confirmDelete() {
-  if (!props.taskId || !task.value) return;
+  if (!props.taskId || !task.value || deleted.value) return;
   error.value = null;
   saving.value = true;
   try {
@@ -210,14 +212,19 @@ async function confirmDelete() {
 
     <template v-else-if="task">
       <!-- 閲覧モード(既定): 編集不可の表示のみ(Requirement 8.2) -->
-      <div v-if="mode === 'view'" class="space-y-3">
+      <div v-if="mode === 'view' || deleted" class="space-y-3">
         <div data-testid="task-detail-badges" class="flex flex-wrap items-center gap-2">
           <PriorityBadge :priority="task.priority" />
           <StageBadge :kind="stage?.kind ?? null" :name="stage?.name ?? null" prefix-mode="modal" />
           <StatusBadge v-if="!closed" :status="task.status" />
           <Badge tone="neutral" :label="`担当者: ${assigneeName ?? '未設定'}`" />
           <Badge tone="neutral" :label="`案件: ${caseName}${task.caseId && task.isRequiredForCase ? '(必須)' : ''}`" />
+          <Badge v-if="deleted" tone="neutral" label="削除済み" />
         </div>
+
+        <p v-if="deleted" class="text-sm text-slate-600">
+          このタスクは参照専用です。編集・削除はできません。
+        </p>
 
         <div class="flex flex-col gap-1">
           <span class="text-xs font-medium text-slate-500">詳細</span>
@@ -227,7 +234,7 @@ async function confirmDelete() {
         </div>
       </div>
 
-      <!-- 編集モード: 編集ボタン経由でのみ到達(Requirement 8.3) -->
+      <!-- 編集モード: 編集ボタン経由でのみ到達(Requirement 8.3)。削除済みは到達不可 -->
       <form v-else id="task-detail-form" class="space-y-3" @submit.prevent="save">
         <div class="flex flex-col gap-1">
           <label class="text-xs font-medium text-slate-500" for="task-detail-title">タイトル</label>
@@ -327,7 +334,17 @@ async function confirmDelete() {
     </template>
 
     <template v-if="task" #actions>
-      <template v-if="mode === 'view'">
+      <template v-if="deleted">
+        <button
+          type="button"
+          class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          @click="emit('close')"
+        >
+          閉じる
+        </button>
+      </template>
+
+      <template v-else-if="mode === 'view'">
         <div class="flex items-center gap-2">
           <button
             type="button"

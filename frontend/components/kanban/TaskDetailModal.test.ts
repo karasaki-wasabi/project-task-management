@@ -222,4 +222,17 @@ describe("TaskDetailModal (task-status-model 5.3)", () => {
     expect(wrapper.find("#task-detail-case").exists()).toBe(true);
     expect(wrapper.find("#task-detail-detail").exists()).toBe(true);
   });
+
+  it("treats soft-deleted tasks as read-only and hides edit/delete actions", async () => {
+    const wrapper = await mountDetail(
+      makeTask({ deletedAt: "2026-08-12T00:00:00.000Z" }),
+    );
+
+    expect(wrapper.text()).toContain("削除済み");
+    expect(wrapper.text()).toContain("このタスクは参照専用です");
+    expect(wrapper.findAll("button").some((button) => button.text() === "編集")).toBe(false);
+    expect(wrapper.findAll("button").some((button) => button.text() === "削除")).toBe(false);
+    expect(wrapper.find("#task-detail-title").exists()).toBe(false);
+    expect(wrapper.get('a[href="/workspaces/w1/tasks/t1"]').exists()).toBe(true);
+  });
 });

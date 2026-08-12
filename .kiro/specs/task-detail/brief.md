@@ -6,14 +6,15 @@
 
 ## Current State
 
-- `TaskDetailModal` がカンバン／カレンダーから開き、主要フィールドの閲覧・編集・削除ができる
-- `/workspaces/:workspaceId/tasks/:taskId` のような詳細ページはない
-- コメント、ユーザー向け操作ログのモデルはない（ops の pino ログとは別物）
+- タスク詳細ページ `/workspaces/:workspaceId/tasks/:taskId` で閲覧・編集・削除・複製、コメント、タイムラインを扱える
+- `Comment` / `ActivityLog` とタイムライン API（`GET /api/tasks/:id/timeline`）が実装済み
+- `TaskDetailModal` は簡易表示を基本とし、ステータス以外の軽微編集と「詳細ページを開く」導線を持つ。削除済みは `deletedAt` により参照専用
 - 操作者はログインユーザー、データはワークスペーススコープが前提（user-auth / workspace-resource-scope 済み）
+- フィールド語彙は `detail` / `scheduledEndDate`（task-field-rename 完了済み）
 
 ## Desired Outcome
 
-- 既存モーダルは簡易表示（必要なら最小編集）として残す
+- 既存モーダルは簡易表示（ステータス以外の最小編集）として残す
 - タスク詳細画面（専用ページ）から、そのタスクの CRUD と関連情報を扱える
 - 詳細画面にコメントを付けられる（誰が・いつ・内容）
 - 詳細画面に操作ログ（誰が何をしたか）を時系列で見られる
@@ -73,3 +74,4 @@
 - 操作ログは pino の運用ログを UI に流用しない。ドメインイベントとして永続化する
 - 画面刷新のため claude design ゲート対象
 - コメント／ログのリアルタイム更新（WebSocket）は必須にしない
+- 非所属ワークスペースへの単一取得は 404 とし、リソースの有無を漏らさない
