@@ -8,6 +8,10 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
+import { activityLogService } from "../activity-logs/activity-log.service.js";
+import type { ActivityLogEntry } from "../activity-logs/activity-log.types.js";
+import { commentService } from "../comments/comment.service.js";
+import type { Comment } from "../comments/comment.types.js";
 import { tasksService } from "./task.service.js";
 import type { TaskError } from "./task.types.js";
 
@@ -43,6 +47,11 @@ const updateDevelopmentStageBodySchema = z.object({
 });
 const splitBodySchema = z.object({ parts: z.array(createTaskBodySchema) });
 const taskIdParamsSchema = z.object({ id: z.string() });
+const timelineQuerySchema = z.object({
+  filter: z.enum(["all", "comments", "changes"]).default("all"),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(20).default(20),
+});
 const listQuerySchema = z.object({
   caseId: z.string().optional(),
   assigneeUserId: z.string().optional(),
@@ -55,12 +64,60 @@ const listQuerySchema = z.object({
   unassignedCase: z.literal("true").optional(),
 });
 
+type TimelineEntry =
+  | (Comment & { type: "comment"; occurredAt: Date })
+  | (ActivityLogEntry & { type: "change" });
+
+interface TimelineCursor {
+  occurredAt: string;
+  id: string;
+}
+
 function parseOrBadRequest<T>(schema: z.ZodType<T>, data: unknown): T {
   const result = schema.safeParse(data);
   if (!result.success) {
     throw badRequest(result.error.issues.map((issue) => issue.message).join(", "));
   }
   return result.data;
+}
+
+function compareTimelineEntries(a: TimelineEntry, b: TimelineEntry): number {
+  const timeDifference = b.occurredAt.getTime() - a.occurredAt.getTime();
+  if (timeDifference !== 0) return timeDifference;
+  if (a.id === b.id) return 0;
+  return a.id < b.id ? 1 : -1;
+}
+
+function encodeTimelineCursor(entry: TimelineEntry): string {
+  const cursor: TimelineCursor = {
+    occurredAt: entry.occurredAt.toISOString(),
+    id: entry.id,
+  };
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeTimelineCursor(encoded: string): TimelineCursor {
+  try {
+    const decoded: unknown = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    const parsed = z
+      .object({
+        occurredAt: z.string().datetime(),
+        id: z.string().min(1),
+      })
+      .safeParse(decoded);
+    if (!parsed.success) {
+      throw new Error("invalid cursor shape");
+    }
+    return parsed.data;
+  } catch {
+    throw badRequest("Invalid timeline cursor");
+  }
+}
+
+function isAfterTimelineCursor(entry: TimelineEntry, cursor: TimelineCursor): boolean {
+  const cursorTime = new Date(cursor.occurredAt).getTime();
+  const entryTime = entry.occurredAt.getTime();
+  return entryTime < cursorTime || (entryTime === cursorTime && entry.id < cursor.id);
 }
 
 function requireCurrentWorkspaceId(request: FastifyRequest): VerifiedWorkspaceId {
@@ -125,6 +182,46 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       return;
     }
     reply.status(200).send(result.value);
+  });
+
+  app.get("/api/tasks/:id/timeline", async (request, reply) => {
+    const params = parseOrBadRequest(taskIdParamsSchema, request.params);
+    const query = parseOrBadRequest(timelineQuerySchema, request.query);
+    const workspaceId = requireCurrentWorkspaceId(request);
+    const task = await tasksService.getById(params.id, workspaceId, { includeDeleted: true });
+    if (!task.ok) {
+      reply.status(taskErrorStatusCode(task.error)).send({ error: taskErrorMessage(task.error) });
+      return;
+    }
+
+    const [comments, changes] = await Promise.all([
+      query.filter === "changes" ? Promise.resolve([]) : commentService.list(params.id),
+      query.filter === "comments" ? Promise.resolve([]) : activityLogService.listDisplayable(params.id),
+    ]);
+    const entries: TimelineEntry[] = [
+      ...comments.map((comment) => ({
+        ...comment,
+        type: "comment" as const,
+        occurredAt: comment.createdAt,
+      })),
+      ...changes.map((change) => ({
+        ...change,
+        type: "change" as const,
+      })),
+    ].sort(compareTimelineEntries);
+    const cursor = query.cursor ? decodeTimelineCursor(query.cursor) : null;
+    const remainingEntries = cursor
+      ? entries.filter((entry) => isAfterTimelineCursor(entry, cursor))
+      : entries;
+    const limit = query.limit ?? 20;
+    const page = remainingEntries.slice(0, limit + 1);
+    const hasNextPage = page.length > limit;
+    const items = hasNextPage ? page.slice(0, limit) : page;
+
+    reply.status(200).send({
+      items,
+      nextCursor: hasNextPage ? encodeTimelineCursor(items[items.length - 1]) : null,
+    });
   });
 
   app.patch("/api/tasks/:id", async (request, reply) => {

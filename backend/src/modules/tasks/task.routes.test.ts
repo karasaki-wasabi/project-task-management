@@ -632,6 +632,159 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [taskId]);
   });
 
+  it("GET /api/tasks/:id/timeline filters, orders, pages, and reads deleted tasks", async () => {
+    const task = await db.task.create({
+      data: {
+        title: `timeline-${randomUUID()}`,
+        priority: "medium",
+        workspaceId: workspaceA,
+      },
+    });
+    const occurredAt = new Date("2037-04-05T06:07:08.000Z");
+    const olderAt = new Date("2037-04-04T06:07:08.000Z");
+    const commentIds = [`timeline-comment-a-${randomUUID()}`, `timeline-comment-z-${randomUUID()}`];
+    const changeIds = [`timeline-change-a-${randomUUID()}`, `timeline-change-z-${randomUUID()}`];
+
+    await db.comment.createMany({
+      data: [
+        {
+          id: commentIds[0],
+          taskId: task.id,
+          authorUserId: memberId,
+          body: "older comment",
+          createdAt: olderAt,
+          updatedAt: olderAt,
+        },
+        {
+          id: commentIds[1],
+          taskId: task.id,
+          authorUserId: memberId,
+          body: "newer comment",
+          createdAt: occurredAt,
+          updatedAt: occurredAt,
+        },
+      ],
+    });
+    await db.activityLog.createMany({
+      data: [
+        {
+          id: changeIds[0],
+          taskId: task.id,
+          actorUserId: memberId,
+          operationType: "field_changed",
+          fieldName: "title",
+          beforeValue: "before",
+          afterValue: "after",
+          occurredAt,
+        },
+        {
+          id: changeIds[1],
+          taskId: task.id,
+          actorUserId: memberId,
+          operationType: "field_changed",
+          fieldName: "priority",
+          beforeValue: "low",
+          afterValue: "high",
+          occurredAt,
+        },
+        {
+          taskId: task.id,
+          actorUserId: memberId,
+          operationType: "task_created",
+          occurredAt: new Date("2037-04-06T06:07:08.000Z"),
+        },
+        {
+          taskId: task.id,
+          actorUserId: memberId,
+          operationType: "comment_edited",
+          occurredAt: new Date("2037-04-07T06:07:08.000Z"),
+        },
+      ],
+    });
+    await db.task.delete({ where: { id: task.id } });
+
+    try {
+      const firstPage = await app.inject(
+        withWorkspace(
+          { method: "GET", url: `/api/tasks/${task.id}/timeline?filter=all&limit=2` },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(firstPage.statusCode).toBe(200);
+      const firstBody = firstPage.json() as {
+        items: Array<{ id: string; type: string; occurredAt: string }>;
+        nextCursor: string | null;
+      };
+      expect(firstBody.items).toHaveLength(2);
+      expect(firstBody.items.map((item) => item.id)).toEqual(
+        [commentIds[1], ...changeIds].sort((a, b) => b.localeCompare(a)).slice(0, 2),
+      );
+      expect(firstBody.items.every((item) => item.occurredAt === occurredAt.toISOString())).toBe(true);
+      expect(firstBody.nextCursor).toEqual(expect.any(String));
+
+      const secondPage = await app.inject(
+        withWorkspace(
+          {
+            method: "GET",
+            url:
+              `/api/tasks/${task.id}/timeline?filter=all&limit=2&cursor=` +
+              encodeURIComponent(firstBody.nextCursor!),
+          },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(secondPage.statusCode).toBe(200);
+      expect(secondPage.json().items.map((item: { id: string }) => item.id)).toEqual([
+        [commentIds[1], ...changeIds].sort((a, b) => b.localeCompare(a))[2],
+        commentIds[0],
+      ]);
+      expect(secondPage.json().nextCursor).toBeNull();
+
+      const comments = await app.inject(
+        withWorkspace(
+          { method: "GET", url: `/api/tasks/${task.id}/timeline?filter=comments` },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(comments.statusCode).toBe(200);
+      expect(comments.json().items).toEqual([
+        expect.objectContaining({ id: commentIds[1], type: "comment", body: "newer comment" }),
+        expect.objectContaining({ id: commentIds[0], type: "comment", body: "older comment" }),
+      ]);
+
+      const changes = await app.inject(
+        withWorkspace(
+          { method: "GET", url: `/api/tasks/${task.id}/timeline?filter=changes` },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(changes.statusCode).toBe(200);
+      expect(changes.json().items).toEqual(
+        [...changeIds]
+          .sort((a, b) => b.localeCompare(a))
+          .map((id) => expect.objectContaining({ id, type: "change", operationType: "field_changed" })),
+      );
+      expect(changes.json().items).not.toContainEqual(
+        expect.objectContaining({ operationType: "task_created" }),
+      );
+      expect(changes.json().items).not.toContainEqual(
+        expect.objectContaining({ operationType: "comment_edited" }),
+      );
+    } finally {
+      await db.$executeRaw`DELETE FROM activity_logs WHERE task_id = ${task.id}`;
+      await db.$executeRaw`DELETE FROM comments WHERE task_id = ${task.id}`;
+      await hardDelete("tasks", [task.id]);
+    }
+  });
+
   it("GET /api/tasks?unassignedCase=true returns only tasks with no case assigned", async () => {
     const caseRecord = await db.case.create({
       data: { name: `route-case-${randomUUID()}`, endDate: new Date(), workspaceId: workspaceA },
