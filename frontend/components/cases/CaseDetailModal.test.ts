@@ -1,15 +1,17 @@
-// Mount tests for CaseDetailModal edit save flow (task 6.3):
-// candidates → B/C confirm → PATCH with selected templateOperations.
-// Requirements 4.1–4.13, design.md System Flow「案件編集保存(確認付き)」.
+// Mount tests for CaseDetailModal:
+// - task 6.3 edit save flow (candidates → B/C confirm → PATCH)
+// - task-status-model 5.6 required-task completion marks + mother-0 progress
+// Requirements 4.1–4.13, 6.6, 8.3.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import CaseDetailModal from "./CaseDetailModal.vue";
-import type { Case, CaseProgress, Task } from "../../composables/useApiClient";
+import type { Case, CaseProgress, DevelopmentStage, Task } from "../../composables/useApiClient";
 
 const listCases = vi.fn();
 const getCaseProgress = vi.fn();
 const listTasks = vi.fn();
+const listDevelopmentStages = vi.fn();
 const updateCase = vi.fn();
 const deleteCase = vi.fn();
 
@@ -21,6 +23,7 @@ vi.mock("../../composables/useApiClient", async (importOriginal) => {
       listCases,
       getCaseProgress,
       listTasks,
+      listDevelopmentStages,
       updateCase,
       deleteCase,
     }),
@@ -98,6 +101,34 @@ function makeProgress(overrides: Partial<CaseProgress> = {}): CaseProgress {
   };
 }
 
+function makeStage(overrides: Partial<DevelopmentStage> & { id: string }): DevelopmentStage {
+  return {
+    name: overrides.id,
+    order: 0,
+    kind: "normal",
+    ...overrides,
+  };
+}
+
+function makeTask(overrides: Partial<Task> & { id: string }): Task {
+  return {
+    title: `task-${overrides.id}`,
+    status: "not_started",
+    priority: "medium",
+    isRequiredForCase: true,
+    developmentStageId: "s-normal",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+const defaultStages: DevelopmentStage[] = [
+  makeStage({ id: "s-normal", name: "実装", kind: "normal", order: 1 }),
+  makeStage({ id: "s-done", name: "完了", kind: "completed", order: 2 }),
+  makeStage({ id: "s-cancel", name: "中止", kind: "cancelled", order: 3 }),
+];
+
 function mountDetail(caseId: string | null = "c1") {
   return mount(CaseDetailModal, {
     props: { caseId },
@@ -144,11 +175,13 @@ describe("CaseDetailModal edit + template apply confirm (task 6.3)", () => {
     listCases.mockReset();
     getCaseProgress.mockReset();
     listTasks.mockReset();
+    listDevelopmentStages.mockReset();
     updateCase.mockReset();
     deleteCase.mockReset();
     listCases.mockResolvedValue([makeCase()]);
     getCaseProgress.mockResolvedValue(makeProgress());
     listTasks.mockResolvedValue([] as Task[]);
+    listDevelopmentStages.mockResolvedValue(defaultStages);
     updateCase.mockResolvedValue(makeCase());
   });
 
@@ -288,3 +321,103 @@ describe("CaseDetailModal edit + template apply confirm (task 6.3)", () => {
     expect(updateCase).not.toHaveBeenCalled();
   });
 });
+
+describe("CaseDetailModal required tasks (task-status-model 5.6)", () => {
+  beforeEach(() => {
+    listCases.mockReset();
+    getCaseProgress.mockReset();
+    listTasks.mockReset();
+    listDevelopmentStages.mockReset();
+    listCases.mockResolvedValue([makeCase()]);
+    listDevelopmentStages.mockResolvedValue(defaultStages);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("fetches development stages when opening a case", async () => {
+    getCaseProgress.mockResolvedValue(makeProgress({ requiredTotal: 1, requiredCompleted: 0 }));
+    listTasks.mockResolvedValue([]);
+    mountDetail();
+    await flushPromises();
+    expect(listDevelopmentStages).toHaveBeenCalled();
+  });
+
+  it("hides required-task progress when requiredTotal is 0 (Requirement 6.6)", async () => {
+    getCaseProgress.mockResolvedValue(makeProgress({ requiredTotal: 0, requiredCompleted: 0 }));
+    listTasks.mockResolvedValue([
+      makeTask({ id: "t-cancel", developmentStageId: "s-cancel", isRequiredForCase: true }),
+    ]);
+    const wrapper = mountDetail();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("必須タスク進捗");
+    expect(wrapper.text()).not.toContain("0 / 0");
+    expect(wrapper.find('[data-testid="required-progress"]').exists()).toBe(false);
+  });
+
+  it("shows required-task progress when requiredTotal is positive", async () => {
+    getCaseProgress.mockResolvedValue(
+      makeProgress({ requiredTotal: 2, requiredCompleted: 1, requiredIncomplete: 1 }),
+    );
+    listTasks.mockResolvedValue([]);
+    const wrapper = mountDetail();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="required-progress"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("1 / 2");
+  });
+
+  it("marks completed-stage required tasks with 完了, not status ready_for_handoff (Requirement 8.3)", async () => {
+    getCaseProgress.mockResolvedValue(
+      makeProgress({ requiredTotal: 2, requiredCompleted: 1, requiredIncomplete: 1 }),
+    );
+    listTasks.mockResolvedValue([
+      makeTask({
+        id: "t-done",
+        title: "完了済み必須",
+        developmentStageId: "s-done",
+        status: "not_started",
+        isRequiredForCase: true,
+      }),
+      makeTask({
+        id: "t-open",
+        title: "未完了必須",
+        developmentStageId: "s-normal",
+        status: "ready_for_handoff",
+        isRequiredForCase: true,
+      }),
+    ]);
+    const wrapper = mountDetail();
+    await flushPromises();
+
+    const marks = wrapper.findAll('[data-testid="required-task-mark"]');
+    expect(marks).toHaveLength(2);
+    expect(marks[0]!.attributes("aria-label")).toBe("完了");
+    expect(marks[0]!.text()).toBe("✓");
+    expect(marks[1]!.attributes("aria-label")).toBe("未完了");
+    expect(marks[1]!.text()).toBe("○");
+  });
+
+  it("does not leave cancelled required tasks marked as incomplete", async () => {
+    getCaseProgress.mockResolvedValue(makeProgress({ requiredTotal: 1, requiredCompleted: 0 }));
+    listTasks.mockResolvedValue([
+      makeTask({
+        id: "t-cancel",
+        title: "中止した必須",
+        developmentStageId: "s-cancel",
+        status: "in_progress",
+        isRequiredForCase: true,
+      }),
+    ]);
+    const wrapper = mountDetail();
+    await flushPromises();
+
+    const mark = wrapper.get('[data-testid="required-task-mark"]');
+    expect(mark.attributes("aria-label")).toBe("中止");
+    expect(mark.attributes("aria-label")).not.toBe("未完了");
+    expect(mark.text()).not.toBe("○");
+  });
+});
+
