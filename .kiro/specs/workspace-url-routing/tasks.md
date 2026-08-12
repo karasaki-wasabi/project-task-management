@@ -10,7 +10,7 @@
 - 前提: `workspace-membership` / `workspace-resource-scope` は main 済み
 
 - [ ] 1. Foundation: パスヘルパーと現在ワークスペース文脈
-- [ ] 1.1 業務画面種とワークスペースIDからパスを組み立て・差し替える
+- [x] 1.1 業務画面種とワークスペースIDからパスを組み立て・差し替える
   - URL 対応表の全画面種（ダッシュボード、`kanban/stages` を含む）を扱えるようにする
   - `buildNavLinks(null)` は `/` と `/workspaces` のみを返す
   - 観測可能な完了状態: ユニットテストで全画面種の path が対応表どおりになり、非対象 path の差し替えは失敗扱いになる
