@@ -8,6 +8,12 @@
 - `buildNavLinks(null)` は「ダッシュボード(`/`)」と「メンバー(`/workspaces`)」のみ
 - 移行順: ヘルパー・文脈 → 親＋ガード → ページ移動 → 旧フラット削除 → ナビ／切替／作成 → 消失退避 → テスト。旧 URL 互換リダイレクトは置かない
 - 前提: `workspace-membership` / `workspace-resource-scope` は main 済み
+- 実装で確定した細部（design 本文の要約を超える運用）
+  - `WorkspaceCreateModal` 成功後: scoped 上なら同一画面種へ、それ以外（`/`・管理 `/workspaces` 含む）は新 WS ダッシュボードへ
+  - 管理画面での削除後退避: path が画面種として解析できないため、他所属があればそのダッシュボードへ（`relocateAfterWorkspaceLost` の「特定不能ならダッシュボード」）
+  - 退避先の他所属は所属一覧の先頭（`others[0]`）。優先順位は持たない
+  - `app.vue` はダッシュボード path が子業務 path で常時 active にならないよう、active 判定を独自に調整する
+  - `app.helpers.ts` は `buildNavLinks` を `utils/workspacePath.ts` から再エクスポートする薄い入口
 
 - [x] 1. Foundation: パスヘルパーと現在ワークスペース文脈
 - [x] 1.1 業務画面種とワークスペースIDからパスを組み立て・差し替える

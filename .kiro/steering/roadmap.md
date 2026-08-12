@@ -60,7 +60,7 @@
 
 - [x] user-auth -- User をアカウントへ拡張し、公開自己登録と Cookie セッション認証を入れる。Dependencies: none
 - [x] workspace-membership -- ワークスペース作成・所属・ユーザー検索でのメンバー追加・現在ワークスペース選択。Dependencies: user-auth
-- [ ] workspace-resource-scope -- 案件・タスク等をワークスペース配下へ移行し、所属外アクセスを拒否する。Dependencies: workspace-membership
+- [x] workspace-resource-scope -- 案件・タスク等をワークスペース配下へ移行し、所属外アクセスを拒否する。Dependencies: workspace-membership
 - [ ] task-detail -- モーダルは簡易表示のまま、詳細画面でコメント・操作ログ・CRUD を提供する。Dependencies: workspace-resource-scope
 - [ ] velocity-dashboard -- ストーリーポイントと消化ペース／案件見通しのダッシュボード。Dependencies: workspace-resource-scope, task-detail
 
@@ -68,5 +68,5 @@
 
 ワークスペース導入後も画面 URL がフラットなままなので、業務画面を `/workspaces/:workspaceId/...` に移し、URL を現在ワークスペースの正本にする。旧フラット URL と非所属 ID は 404。API パス変更はしない。
 
-- [ ] workspace-url-routing -- 業務画面 URL のワークスペース配下化、`/` の last-used／一覧分岐、Switcher の同一画面種付け替え、URL 一覧の確定。Dependencies: workspace-membership, workspace-resource-scope
+- [x] workspace-url-routing -- 業務画面 URL のワークスペース配下化、`/` の last-used／一覧分岐、Switcher の同一画面種付け替え、URL 一覧の確定。Dependencies: workspace-membership, workspace-resource-scope
 
