@@ -44,7 +44,17 @@ describe("recurrence schema shape (task 1.1)", () => {
     const taskFields = Prisma.TaskScalarFieldEnum;
     expect(taskFields).toMatchObject({
       sourceAnchor: "sourceAnchor",
+      detail: "detail",
+      scheduledEndDate: "scheduledEndDate",
     });
+    expect(taskFields).not.toHaveProperty("memo");
+    expect(taskFields).not.toHaveProperty("scheduledDate");
+    expect(taskFields).not.toHaveProperty("scheduledStartDate");
+
+    expect(templateFields).toMatchObject({
+      defaultDetail: "defaultDetail",
+    });
+    expect(templateFields).not.toHaveProperty("defaultMemo");
 
     // fixed_interval / interval enums must be gone from the generated client
     expect(PrismaClientModule).not.toHaveProperty("RecurrenceKind");
@@ -57,7 +67,13 @@ describe("recurrence schema shape (task 1.1)", () => {
     const schema = readFileSync(schemaPath, "utf8");
     expect(schema).toMatch(/templateCaseDateActiveKey\s+Unsupported\(/);
     expect(schema).toMatch(/@map\("template_case_date_active_key"\)/);
-    expect(schema).not.toMatch(/@@unique\(\[sourceTemplateId,\s*scheduledDate\]\)/);
+    expect(schema).toMatch(/scheduledEndDate\s+DateTime\?\s+@map\("scheduled_end_date"\)/);
+    expect(schema).toMatch(/defaultDetail\s+String\?\s+@db\.Text\s+@map\("default_detail"\)/);
+    expect(schema).toMatch(/scheduled_end_date/);
+    expect(schema).not.toMatch(/@map\("scheduled_date"\)/);
+    expect(schema).not.toMatch(/@map\("default_memo"\)/);
+    expect(schema).not.toMatch(/scheduledStartDate|scheduled_start_date/);
+    expect(schema).not.toMatch(/@@unique\(\[sourceTemplateId,\s*scheduled(Date|EndDate)\]\)/);
     expect(schema).not.toMatch(/enum RecurrenceKind/);
     expect(schema).not.toMatch(/enum IntervalUnit/);
   });
@@ -129,7 +145,7 @@ describe("physical schema (task 1.2)", () => {
         caseId: caseEntity.id,
         sourceTemplateId: template.id,
         sourceAnchor: CaseRelativeAnchor.case_start,
-        scheduledDate: new Date("2026-08-10"),
+        scheduledEndDate: new Date("2026-08-10"),
         workspaceId: workspace.id,
       },
     });
@@ -200,7 +216,7 @@ describe("physical schema (task 1.2)", () => {
     await prisma.user.delete({ where: { id: user.id } });
   });
 
-  it("rejects two active template tasks on the same (template, case, scheduledDate), but allows recreate after soft delete", async () => {
+  it("rejects two active template tasks on the same (template, case, scheduledEndDate), but allows recreate after soft delete", async () => {
     const suffix = randomUUID();
     const { user, workspace } = await createOwnedWorkspace(`tpl-${suffix}`);
     const caseEntity = await prisma.case.create({
@@ -220,14 +236,14 @@ describe("physical schema (task 1.2)", () => {
         workspaceId: workspace.id,
       },
     });
-    const scheduledDate = new Date("2026-09-15");
+    const scheduledEndDate = new Date("2026-09-15");
     const baseTask = {
       title: "generated",
       priority: "high" as const,
       caseId: caseEntity.id,
       sourceTemplateId: template.id,
       sourceAnchor: CaseRelativeAnchor.case_end,
-      scheduledDate,
+      scheduledEndDate,
       workspaceId: workspace.id,
     };
 
@@ -804,4 +820,73 @@ describe("task-status-model schema (task 1.1)", () => {
     }
   });
 
+});
+
+describe("task-field-rename schema (task 1.1)", () => {
+  it("maps renamed Prisma fields to detail / scheduled_end_date / default_detail", () => {
+    expect(Prisma.TaskScalarFieldEnum).toMatchObject({
+      detail: "detail",
+      scheduledEndDate: "scheduledEndDate",
+    });
+    expect(Prisma.TaskScalarFieldEnum).not.toHaveProperty("memo");
+    expect(Prisma.TaskScalarFieldEnum).not.toHaveProperty("scheduledDate");
+    expect(Prisma.TaskScalarFieldEnum).not.toHaveProperty("scheduledStartDate");
+
+    expect(Prisma.RecurringTaskTemplateScalarFieldEnum).toMatchObject({
+      defaultDetail: "defaultDetail",
+    });
+    expect(Prisma.RecurringTaskTemplateScalarFieldEnum).not.toHaveProperty("defaultMemo");
+
+    const schemaPath = resolve(__dirname, "schema.prisma");
+    const schema = readFileSync(schemaPath, "utf8");
+    expect(schema).toMatch(/\bdetail\s+String\?\s+@db\.Text/);
+    expect(schema).toMatch(/scheduledEndDate\s+DateTime\?\s+@map\("scheduled_end_date"\)/);
+    expect(schema).toMatch(/defaultDetail\s+String\?\s+@db\.Text\s+@map\("default_detail"\)/);
+    expect(schema).not.toMatch(/scheduledStartDate|scheduled_start_date/);
+  });
+
+  it("keeps a migrate-dev warning in the rename migration SQL", () => {
+    const migrationPath = resolve(
+      __dirname,
+      "migrations/20260812100000_rename_task_detail_and_scheduled_end/migration.sql",
+    );
+    const sql = readFileSync(migrationPath, "utf8");
+    expect(sql).toMatch(/prisma migrate dev/);
+    expect(sql).toMatch(/STORED GENERATED COLUMN/);
+    expect(sql).toMatch(/prisma migrate deploy/);
+    expect(sql).toMatch(/scheduled_end_date/);
+    expect(sql).toMatch(/RENAME COLUMN `memo` TO `detail`/);
+    expect(sql).toMatch(/RENAME COLUMN `default_memo` TO `default_detail`/);
+  });
+
+  it("provides renamed physical columns and generated key over scheduled_end_date", async () => {
+    const taskColumns = await prisma.$queryRaw<Array<{ Field: string }>>`SHOW COLUMNS FROM tasks`;
+    const taskColumnNames = taskColumns.map((column) => column.Field);
+    expect(taskColumnNames).toEqual(
+      expect.arrayContaining(["detail", "scheduled_end_date", "template_case_date_active_key"]),
+    );
+    expect(taskColumnNames).not.toContain("memo");
+    expect(taskColumnNames).not.toContain("scheduled_date");
+    expect(taskColumnNames).not.toContain("scheduled_start_date");
+
+    const templateColumns = await prisma.$queryRaw<Array<{ Field: string }>>`
+      SHOW COLUMNS FROM recurring_task_templates
+    `;
+    const templateColumnNames = templateColumns.map((column) => column.Field);
+    expect(templateColumnNames).toContain("default_detail");
+    expect(templateColumnNames).not.toContain("default_memo");
+
+    const createRows = await prisma.$queryRawUnsafe<Array<Record<string, string>>>(
+      "SHOW CREATE TABLE tasks",
+    );
+    const createSql =
+      createRows[0]?.["Create Table"] ??
+      Object.values(createRows[0] ?? {}).find(
+        (value) => typeof value === "string" && value.includes("CREATE TABLE"),
+      ) ??
+      "";
+    expect(createSql).toMatch(/`scheduled_end_date`/);
+    expect(createSql).toMatch(/date_format\(`scheduled_end_date`/i);
+    expect(createSql).not.toMatch(/date_format\(`scheduled_date`/i);
+  });
 });
