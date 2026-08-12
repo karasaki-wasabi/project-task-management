@@ -33,7 +33,7 @@
   - _Boundary: workspace-member middleware_
   - _Depends: 1.2_
 
-- [ ] 3. Integration: 業務ページの scoped 化
+- [x] 3. Integration: 業務ページの scoped 化
 - [x] 3.1 ダッシュボードを scoped 配下へ移し、`/` をランディング分岐にする
   - `/` は last-used が有効ならダッシュボード URL へ進み、無効なら一覧・追加（既存見た目の Picker）を表示する
   - ダッシュボード本体は `/workspaces/:workspaceId` で提供する
@@ -41,21 +41,21 @@
   - _Requirements: 2.1, 2.2, 8.1_
   - _Depends: 1.1, 1.2, 2_
 
-- [ ] 3.2 残りの業務画面を scoped 配下へ移し、内部リンクをヘルパー経由にする
+- [x] 3.2 残りの業務画面を scoped 配下へ移し、内部リンクをヘルパー経由にする
   - タスク・カンバン・開発段階・案件・カレンダー・繰り返し・非営業日・消化数を移す
   - 未選択時の空状態ブロックを外し、案件絞り込み付き遷移のクエリを維持する
   - 観測可能な完了状態: 各業務画面が新 URL で開き、案件からタスクへの絞り込みリンクが新 path + `caseId` になる
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 3.1_
   - _Depends: 3.1_
 
-- [ ] 3.3 旧フラット業務ページを削除し404にする
+- [x] 3.3 旧フラット業務ページを削除し404にする
   - 互換リダイレクトは置かない
   - 観測可能な完了状態: `/tasks` や `/kanban` などを開くと見つからない画面（404）になる
   - _Requirements: 5.2, 5.3_
   - _Depends: 3.2_
 
-- [ ] 4. Integration: ナビ・切替・作成導線
-- [ ] 4.1 (P) ナビを現在ワークスペース付きリンクへ切り替える
+- [x] 4. Integration: ナビ・切替・作成導線
+- [x] 4.1 (P) ナビを現在ワークスペース付きリンクへ切り替える
   - `buildNavLinks(currentId)` を使い、`null` のときは `/` と `/workspaces` のみにする
   - 選択中表示を scoped path に合わせる
   - 観測可能な完了状態: scoped 表示中の業務ナビリンクが、表示中と同一の workspaceId を含む
@@ -63,29 +63,29 @@
   - _Boundary: App nav_
   - _Depends: 1.1, 1.2, 3.2_
 
-- [ ] 4.2 (P) ヘッダー切替で同一画面種のまま workspaceId を付け替える
+- [x] 4.2 (P) ヘッダー切替で同一画面種のまま workspaceId を付け替える
   - scoped 上では path 差し替えとクエリ維持、`/` 上では選択後ダッシュボードへ、管理画面上では選択のみ
   - 観測可能な完了状態: ワークスペース A のカンバン（クエリ付き）から B へ切り替えると、B のカンバンに同じクエリで移る
   - _Requirements: 4.1, 4.2, 2.3_
   - _Boundary: WorkspaceSwitcher_
   - _Depends: 1.1, 1.2, 3.2_
 
-- [ ] 4.3 作成モーダル成功後の遷移を新URL規約に合わせる
+- [x] 4.3 作成モーダル成功後の遷移を新URL規約に合わせる
   - scoped 上で作成した場合は同一画面種の新ワークスペースへ、それ以外は新ワークスペースのダッシュボードへ進む
   - 観測可能な完了状態: 作成直後に新しい workspaceId を含む業務 URL へ到達できる
   - _Requirements: 2.1, 2.3, 8.1_
   - _Boundary: WorkspaceCreateModal_
   - _Depends: 1.1, 1.2, 3.1_
 
-- [ ] 5. Integration: ワークスペース消失時の退避配線
-- [ ] 5.1 (P) 管理画面での削除成功後に退避する
+- [x] 5. Integration: ワークスペース消失時の退避配線
+- [x] 5.1 (P) 管理画面での削除成功後に退避する
   - 削除成功後に現在選択を片付け、`relocateAfterWorkspaceLost` で退避する
   - 観測可能な完了状態: 削除後、他所属があれば同一画面種へ、なければ `/` へ移り、削除した WS の画面に残らない
   - _Requirements: 6.1, 6.2, 6.3_
   - _Boundary: Manage /workspaces_
   - _Depends: 1.2, 3.2_
 
-- [ ] 5.2 (P) scoped API の所属拒否時に一覧を再取得し、失っていれば退避する
+- [x] 5.2 (P) scoped API の所属拒否時に一覧を再取得し、失っていれば退避する
   - リアルタイム監視はしない
   - 観測可能な完了状態: 所属拒否相当の応答のあと、現在 WS が消えていれば他所属の同一画面種または `/` へ移る
   - _Requirements: 6.1, 6.2, 6.3_
@@ -93,7 +93,7 @@
   - _Depends: 1.2, 3.2_
 
 - [ ] 6. Validation: 認証戻り先と E2E
-- [ ] 6.1 ログイン redirect が scoped fullPath を保持することを確認し、関連ユニットを更新する
+- [x] 6.1 ログイン redirect が scoped fullPath を保持することを確認し、関連ユニットを更新する
   - 観測可能な完了状態: `/workspaces/:id/tasks?caseId=...` がログイン redirect 経由で復元されるテストが通る
   - _Requirements: 7.1, 7.2, 7.3_
   - _Depends: 3.2_
@@ -103,8 +103,10 @@
   - 観測可能な完了状態: 主要 E2E が新 URL で通り、旧フラット業務 URL は 404 になる
   - _Requirements: 1.1, 2.1, 2.2, 4.1, 5.1, 5.2, 8.1, 8.2_
   - _Depends: 3.3, 4.1, 4.2, 4.3, 5.1, 5.2, 6.1_
+  - _Note: fixtures / specs は新 path へ更新済み。Docker 未起動のため Playwright 実行は未検証_
 
 - [ ] 6.3 残りの業務 E2E の遷移先・期待 URL を更新する
   - 観測可能な完了状態: 既存の業務 E2E スイートが新 path 前提で通過する
   - _Requirements: 1.1, 1.4_
   - _Depends: 6.2_
+  - _Note: 業務 E2E の path 更新は済み。実行検証は 6.2 と同時に行う_

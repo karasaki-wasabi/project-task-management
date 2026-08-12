@@ -12,10 +12,10 @@ import { ref, watch } from "vue";
 import {
   useApiClient,
   type RecurringTaskTemplate,
-} from "../../composables/useApiClient";
-import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
-import RecurrenceFormModal from "../../components/recurrence/RecurrenceFormModal.vue";
-import RecurrenceDetailModal from "../../components/recurrence/RecurrenceDetailModal.vue";
+} from "../../../../composables/useApiClient";
+import { useCurrentWorkspace } from "../../../../composables/useCurrentWorkspace";
+import RecurrenceFormModal from "../../../../components/recurrence/RecurrenceFormModal.vue";
+import RecurrenceDetailModal from "../../../../components/recurrence/RecurrenceDetailModal.vue";
 import {
   templateOffsetLabel,
   templatePolicyLabel,
@@ -93,24 +93,6 @@ async function onTemplateDeleted() {
 
 <template>
   <div class="space-y-5">
-    <div
-      v-if="currentId === null"
-      data-testid="workspace-empty-state"
-      class="rounded-lg bg-white p-8 text-center ring-1 ring-slate-200"
-    >
-      <h1 class="text-xl font-semibold tracking-tight text-slate-900">ワークスペースがありません</h1>
-      <p class="mt-2 text-sm text-slate-600">
-        最初のワークスペースを作成すると、メンバーを追加して共有の可視境界を持てます。
-      </p>
-      <NuxtLink
-        to="/workspaces"
-        class="mt-5 inline-block rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
-      >
-        ワークスペースを作成
-      </NuxtLink>
-    </div>
-
-    <template v-else>
       <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
         <h1 class="text-xl font-semibold tracking-tight text-slate-900">繰り返し設定</h1>
         <button
@@ -179,6 +161,5 @@ async function onTemplateDeleted() {
         @updated="onTemplateUpdated"
         @deleted="onTemplateDeleted"
       />
-    </template>
   </div>
 </template>

@@ -107,10 +107,11 @@ import {
   type DevelopmentStage,
   type Task,
   type User,
-} from "../../composables/useApiClient";
-import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
-import { useDialogFocusTrap } from "../../composables/useDialogFocusTrap";
-import { preventSameListMove } from "../../composables/useSameListMoveGuard";
+} from "../../../../composables/useApiClient";
+import { useCurrentWorkspace } from "../../../../composables/useCurrentWorkspace";
+import { workspacePath } from "../../../../utils/workspacePath";
+import { useDialogFocusTrap } from "../../../../composables/useDialogFocusTrap";
+import { preventSameListMove } from "../../../../composables/useSameListMoveGuard";
 import {
   computeBacklogTasks,
   computeFocusedTasks,
@@ -460,28 +461,10 @@ watch(
 
 <template>
   <div class="space-y-5">
-    <div
-      v-if="currentId === null"
-      data-testid="workspace-empty-state"
-      class="rounded-lg bg-white p-8 text-center ring-1 ring-slate-200"
-    >
-      <h1 class="text-xl font-semibold tracking-tight text-slate-900">ワークスペースがありません</h1>
-      <p class="mt-2 text-sm text-slate-600">
-        最初のワークスペースを作成すると、メンバーを追加して共有の可視境界を持てます。
-      </p>
-      <NuxtLink
-        to="/workspaces"
-        class="mt-5 inline-block rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
-      >
-        ワークスペースを作成
-      </NuxtLink>
-    </div>
-
-    <template v-else>
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
       <h1 class="text-xl font-semibold tracking-tight text-slate-900">カンバン</h1>
       <NuxtLink
-        to="/kanban/stages"
+        :to="currentId ? workspacePath(currentId, 'kanban/stages') : '#'"
         class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
       >
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -642,6 +625,5 @@ watch(
         </VueDraggable>
       </div>
     </div>
-    </template>
   </div>
 </template>

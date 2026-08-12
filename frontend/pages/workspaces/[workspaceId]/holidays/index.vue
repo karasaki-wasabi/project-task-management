@@ -9,8 +9,8 @@
 -->
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useApiClient, type NonBusinessDay } from "../../composables/useApiClient";
-import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
+import { useApiClient, type NonBusinessDay } from "../../../../composables/useApiClient";
+import { useCurrentWorkspace } from "../../../../composables/useCurrentWorkspace";
 import {
   formatSyncResult,
   holidayDisplayLabel,
@@ -90,24 +90,6 @@ watch(
 
 <template>
   <div class="space-y-6">
-    <div
-      v-if="currentId === null"
-      data-testid="workspace-empty-state"
-      class="rounded-lg bg-white p-8 text-center ring-1 ring-slate-200"
-    >
-      <h1 class="text-xl font-semibold tracking-tight text-slate-900">ワークスペースがありません</h1>
-      <p class="mt-2 text-sm text-slate-600">
-        最初のワークスペースを作成すると、メンバーを追加して共有の可視境界を持てます。
-      </p>
-      <NuxtLink
-        to="/workspaces"
-        class="mt-5 inline-block rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
-      >
-        ワークスペースを作成
-      </NuxtLink>
-    </div>
-
-    <template v-else>
       <h1 class="text-xl font-semibold tracking-tight">休日マスタ</h1>
 
       <div class="space-y-4 rounded-lg bg-white p-4 ring-1 ring-slate-200 sm:p-5">
@@ -198,6 +180,5 @@ watch(
           </tbody>
         </table>
       </div>
-    </template>
   </div>
 </template>

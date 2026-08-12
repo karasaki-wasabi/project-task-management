@@ -22,7 +22,7 @@
 // is `import type` only (erased entirely by TS, never actually resolved at
 // runtime) — see e.g. frontend/pages/kanban/index.helpers.ts. A relative
 // import works in both the Nuxt app and this Vitest suite.
-import { parseLocalDateOnly, type DateCell } from "../../components/shared/DatePicker.helpers";
+import { parseLocalDateOnly, type DateCell } from "../../../../components/shared/DatePicker.helpers";
 
 // Map keys throughout this module are `YYYY-MM-DD` local-calendar-day
 // strings, matching frontend/components/shared/DatePicker.helpers.ts's

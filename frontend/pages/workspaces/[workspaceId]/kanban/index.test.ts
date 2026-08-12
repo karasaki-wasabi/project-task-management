@@ -8,7 +8,7 @@ import type {
   DevelopmentStage,
   Task,
   WorkspaceUserSummary,
-} from "../../composables/useApiClient";
+} from "../../../../composables/useApiClient";
 import KanbanPage from "./index.vue";
 
 const listTasks = vi.fn();
@@ -20,11 +20,11 @@ const updateTaskDevelopmentStage = vi.fn();
 const updateTask = vi.fn();
 const currentId = ref<string | null>("ws-1");
 
-vi.mock("../../composables/useCurrentWorkspace", () => ({
+vi.mock("../../../../composables/useCurrentWorkspace", () => ({
   useCurrentWorkspace: () => ({ currentId }),
 }));
 
-vi.mock("../../composables/useApiClient", async (importOriginal) => {
+vi.mock("../../../../composables/useApiClient", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../composables/useApiClient")>();
   return {
     ...actual,
@@ -40,7 +40,7 @@ vi.mock("../../composables/useApiClient", async (importOriginal) => {
   };
 });
 
-vi.mock("../../composables/useDialogFocusTrap", () => ({
+vi.mock("../../../../composables/useDialogFocusTrap", () => ({
   useDialogFocusTrap: () => undefined,
 }));
 
@@ -273,6 +273,6 @@ describe("KanbanPage assignee candidates (task 8.1, Req 4.1)", () => {
 
     expect(listWorkspaceMembers).not.toHaveBeenCalled();
     expect(listUsers).not.toHaveBeenCalled();
-    expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(false);
   });
 });

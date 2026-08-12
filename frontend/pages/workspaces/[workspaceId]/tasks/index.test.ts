@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
-import type { Task, WorkspaceUserSummary } from "../../composables/useApiClient";
+import type { Task, WorkspaceUserSummary } from "../../../../composables/useApiClient";
 import TasksPage from "./index.vue";
 
 const listTasks = vi.fn();
@@ -15,11 +15,11 @@ const listWorkspaceMembers = vi.fn();
 const currentId = ref<string | null>("ws-1");
 const route = { query: {} as Record<string, string | undefined> };
 
-vi.mock("../../composables/useCurrentWorkspace", () => ({
+vi.mock("../../../../composables/useCurrentWorkspace", () => ({
   useCurrentWorkspace: () => ({ currentId }),
 }));
 
-vi.mock("../../composables/useApiClient", async (importOriginal) => {
+vi.mock("../../../../composables/useApiClient", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../composables/useApiClient")>();
   return {
     ...actual,
@@ -174,6 +174,6 @@ describe("TasksPage assignee candidates (task 8.1, Req 4.1)", () => {
 
     expect(listWorkspaceMembers).not.toHaveBeenCalled();
     expect(listUsers).not.toHaveBeenCalled();
-    expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(false);
   });
 });

@@ -14,8 +14,8 @@ import {
   useApiClient,
   type PeriodType,
   type ThroughputSummary,
-} from "../../composables/useApiClient";
-import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
+} from "../../../../composables/useApiClient";
+import { useCurrentWorkspace } from "../../../../composables/useCurrentWorkspace";
 
 const api = useApiClient();
 const { currentId } = useCurrentWorkspace();
@@ -43,24 +43,6 @@ watch(
 
 <template>
   <div class="space-y-6">
-    <div
-      v-if="currentId === null"
-      data-testid="workspace-empty-state"
-      class="rounded-lg bg-white p-8 text-center ring-1 ring-slate-200"
-    >
-      <h1 class="text-xl font-semibold tracking-tight text-slate-900">ワークスペースがありません</h1>
-      <p class="mt-2 text-sm text-slate-600">
-        最初のワークスペースを作成すると、メンバーを追加して共有の可視境界を持てます。
-      </p>
-      <NuxtLink
-        to="/workspaces"
-        class="mt-5 inline-block rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
-      >
-        ワークスペースを作成
-      </NuxtLink>
-    </div>
-
-    <template v-else>
       <h1 class="text-xl font-semibold tracking-tight">消化数ダッシュボード</h1>
 
       <form
@@ -119,6 +101,5 @@ watch(
       <p v-else-if="summary" class="rounded-lg bg-slate-100 px-4 py-3 text-sm text-slate-600">
         実績データ不足のため、今後の目安は表示できません。
       </p>
-    </template>
   </div>
 </template>

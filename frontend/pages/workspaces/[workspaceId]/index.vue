@@ -23,12 +23,13 @@ const visibleOverdueCases = computed(() => overdueCases.value.slice(0, DISPLAY_L
 
 const casesPath = computed(() => {
   const id = currentId.value;
-  return id ? workspacePath(id, "cases") : "/cases";
+  // Middleware guarantees membership; currentId is synced from the route.
+  return id ? workspacePath(id, "cases") : "#";
 });
 
 function caseTasksPath(caseId: string): string {
   const id = currentId.value;
-  if (!id) return `/tasks?caseId=${caseId}`;
+  if (!id) return "#";
   return `${workspacePath(id, "tasks")}?caseId=${caseId}`;
 }
 

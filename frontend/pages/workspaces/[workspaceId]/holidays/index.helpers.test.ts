@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { NonBusinessDay } from "../../composables/useApiClient";
+import type { NonBusinessDay } from "../../../../composables/useApiClient";
 import {
   formatSyncResult,
   holidayDisplayLabel,

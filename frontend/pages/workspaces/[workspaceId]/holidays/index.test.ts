@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
-import type { NonBusinessDay } from "../../composables/useApiClient";
+import type { NonBusinessDay } from "../../../../composables/useApiClient";
 import HolidaysPage from "./index.vue";
 
 const listHolidays = vi.fn();
@@ -13,11 +13,11 @@ const deleteHoliday = vi.fn();
 const syncHolidays = vi.fn();
 const currentId = ref<string | null>("ws-1");
 
-vi.mock("../../composables/useCurrentWorkspace", () => ({
+vi.mock("../../../../composables/useCurrentWorkspace", () => ({
   useCurrentWorkspace: () => ({ currentId }),
 }));
 
-vi.mock("../../composables/useApiClient", async (importOriginal) => {
+vi.mock("../../../../composables/useApiClient", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../composables/useApiClient")>();
   return {
     ...actual,
@@ -161,17 +161,12 @@ describe("HolidaysPage (task 7.2)", () => {
     expect(wrapper.text()).not.toContain("繰り返し");
   });
 
-  it("ワークスペース未選択時は空状態を表示し一覧・登録・同期を行わない（workspace-resource-scope Req 2.1, 2.2）", async () => {
-    currentId.value = null;
-    const wrapper = mountPage();
-    await flushPromises();
 
-    expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(true);
-    expect(wrapper.text()).toContain("ワークスペースがありません");
-    expect(wrapper.text()).toContain("ワークスペースを作成");
-    expect(wrapper.text()).not.toContain("休日マスタ");
-    expect(wrapper.text()).not.toContain("祝日を取得");
-    expect(listHolidays).not.toHaveBeenCalled();
-    expect(wrapper.find('a[href="/workspaces"]').exists()).toBe(true);
+  it("scoped 配下では未選択空状態を出さない（workspace-url-routing 3.2）", async () => {
+    currentId.value = null;
+    const mod = await import("./index.vue");
+    const wrapper = mount(mod.default);
+    await flushPromises();
+    expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(false);
   });
 });

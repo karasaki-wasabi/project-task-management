@@ -1,10 +1,10 @@
 // Pure helpers for the recurrence templates index page (task 7.3,
 // research.md「ビジュアルデザイン確定」, Requirements 1.3, 7.1, 7.2, 8.1–8.3).
-import type { RecurringTaskTemplate } from "../../composables/useApiClient";
+import type { RecurringTaskTemplate } from "../../../../composables/useApiClient";
 import {
   formatOffsetLabel,
   nonBusinessDayPolicyLabel,
-} from "../../components/recurrence/recurrenceLabels";
+} from "../../../../components/recurrence/recurrenceLabels";
 
 export type TemplateStatusTone = "success" | "neutral";
 

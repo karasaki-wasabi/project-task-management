@@ -1,7 +1,7 @@
 // Helpers for RecurrencePage list columns (task 7.3).
 // Requirements 1.3, 8.1, 8.3 — case-relative fields only (no kind / interval).
 import { describe, expect, it } from "vitest";
-import type { RecurringTaskTemplate } from "../../composables/useApiClient";
+import type { RecurringTaskTemplate } from "../../../../composables/useApiClient";
 import { templateOffsetLabel, templatePolicyLabel, templateStatusBadge } from "./index.helpers";
 
 function makeTemplate(
