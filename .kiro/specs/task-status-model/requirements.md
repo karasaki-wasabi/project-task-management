@@ -39,8 +39,8 @@
 
 #### Acceptance Criteria
 1. The Development Stage Service shall すべての開発段階に、通常・完了・中止のいずれかの種別を保持する
-2. The Development Stage Service shall 完了種別の開発段階を常に 1 つだけ存在させる
-3. The Development Stage Service shall 中止種別の開発段階を常に 1 つだけ存在させる
+2. The Development Stage Service shall 各ワークスペースにおいて、完了種別の開発段階を常に 1 つだけ存在させる
+3. The Development Stage Service shall 各ワークスペースにおいて、中止種別の開発段階を常に 1 つだけ存在させる
 4. When メンバーが新しい開発段階を作成した場合、the Development Stage Service shall 当該開発段階を通常種別として作成する
 5. If 完了種別または中止種別の開発段階を削除する操作が試みられた場合、the Development Stage Service shall 削除を拒否する
 6. If 既存の開発段階の種別を変更する操作が試みられた場合、the Development Stage Service shall 変更を拒否する

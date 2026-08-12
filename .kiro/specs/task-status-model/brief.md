@@ -15,11 +15,11 @@
 ## Current State
 
 - `Task.status` は `TaskStatus` enum（`not_started` / `in_progress` / `done` / `on_hold`）で、開発段階とは独立
-- カンバンの列は開発段階（`Task.developmentStageId`）であり、ドラッグで段階が変わる（`frontend/pages/kanban/index.vue`）
-- `completedAt` は `status === "done"` のとき打刻し、それ以外では null に戻す（`backend/src/modules/tasks/task.service.ts:55`）
-- 消化数は `completedAt` の期間フィルタのみで算出する（`backend/src/modules/throughput/throughput.repository.ts:15`）
-- 親子完了制約（子が未完了なら親を完了にできない）は `status = done` への遷移時にチェックしている（`backend/src/modules/tasks/task.service.ts:49`）
-- `DevelopmentStage` は `name` と `order` のみを持ち、終端かどうかを表す属性はない
+- カンバンの列は開発段階（`Task.developmentStageId`）であり、ドラッグで段階が変わる（`frontend/pages/workspaces/[workspaceId]/kanban/index.vue`）
+- `completedAt` は `status === "done"` のとき打刻し、それ以外では null に戻す（`backend/src/modules/tasks/task.service.ts` の `updateStatus`）
+- 消化数は `completedAt` の期間フィルタのみで算出する（`backend/src/modules/throughput/throughput.repository.ts`）
+- 親子完了制約（子が未完了なら親を完了にできない）は `status = done` への遷移時にチェックしている（同 `updateStatus`）
+- `DevelopmentStage` は `name`・`order`・`workspaceId` を持ち、終端かどうかを表す属性はない
 
 ## Desired Outcome
 
@@ -99,10 +99,10 @@
 
 ### 開発段階の種別
 
-- 完了種別・中止種別の開発段階は、それぞれ常に 1 つだけ存在する
-- 両者は必ず存在し、削除できない
+- 完了種別・中止種別の開発段階は、各ワークスペースにおいてそれぞれ常に 1 つだけ存在する
+- 両者は各ワークスペースで必ず存在し、削除できない
 - 開発段階の設定自体は任意であり、段階未設定のタスクを完了・中止へ直接移す運用も成り立つ
-- 既存 DB の開発段階データは移行対象とせず、データ削除で対応する
+- 既存 DB の開発段階データは移行対象とせず、データ削除で対応することを許容する（実装時のマイグレーション方針は design.md を正とする）
 
 ### 「完了」と「クローズ」の区別
 

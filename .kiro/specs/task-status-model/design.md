@@ -17,19 +17,19 @@
 | `task.repository.ts` `countIncompleteChildren` | `status != "done"` | クローズ済みでない |
 | `task.service.ts` `updateStatus` | `status === "done"` | 撤去し段階変更へ移設 |
 | `case.repository.ts` `countRequiredCompletedTasks` | `status: "done"` | 完了段階にある |
-| `components/cases/CaseDetailModal.vue` | `status === 'done'` | 完了段階にある |
-| `pages/calendar/index.helpers.ts` | `status !== "done"` | クローズ済みでない |
-| `pages/kanban/index.helpers.ts` `computeFocusedTasks` | `status !== "done"` | クローズ済みでない（8.7） |
-| `pages/kanban/index.helpers.ts` `computeWorkloadCounts` | `status === "done"` | クローズ済みでない（8.7） |
-| `pages/kanban/index.helpers.ts` `computeTaskProgressById` | `status === "done"` | 完了段階の子を数え、中止段階の子を母数から除外（8.6） |
-| `prisma/seed.ts` | `status: "done"` | 新しい列挙値へ追従。**投入済みの完了段階を参照するよう修正**（後述） |
+| `frontend/components/cases/CaseDetailModal.vue` | `status === 'done'` | 完了段階にある |
+| `frontend/pages/workspaces/[workspaceId]/calendar/index.helpers.ts` | `status !== "done"` | クローズ済みでない |
+| `frontend/pages/workspaces/[workspaceId]/kanban/index.helpers.ts` `computeFocusedTasks` | `status !== "done"` | クローズ済みでない（8.7） |
+| `frontend/pages/workspaces/[workspaceId]/kanban/index.helpers.ts` `computeWorkloadCounts` | `status === "done"` | クローズ済みでない（8.7） |
+| `frontend/pages/workspaces/[workspaceId]/kanban/index.helpers.ts` `computeTaskProgressById` | `status === "done"` | 完了段階の子を数え、中止段階の子を母数から除外（8.6） |
+| `backend/src/prisma/seed.ts` | `status: "done"` | 新しい列挙値へ追従。シードが作るワークスペースでも終端段階を種別つきでちょうど 1 つずつ作る（後述） |
 
 ### Goals
 
 - 完了種別の開発段階への到達をもって完了日時を確定し、段階を進める運用のままで消化数を集計できる状態にする
 - 「完了」と「クローズ」を区別し、中止したタスクが親タスク・案件・カレンダーを塞がない状態にする
 - ステータスを段階内の作業状態に限定し、「完了」の語がタスク全体の完了のみを指す状態にする
-- 完了・中止の開発段階が常に 1 つずつ存在することを保証する
+- 各ワークスペースで完了・中止の開発段階が常に 1 つずつ存在することを保証する
 
 ### Non-Goals
 
@@ -43,7 +43,7 @@
 
 ### This Spec Owns
 
-- `DevelopmentStage` の種別（通常・完了・中止）と、その不変条件（完了・中止は常に 1 つずつ存在し、削除も種別変更もできない）
+- `DevelopmentStage` の種別（通常・完了・中止）と、その不変条件（各ワークスペースで完了・中止は常に 1 つずつ存在し、削除も種別変更もできない）
 - タスクのクローズ状態（未クローズ／完了／中止）の定義と、その唯一の判定元
 - `Task.completedAt` の打刻・解除の責務
 - `TaskStatus` の値の意味と、開発段階の移動に伴うステータスのリセット
@@ -169,11 +169,11 @@ frontend/
 │   ├── tasks/TaskNode.vue                  # 選択肢追従
 │   ├── kanban/TaskDetailModal.vue          # 終端段階でステータスを出さない
 │   └── cases/CaseDetailModal.vue           # 必須タスクの完了表示をクローズ基準へ
-└── pages/
-    ├── calendar/index.helpers.ts           # 期限超過判定をクローズ基準へ
-    ├── calendar/index.vue                  # 段階一覧の取得を追加
+└── pages/workspaces/[workspaceId]/
+    ├── calendar/index.helpers.ts           # 期限超過判定をクローズ基準へ（段階一覧は取得済み）
     ├── cases/index.vue                     # 段階一覧の取得を追加
     ├── tasks/index.vue                     # 段階一覧の取得を追加
+    ├── kanban/index.helpers.ts             # 進捗・トレイ・負荷をクローズ基準へ
     ├── kanban/index.vue                    # 完了列へのドラッグ拒否を復旧・通知する
     └── kanban/stages.vue                   # 種別の表示、終端段階の削除を抑止
 ```
@@ -188,7 +188,7 @@ frontend/
 | `task.repository.ts` | `countIncompleteChildren` をクローズ基準へ、`updateDevelopmentStage` が status と completedAt も更新できるようにする |
 | `case.repository.ts` | `countRequiredTasks` が中止を除外、`countRequiredCompletedTasks` がクローズ基準で完了を数える |
 | `useApiClient.ts` | `TaskStatus` の値を更新、`DevelopmentStage` に `kind` を追加 |
-| `pages/kanban/index.vue` | `onDropOnStage` に失敗時の復旧を追加する。完了列へのドラッグが `incomplete_children` で拒否されうるようになるため |
+| `pages/workspaces/[workspaceId]/kanban/index.vue` | `onDropOnStage` に失敗時の復旧を追加する。完了列へのドラッグが `incomplete_children` で拒否されうるようになるため |
 
 ## System Flows
 
@@ -224,7 +224,7 @@ flowchart TD
 | Requirement | Summary | Components | Interfaces |
 |-------------|---------|------------|------------|
 | 1.1 | 種別の保持 | DevelopmentStage モデル / ドメイン型 | `DevelopmentStage.kind` |
-| 1.2, 1.3 | 完了・中止は常に 1 つ | マイグレーション（初期投入） / DevelopmentStagesService | 1.4〜1.6 の複合で維持 |
+| 1.2, 1.3 | 各ワークスペースで完了・中止は常に 1 つ | マイグレーション（既存 WS への初期投入） / DevelopmentStagesService / seed | 1.4〜1.6 の複合で維持 |
 | 1.4 | 新規は通常種別 | DevelopmentStagesService | `create` |
 | 1.5 | 終端段階の削除拒否 | DevelopmentStagesService | `delete` |
 | 1.6 | 種別変更の拒否 | development-stage.routes | 変更経路を設けない |
@@ -245,7 +245,7 @@ flowchart TD
 | 6.1, 6.2, 6.3 | 案件の必須タスク進捗 | caseRepository | `countRequiredTasks` / `countRequiredCompletedTasks` |
 | 6.4, 6.5 | 終了日超過警告 | CaseService | `getProgress`（算術により追従） |
 | 6.6, 8.9 | 母数 0 のとき進捗を出さない | CaseDetailModal / TaskCard | 表示の抑止 |
-| 8.6, 8.7, 8.8 | カンバンの進捗・トレイ・負荷の追従 | kanban/index.helpers.ts | `computeTaskProgressById` ほか |
+| 8.6, 8.7, 8.8 | カンバンの進捗・トレイ・負荷の追従 | `pages/workspaces/[workspaceId]/kanban/index.helpers.ts` | `computeTaskProgressById` ほか |
 | 8.10 | 終端段階では分割操作を出さない | TaskNode | 表示の抑止 |
 | 7.1〜7.4 | 消化数 | throughputRepository | **変更なし**（後述） |
 | 8.1 | 終端段階も列として表示 | kanban/index.vue | **変更なし** |
@@ -413,7 +413,7 @@ Domain Model の不変条件「完了種別の段階にあるタスクは未ク�
 
 **Responsibilities & Constraints**
 
-- 完了種別・中止種別の段階がそれぞれ常に 1 つ存在することを保証する
+- 各ワークスペースで完了種別・中止種別の段階がそれぞれ常に 1 つ存在することを保証する
 - 種別を変更する手段を提供しない
 
 **Contracts**: Service [x] / API [x] / Event [ ] / Batch [ ] / State [ ]
@@ -428,21 +428,23 @@ export interface DevelopmentStage {
   name: string;
   order: number;
   kind: DevelopmentStageKind;
+  workspaceId: string; // 既存。本仕様では変更しない
 }
 
 interface DevelopmentStagesService {
-  create(name: string): Promise<DevelopmentStage>;   // 常に kind = "normal"
-  rename(id: string, name: string): Promise<DevelopmentStage>;
-  reorder(orderedIds: string[]): Promise<DevelopmentStage[]>;
-  delete(id: string, requestId?: string): Promise<void>;  // 終端種別は拒否
-  getById(id: string): Promise<DevelopmentStage | null>;  // 新規
-  list(): Promise<DevelopmentStage[]>;
+  // workspaceId 引数は既存の VerifiedWorkspaceId 規約を維持する
+  create(name: string, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage>;   // 常に kind = "normal"
+  rename(id: string, workspaceId: VerifiedWorkspaceId, name: string): Promise<DevelopmentStage>;
+  reorder(orderedIds: string[], workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage[]>;
+  delete(id: string, workspaceId: VerifiedWorkspaceId, requestId?: string): Promise<void>;  // 終端種別は拒否
+  getById(id: string, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage | null>;  // 新規
+  list(workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage[]>;
 }
 ```
 
 - Preconditions: `create` の `name` は空白のみでない（既存の検証を維持）
 - Postconditions: `create` が返す段階の種別は常に通常である（1.4）
-- Invariants: 完了種別・中止種別の段階はそれぞれちょうど 1 つ存在する（1.2, 1.3）
+- Invariants: 対象ワークスペース内で、完了種別・中止種別の段階はそれぞれちょうど 1 つ存在する（1.2, 1.3）
 
 ##### API Contract
 
@@ -520,9 +522,9 @@ export function isTaskCompleted(
 
 **Implementation Notes**
 
-- Integration: タスクの API ペイロードには段階の種別を含めない。`Task` ドメイン型が Prisma モデルの再エクスポートである既存規約を崩さないため、クライアント側で段階一覧と突き合わせる。`calendar`・`cases`・`tasks` の各画面は段階一覧の取得を追加する（`kanban` はすでに取得済み）
+- Integration: タスクの API ペイロードには段階の種別を含めない。`Task` ドメイン型が Prisma モデルの再エクスポートである既存規約を崩さないため、クライアント側で段階一覧と突き合わせる。`cases`・`tasks` は段階一覧の取得を追加する（`kanban`・`calendar` は取得済み）
 - Validation: 段階未設定・未知の段階 ID のいずれでも `"open"` になることをテストする
-- Risks: 段階一覧の取得が増える画面が 3 つある。一覧は小さく、既存のカンバンと同じ取得方法であるため影響は限定的
+- Risks: 段階一覧の取得が増える画面は 2 つ。一覧は小さく、既存のカンバンと同じ取得方法であるため影響は限定的
 
 #### 表示コンポーネント（Summary のみ）
 
@@ -534,9 +536,9 @@ export function isTaskCompleted(
 | `TaskDetailModal.vue` | 終端段階のタスクではステータスを表示しない。段階バッジを `StageBadge` に置き換える | 4.5, 8.2 |
 | `TaskCard.vue` | 終端列では下段のステータスバッジのみを落とし、**担当者の丸は下段右に維持**する。終端列では子タスク進捗を出さない。中止の子がいる親では進捗の右に「中止 N 件を除く」を添える | 4.5, 8.6, 8.9 |
 | `CaseDetailModal.vue` | 必須タスクの完了表示を `isTaskCompleted` に置き換える。母数 0 のとき進捗を提示しない | 8.3, 6.6 |
-| `calendar/index.helpers.ts` | 期限超過判定を「クローズ済みでない」に置き換える | 8.4, 8.5 |
-| `kanban/index.helpers.ts` | `computeFocusedTasks` / `computeWorkloadCounts` をクローズ基準へ。`computeTaskProgressById` を「完了段階の子 ÷ 中止を除いた子」へ | 8.6, 8.7, 8.8 |
-| `kanban/stages.vue` | 種別を表示し、終端段階の削除操作を無効化して「この段階は削除できません」を添える | 1.5, 1.8 |
+| `pages/workspaces/[workspaceId]/calendar/index.helpers.ts` | 期限超過判定を「クローズ済みでない」に置き換える | 8.4, 8.5 |
+| `pages/workspaces/[workspaceId]/kanban/index.helpers.ts` | `computeFocusedTasks` / `computeWorkloadCounts` をクローズ基準へ。`computeTaskProgressById` を「完了段階の子 ÷ 中止を除いた子」へ | 8.6, 8.7, 8.8 |
+| `pages/workspaces/[workspaceId]/kanban/stages.vue` | 種別を表示し、終端段階の削除操作を無効化して「この段階は削除できません」を添える | 1.5, 1.8 |
 
 ## Data Models
 
@@ -545,7 +547,7 @@ export function isTaskCompleted(
 - **DevelopmentStage**（集約ルート）: `kind` を不変の属性として持つ。生成後に種別は変化しない
 - **Task**: `developmentStageId` を通じてクローズ状態が決まる。`completedAt` はクローズ状態から導出される派生値であり、独立した入力ではない
 - **不変条件**:
-  - 完了種別・中止種別の開発段階はそれぞれちょうど 1 つ存在する
+  - 各ワークスペースにおいて、完了種別・中止種別の開発段階はそれぞれちょうど 1 つ存在する
   - `completedAt` が非 `null` であることと、タスクが完了種別の段階にあることは同値である
   - 完了種別の段階にあるタスクは、未クローズの子タスクを持たない
 
@@ -567,7 +569,7 @@ enum TaskStatus {
 
 model DevelopmentStage {
   kind DevelopmentStageKind @default(normal)
-  // 既存の id / name / order / 監査カラムは変更しない
+  // 既存の id / name / order / workspaceId / 監査カラムは変更しない
 }
 ```
 
@@ -578,13 +580,13 @@ model DevelopmentStage {
 ```mermaid
 flowchart LR
     A[migration 追加] --> B[kind 列を追加]
-    B --> C[完了・中止段階を固定 UUID で投入]
+    B --> C[各 WS に完了・中止段階を投入]
     C --> D[status の列挙値を変更]
     D --> E[既存 done を ready_for_handoff へ更新]
-    E --> F[完了済みタスクを完了段階へ移送]
+    E --> F[完了済みタスクを当該 WS の完了段階へ移送]
 ```
 
-**手書きの追加マイグレーションを 1 本作成し、`prisma migrate deploy` で適用する**（既存 3 本は温存する）。`prisma migrate dev` は使用しない。
+**手書きの追加マイグレーションを 1 本作成し、`prisma migrate deploy` で適用する**（既存 4 本は温存する）。`prisma migrate dev` は使用しない。
 
 #### 通常の運用が使えない理由
 
@@ -608,13 +610,23 @@ flowchart LR
 | 3 | `prisma migrate deploy` で適用する |
 | 4 | マイグレーション SQL の冒頭に、`migrate dev` を使ってはいけない旨と理由をコメントで残す |
 
-初期投入は固定 UUID の `INSERT` としてマイグレーションに含める。リポジトリには seed 機構が存在する（`backend/src/prisma/seed.ts` ＋ `db:seed`）が、seed は開発用データであり本番では実行されない。不変条件（1.2, 1.3）は seed を実行しない環境でも成立している必要があるため、投入責務はマイグレーションが負う。
+初期投入はワークスペース単位で行う。`DevelopmentStage` はすでに `workspaceId` を持つため、グローバルな固定 UUID 1 組では不変条件を満たせない。
+
+| 手順 | 内容 |
+|---|---|
+| 1 | 既存の各ワークスペースについて、完了種別・中止種別の段階がまだ無い場合に `INSERT` する（識別子はワークスペースごとに採番する） |
+| 2 | 名称が「完了」など完了相当とみなせる既存段階がある場合は、新規行を足さず当該行の `kind` を `completed` に昇格してよい |
+| 3 | 中止相当の既存段階が無い場合は、中止種別の段階を新規投入する |
+
+リポジトリには seed 機構が存在する（`backend/src/prisma/seed.ts` ＋ `db:seed`）が、seed は開発用データであり本番では実行されない。マイグレーション適用時点で存在するワークスペースについて、不変条件（1.2, 1.3）を成立させる責務はマイグレーションが負う。
 
 #### seed.ts の修正（必須）
 
-既存の seed は開発段階を自前で投入しており、その中に完了相当の段階（`STAGE_DONE_ID`）を含む。マイグレーションが完了段階を投入したうえで seed をそのまま実行すると、**完了種別の段階が 2 つ存在し不変条件が破れる**。
+seed はマイグレーション後に新しいワークスペースを作るため、マイグレーションが投入した終端段階を参照できない。当該ワークスペース向けに、完了種別・中止種別の段階を種別つきでちょうど 1 つずつ作成する。
 
-seed からは終端段階の作成を取り除き、マイグレーションが投入した完了・中止段階を参照する形へ変更する。タスクのステータス値も新しい列挙値へ追従させる。
+既存の seed は完了相当の段階（`STAGE_DONE_ID`）を種別なしで作っている。種別導入後も通常種別のまま残すと、同じワークスペースに完了種別が足りない／余分な通常の「完了」段階が残る、のいずれかで不変条件が破れる。
+
+タスクのステータス値も新しい列挙値へ追従させ、完了済みとして置くタスクは当該ワークスペースの完了段階へ紐づける。
 
 #### 既存データの整合（必須）
 
@@ -624,8 +636,8 @@ seed からは終端段階の作成を取り除き、マイグレーションが
 
 | 列 | 移行後の値 | 理由 |
 |---|---|---|
-| `development_stage_id` | 投入した完了段階の ID | 完了の判定元を新しい定義へ合わせる |
-| `completed_at` | **変更しない** | 消化数の履歴を失わない |
+| `development_stage_id` | 当該タスクのワークスペースに投入（または昇格）した完了段階の ID | 完了の判定元を新しい定義へ合わせる |
+| `completed_at` | 変更しない | 消化数の履歴を失わない |
 | `status` | `not_started` | 段階移動時のリセット規則（4.4）と揃える |
 
 旧 `done` でないタスクは `completed_at` を持たないため、追加の処理を要しない。この整合により、マイグレーション完了時点で不変条件が全行について成立する。
@@ -699,22 +711,23 @@ seed からは終端段階の作成を取り除き、マイグレーションが
 ## Risks
 
 1. **既存テストの改修量**: ステータスを参照するテストはバックエンド 20 ファイル・フロントエンド 6 ファイルに及ぶ。多くは列挙値の機械的置換だが、`task.service.test.ts`・`case.service.test.ts`・`kanban/index.helpers.test.ts`・`TaskCard.helpers.test.ts` は判定基準そのものが変わるため書き換えが必要
-5. **seed.ts の修正漏れ**: 修正しないまま `db:seed` を実行すると完了種別の段階が 2 つになり、不変条件が破れる。マイグレーションと同一タスクで扱う
+5. **seed.ts の修正漏れ**: seed は新規ワークスペースを作るため、終端段階を種別つきでちょうど 1 つずつ作らないと不変条件が破れる。マイグレーションと同一タスクで扱う
 2. **新しい通常段階の挿入位置**: `create` の挙動を変更する。既存の `reorder` の事前条件（現存集合との完全一致）には影響しない
-3. **不変条件の担保範囲**: 完了・中止がそれぞれ 1 つであることはアプリケーション層で維持する（後述の決定を参照）。データベースへ直接 SQL を実行した場合は不変条件が破れうる。運用上これを許容する
+3. **不変条件の担保範囲**: 各ワークスペースで完了・中止がそれぞれ 1 つであることはアプリケーション層で維持する（後述の決定を参照）。データベースへ直接 SQL を実行した場合は不変条件が破れうる。運用上これを許容する
 4. **マイグレーション適用時の操作ミス**: `prisma migrate dev` を誤って実行すると生成列と一意インデックスが失われる。マイグレーション SQL 自体にコメントを残すことで緩和する
 
 ## Design Decisions（確認済み）
 
 ### 不変条件はアプリケーション層のみで担保する
 
-完了・中止の開発段階がそれぞれ 1 つであることは、次の 4 つの仕組みの組み合わせで維持する。データベース制約（生成列＋一意インデックス）による二重の担保は行わない。
+各ワークスペースで完了・中止の開発段階がそれぞれ 1 つであることは、次の仕組みの組み合わせで維持する。データベース制約（生成列＋一意インデックス）による二重の担保は行わない。
 
 | 仕組み | 対応する要件 |
 |---|---|
-| マイグレーションでの初期投入 | 1.2, 1.3 |
+| マイグレーションでの、既存各ワークスペースへの初期投入 | 1.2, 1.3 |
+| seed が新規ワークスペースに終端段階を種別つきでちょうど 1 つずつ作る | 1.2, 1.3 |
 | `create` が常に通常種別を割り当てる | 1.4 |
 | 種別を変更する API 経路が存在しない | 1.6 |
 | 終端種別の削除を拒否する | 1.5 |
 
-API とフロントエンドで担保できているため、データベース制約は不要と判断した。生成列による担保は 3 本目の手編集マイグレーションを必要とし、前述の `migrate dev` の罠を増やす側面もある。
+API とフロントエンドで担保できているため、データベース制約は不要と判断した。生成列による担保は追加の手編集マイグレーションを必要とし、前述の `migrate dev` の罠を増やす側面もある。

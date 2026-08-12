@@ -16,11 +16,11 @@
 
 | 資産 | 内容 |
 |---|---|
-| `DevelopmentStage`（schema.prisma） | `id / name / order / timestamps / deletedAt`。種別なし |
+| `DevelopmentStage`（schema.prisma） | `id / name / order / workspaceId / timestamps / deletedAt`。種別なし |
 | `development-stage.types.ts` | ドメイン型は `{ id, name, order }` のみ公開 |
 | `development-stage.service.ts` | `create(name)`（order は max+1）／`rename`／`reorder`（現存集合と完全一致が事前条件）／`delete` |
 | `development-stage.routes.ts` | `POST` / `PATCH`(name のみ) / `POST /reorder` / `DELETE` / `GET` |
-| `frontend/pages/kanban/stages.vue` | 開発段階マスタ管理画面 |
+| `frontend/pages/workspaces/[workspaceId]/kanban/stages.vue` | 開発段階マスタ管理画面 |
 
 ### タスクの状態
 
@@ -40,7 +40,7 @@
 | `task.service.ts:48,55` | `status === "done"`（制約チェック＋完了日時打刻） |
 | `case.repository.ts:52` | `status: "done"`（案件の必須タスク完了数） |
 | `frontend/components/cases/CaseDetailModal.vue:273` | `task.status === 'done'`（必須タスクのチェック表示） |
-| `frontend/pages/calendar/index.helpers.ts:100` | `task.status !== "done"`（期限超過判定） |
+| `frontend/pages/workspaces/[workspaceId]/calendar/index.helpers.ts` | `task.status !== "done"`（期限超過判定） |
 
 ### 集計・表示
 
@@ -52,11 +52,11 @@
 | `StatusBadge.vue` | ラベル定義（`in_progress` = 「進行中」） |
 | `TaskNode.vue:46-49` | ステータス選択の `<option>` 4 件 |
 | `useApiClient.ts:11` | `TaskStatus` 型定義。API 境界の単一窓口 |
-| `pages/kanban/index.vue` | 列＝開発段階。段階未設定タスクは列から除外しバックログへ |
+| `pages/workspaces/[workspaceId]/kanban/index.vue` | 列＝開発段階。段階未設定タスクは列から除外しバックログへ |
 
 ### マイグレーション
 
-`20260805030211_init_domain_schema` / `20260809060000_add_user_account_fields` / `20260809090000_add_workspace_membership` の 3 本。本番データなしのため、enum リネームはマイグレーション削除＋DB リセットで対応する方針（steering の運用ルール）。
+`20260805030211_init_domain_schema` / `20260809060000_add_user_account_fields` / `20260809090000_add_workspace_membership` / `20260810020000_add_workspace_resource_scope` の 4 本。`TaskStatus` 改名は生成列保護のため手書き追加マイグレーション＋`migrate deploy` とする（design.md 参照）。
 
 ## Requirement-to-Asset Map
 
@@ -67,7 +67,7 @@
 | 受入基準 | 対象資産 | ギャップ |
 |---|---|---|
 | 1.1 種別の保持 | `DevelopmentStage` model / `development-stage.types.ts` | **Missing** 列とドメイン型への追加 |
-| 1.2 / 1.3 完了・中止が常に 1 つ | — | **Missing** 初期投入と一意性担保。**seed 機構がリポジトリに存在しない**（`package.json` に seed スクリプトなし） |
+| 1.2 / 1.3 各 WS で完了・中止が常に 1 つ | — | **Missing** ワークスペース単位の初期投入と一意性担保（後続セクションで seed の存在を訂正） |
 | 1.4 新規作成は通常種別 | `developmentStagesService.create` | **Constraint** 種別を固定して作成 |
 | 1.5 終端段階の削除拒否 | `.delete` / `DELETE` route | **Missing** 種別チェック |
 | 1.6 種別変更の拒否 | `PATCH` route | **OK** 現状 `PATCH` は `name` のみ受け付けるため、種別変更の経路が存在しない |
@@ -135,7 +135,7 @@
 
 | 受入基準 | 対象資産 | ギャップ |
 |---|---|---|
-| 8.1 終端段階も列として表示 | `pages/kanban/index.vue` | **OK** 全段階を列として描画しているため自動的に満たされる |
+| 8.1 終端段階も列として表示 | `pages/workspaces/[workspaceId]/kanban/index.vue` | **OK** 全段階を列として描画しているため自動的に満たされる |
 | 8.2 ステータス語の追従 | `StatusBadge.vue` / `TaskNode.vue` | **Missing** |
 | 8.3 「完了」の語を一意に | `CaseDetailModal.vue:273-276` | **Missing** `status === 'done'` を段階種別ベースへ |
 
@@ -143,7 +143,7 @@
 
 **カレンダーの期限超過判定が要件に含まれていなかった。**
 
-`frontend/pages/calendar/index.helpers.ts:100` は `dateKey < todayIso && task.status !== "done"` で期限超過を判定している。`done` を単純にリネームすると、**完了したタスクが期限超過として赤く表示され続ける**。
+`frontend/pages/workspaces/[workspaceId]/calendar/index.helpers.ts` は `dateKey < todayIso && task.status !== "done"` で期限超過を判定している。`done` を単純にリネームすると、**完了したタスクが期限超過として赤く表示され続ける**。
 
 当初の Requirement 8 は「ステータス語の追従」と「完了の語の一意性」しか規定しておらず、この判定基準の変更を要求していなかった。判定を「完了していない」ではなく「**クローズ済みでない**」に変える方針で、Requirement 8.4（クローズ済みは期限超過として表示しない）および 8.5（ステータスに基づいて判定しない）を追加済み。
 
@@ -355,11 +355,11 @@ steering の指示どおり、手書きマイグレーションを `prisma migra
 | `task.repository.ts:85` | 親子完了制約 | 把握済み |
 | `task.service.ts:146,153` | 制約チェック＋完了日時の打刻 | 把握済み |
 | `case.repository.ts:70` | 案件の必須タスク完了数 | 把握済み |
-| `calendar/index.helpers.ts:100` | 期限超過 | 把握済み |
+| `workspaces/.../calendar/index.helpers.ts` | 期限超過 | 把握済み |
 | `CaseDetailModal.vue` | 必須タスクのチェック表示 | 把握済み |
-| `kanban/index.helpers.ts:29` | 担当者フォーカストレイ | **見落とし** |
-| `kanban/index.helpers.ts:40` | チーム負荷カウント | **見落とし** |
-| `kanban/index.helpers.ts:77` | 親タスクの子進捗 | **見落とし** |
+| `workspaces/.../kanban/index.helpers.ts`（フォーカストレイ） | 担当者フォーカストレイ | **見落とし** |
+| `workspaces/.../kanban/index.helpers.ts`（チーム負荷） | チーム負荷カウント | **見落とし** |
+| `workspaces/.../kanban/index.helpers.ts`（子進捗） | 親タスクの子進捗 | **見落とし** |
 | `seed.ts:181` | シードデータ | **見落とし** |
 
 ### 誤り 2: seed 機構は存在する
@@ -368,9 +368,9 @@ steering の指示どおり、手書きマイグレーションを `prisma migra
 
 design.md は「seed 機構が存在しない」を根拠に初期投入をマイグレーションへ置いていた。前提が崩れたため再判断し、**結論は維持**する（利用者確認済み）。
 
-- 不変条件（完了・中止が常に 1 つずつ存在する）は、seed を実行しない環境でも成立している必要がある
+- 不変条件（各ワークスペースで完了・中止が常に 1 つずつ存在する）は、seed を実行しない環境でも成立している必要がある
 - seed は開発用データであり、本番では実行されない
-- ただし **seed.ts 側の修正が必要**: 既存の `STAGE_DONE_ID` を、マイグレーションが投入する完了段階へ向け直す。放置すると完了種別の段階が 2 つになり不変条件が破れる
+- ただし **seed.ts 側の修正が必要**: seed は新規ワークスペースを作るため、当該 WS 向けに終端段階を種別つきでちょうど 1 つずつ作る。放置すると不変条件が破れる
 
 ### 誤り 3: workspace-resource-scope は実装済み
 
@@ -399,9 +399,9 @@ design.md は「seed 機構が存在しない」を根拠に初期投入をマ�
 
 | 画面 | 変更内容 | 適用条件 |
 |---|---|---|
-| 開発段階管理（`/kanban/stages`） | 種別の表示、終端段階の削除操作を出さない | 一覧の情報設計の変更 |
-| カンバンボード（`/kanban`） | 完了・中止列の常設、終端列カードのステータス非表示、拒否時の提示 | 列構成と情報設計の変更 |
-| タスク一覧（`/tasks`） | 終端段階でステータスのバッジとセレクトを出さない | 行の情報設計の変更 |
+| 開発段階管理（`/workspaces/:workspaceId/kanban/stages`） | 種別の表示、終端段階の削除操作を出さない | 一覧の情報設計の変更 |
+| カンバンボード（`/workspaces/:workspaceId/kanban`） | 完了・中止列の常設、終端列カードのステータス非表示、拒否時の提示 | 列構成と情報設計の変更 |
+| タスク一覧（`/workspaces/:workspaceId/tasks`） | 終端段階でステータスのバッジとセレクトを出さない | 行の情報設計の変更 |
 | タスク詳細モーダル | 終端段階でステータスを出さない | 同上 |
 
 ### 適用外と判定した変更
@@ -435,11 +435,27 @@ design.md は「seed 機構が存在しない」を根拠に初期投入をマ�
 
 `incomplete_children` の発生契機がステータス変更から**開発段階の変更**へ移る結果、カンバンのドラッグで正常に発生しうる拒否になる。`onDropOnStage` は例外処理を持たず、楽観更新の巻き戻しも通知もされない状態だった。
 
-→ `pages/kanban/index.vue` を File Structure Plan と Modified Files に追加し、同一ファイル内の `handleFocusTrayAssign` が持つ既存の復旧パターン（`revertOptimisticMove()` ＋ 共有 `ErrorAlert`）を踏襲することを明記した。新しい復旧機構は設けない。
+→ `pages/workspaces/[workspaceId]/kanban/index.vue` を File Structure Plan と Modified Files に追加し、同一ファイル内の `handleFocusTrayAssign` が持つ既存の復旧パターン（`revertOptimisticMove()` ＋ 共有 `ErrorAlert`）を踏襲することを明記した。新しい復旧機構は設けない。
 
 ### 3. Requirement 4.5 の適用範囲と影響画面数の誤り
 
-`TaskNode.vue` はステータスのバッジと編集セレクトの両方を描画するため 4.5 の対象だが、コンポーネント表では 8.2 のみを割り当てていた。あわせて段階一覧の取得が増える画面を「2 画面」と記載していたが、`tasks` を含めて **3 画面**が正しい。
+`TaskNode.vue` はステータスのバッジと編集セレクトの両方を描画するため 4.5 の対象だが、コンポーネント表では 8.2 のみを割り当てていた。あわせて段階一覧の取得が増える画面を「2 画面」と記載していたが、当時は `calendar`・`cases`・`tasks` の 3 画面が正しい、として訂正した。
 
 → 双方を訂正。E2E にタスク一覧での非表示確認を追加した。
 | 既存テストの改修漏れ | 判定基準の変更が検証されないまま残る | `task.service.test.ts` / `case.service.test.ts` は機械的置換では済まないことを明記 |
+
+## main マージ後の文書同期（2026-08-12）
+
+`workspace-url-routing` が main に入り、業務画面は `frontend/pages/workspaces/[workspaceId]/...` 配下・URL は `/workspaces/:workspaceId/...` になった。あわせて `DevelopmentStage.workspaceId` 前提で、終端段階の不変条件を「グローバルに各 1 つ」から「各ワークスペースで各 1 つ」へ言い直した。
+
+| 項目 | 同期後の正 |
+|---|---|
+| フロントパス | `pages/workspaces/[workspaceId]/{kanban,calendar,tasks,cases}/...` |
+| 画面 URL | `/workspaces/:workspaceId/{kanban,tasks,...}` |
+| 要件 1.2 / 1.3 | 各ワークスペースで完了・中止がちょうど 1 つ |
+| マイグレーション初期投入 | 既存各 WS へ完了・中止を投入（固定 UUID 1 組ではない） |
+| seed | 新規 WS を作るため、当該 WS 向けに終端段階を種別つきでちょうど 1 つずつ作る |
+| 既存マイグレーション本数 | 4 本（本仕様で手書き 1 本を追加） |
+| 段階一覧の取得追加 | `cases`・`tasks` のみ（`kanban`・`calendar` は取得済み） |
+
+詳細は `design.md` / `requirements.md` / `tasks.md` を正とする。冒頭の gap 分析の「5 箇所」「seed なし」は歴史的記述であり、後続の訂正セクションと本節が優先する。
