@@ -88,7 +88,7 @@ async function submit() {
 </script>
 
 <template>
-  <Modal class="recurrence-form-modal" :open="open" aria-label="案件連動テンプレートの登録" @close="emit('close')">
+  <Modal class="recurrence-form-modal" :open="open" ariaLabel="案件連動テンプレートの登録" @close="emit('close')">
     <template #title>案件連動テンプレートを登録</template>
 
     <ErrorAlert v-if="error" :message="error" />

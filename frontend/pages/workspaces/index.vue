@@ -406,7 +406,7 @@ async function confirmDelete() {
 
     <Modal
       :open="deleteConfirmOpen"
-      aria-label="ワークスペースの削除確認"
+      ariaLabel="ワークスペースの削除確認"
       @close="closeDeleteConfirm"
     >
       <template #title>ワークスペースを削除</template>

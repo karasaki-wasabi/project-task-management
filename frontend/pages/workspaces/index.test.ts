@@ -381,7 +381,6 @@ describe("WorkspacesPage member search add panel (task 6.4)", () => {
     await nextTick();
 
     const panel = wrapper.get('[data-testid="member-search-panel"]');
-    expect(panel.exists()).toBe(true);
     expect(panel.text()).toMatch(/既存メンバー/);
     const input = wrapper.get('[data-testid="member-search-input"]');
     expect(input.attributes("placeholder") ?? "").toContain("表示名またはメールアドレスで検索");
@@ -528,7 +527,6 @@ describe("WorkspacesPage creator-only delete (task 6.6)", () => {
     await nextTick();
 
     const modal = wrapper.get('[data-testid="workspace-delete-modal"]');
-    expect(modal.exists()).toBe(true);
     expect(modal.text()).toContain("このワークスペースを削除しますか？");
     expect(modal.text()).toMatch(/メンバー\s*2人/);
     expect(modal.text()).not.toMatch(/案件/);

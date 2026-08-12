@@ -80,8 +80,8 @@ describe("TaskNode (task-status-model 5.2)", () => {
     const priorityIdx = texts.indexOf("priority-badge");
     const stageIdx = badges
       .findAllComponents(StageBadge)
-      .map((c) => c.element)
-      .map((el) => Array.from(badges.element.children).indexOf(el as Element))[0];
+      .map((c: { element: Element }) => c.element)
+      .map((el: Element) => Array.from(badges.element.children).indexOf(el))[0];
     const priorityEl = badges.get('[data-testid="priority-badge"]').element;
     const priorityPos = Array.from(badges.element.children).indexOf(priorityEl);
     expect(stageIdx).toBeGreaterThan(priorityPos);
@@ -137,10 +137,10 @@ describe("TaskNode (task-status-model 5.2)", () => {
     for (const wrapper of [open, closed]) {
       const main = wrapper.get('[data-testid="task-node-main"]');
       expect(main.classes().join(" ")).toMatch(/flex/);
-      expect(main.get('[data-testid="task-node-badges"]').exists()).toBe(true);
+      expect(main.find('[data-testid="task-node-badges"]').exists()).toBe(true);
       const spacer = main.get('[data-testid="task-node-spacer"]');
       expect(spacer.classes().join(" ")).toContain("flex-1");
-      expect(main.get('[data-testid="task-node-actions"]').exists()).toBe(true);
+      expect(main.find('[data-testid="task-node-actions"]').exists()).toBe(true);
     }
 
     const openActions = open.get('[data-testid="task-node-actions"]');

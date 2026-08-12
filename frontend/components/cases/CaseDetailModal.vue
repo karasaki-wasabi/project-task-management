@@ -253,7 +253,7 @@ async function confirmDelete() {
 </script>
 
 <template>
-  <Modal class="case-detail-modal" :open="isOpen" aria-label="案件の詳細" @close="emit('close')">
+  <Modal class="case-detail-modal" :open="isOpen" ariaLabel="案件の詳細" @close="emit('close')">
     <template #title>{{ caseEntity ? name : "読み込み中…" }}</template>
 
     <ErrorAlert v-if="error" :message="error" />
@@ -328,12 +328,12 @@ async function confirmDelete() {
         <div class="flex flex-wrap items-end gap-2">
           <div class="flex flex-col gap-1">
             <span class="text-xs font-medium text-slate-500">開始日</span>
-            <DatePicker v-model="startDate" aria-label="開始日" />
+            <DatePicker v-model="startDate" ariaLabel="開始日" />
           </div>
 
           <div class="flex flex-col gap-1">
             <span class="text-xs font-medium text-slate-500">終了日</span>
-            <DatePicker v-model="endDate" aria-label="終了日" />
+            <DatePicker v-model="endDate" ariaLabel="終了日" />
           </div>
         </div>
 
