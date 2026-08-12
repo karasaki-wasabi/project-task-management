@@ -62,16 +62,16 @@ describe("computeFocusedTasks (Requirement 1.1-1.3)", () => {
     expect(result).toEqual([withStage, withoutStage]);
   });
 
-  it("excludes done tasks for the selected assignee", () => {
-    const done = makeTask({ id: "t1", assigneeUserId: "u-alice", status: "done" });
-    const notDone = makeTask({ id: "t2", assigneeUserId: "u-alice", status: "in_progress" });
-    const result = computeFocusedTasks([done, notDone], "u-alice");
-    expect(result).toEqual([notDone]);
+  it("excludes ready_for_handoff tasks for the selected assignee", () => {
+    const handoff = makeTask({ id: "t1", assigneeUserId: "u-alice", status: "ready_for_handoff" });
+    const notHandoff = makeTask({ id: "t2", assigneeUserId: "u-alice", status: "in_progress" });
+    const result = computeFocusedTasks([handoff, notHandoff], "u-alice");
+    expect(result).toEqual([notHandoff]);
   });
 
   it("returns an empty array when the selected assignee has no incomplete tasks", () => {
-    const done = makeTask({ id: "t1", assigneeUserId: "u-alice", status: "done" });
-    expect(computeFocusedTasks([done], "u-alice")).toEqual([]);
+    const handoff = makeTask({ id: "t1", assigneeUserId: "u-alice", status: "ready_for_handoff" });
+    expect(computeFocusedTasks([handoff], "u-alice")).toEqual([]);
   });
 });
 
@@ -94,8 +94,10 @@ describe("computeWorkloadCounts (Requirement 2.1-2.3)", () => {
     expect(computeWorkloadCounts(tasks, [alice])).toEqual([]);
   });
 
-  it("excludes done tasks even when a development stage is set", () => {
-    const tasks = [makeTask({ id: "t1", assigneeUserId: "u-alice", developmentStageId: "s1", status: "done" })];
+  it("excludes ready_for_handoff tasks even when a development stage is set", () => {
+    const tasks = [
+      makeTask({ id: "t1", assigneeUserId: "u-alice", developmentStageId: "s1", status: "ready_for_handoff" }),
+    ];
     expect(computeWorkloadCounts(tasks, [alice])).toEqual([]);
   });
 
@@ -149,7 +151,7 @@ describe("computeBacklogTasks (Requirement 3.1/3.6)", () => {
 describe("computeTaskProgressById (Requirement 5.4/5.5)", () => {
   it("counts completed/total children per parent task", () => {
     const parent = makeTask({ id: "parent" });
-    const child1 = makeTask({ id: "c1", parentTaskId: "parent", status: "done" });
+    const child1 = makeTask({ id: "c1", parentTaskId: "parent", status: "ready_for_handoff" });
     const child2 = makeTask({ id: "c2", parentTaskId: "parent", status: "in_progress" });
     const result = computeTaskProgressById([parent, child1, child2]);
     expect(result.get("parent")).toEqual({ completed: 1, total: 2 });
@@ -163,8 +165,8 @@ describe("computeTaskProgressById (Requirement 5.4/5.5)", () => {
   });
 
   it("handles multiple parents independently", () => {
-    const childA1 = makeTask({ id: "a1", parentTaskId: "parentA", status: "done" });
-    const childA2 = makeTask({ id: "a2", parentTaskId: "parentA", status: "done" });
+    const childA1 = makeTask({ id: "a1", parentTaskId: "parentA", status: "ready_for_handoff" });
+    const childA2 = makeTask({ id: "a2", parentTaskId: "parentA", status: "ready_for_handoff" });
     const childB1 = makeTask({ id: "b1", parentTaskId: "parentB", status: "not_started" });
     const result = computeTaskProgressById([childA1, childA2, childB1]);
     expect(result.get("parentA")).toEqual({ completed: 2, total: 2 });

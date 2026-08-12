@@ -32,7 +32,7 @@ export interface TaskMarkerView {
   taskId: string;
   title: string;
   stage: string | null; // resolved developmentStageId -> DevelopmentStage.name
-  isOverdue: boolean; // scheduledDate < 本日 かつ status !== "done"
+  isOverdue: boolean; // scheduledDate < 本日 かつ status !== "ready_for_handoff"
 }
 
 export interface DayVisibleMarkers {
@@ -97,7 +97,7 @@ export function buildTaskMarkersByDate(
     // Requirement 2.4: date-only string comparison is safe here because
     // both sides are `YYYY-MM-DD` (lexicographic order matches calendar
     // order for this fixed-width format).
-    const isOverdue = dateKey < todayIso && task.status !== "done";
+    const isOverdue = dateKey < todayIso && task.status !== "ready_for_handoff";
 
     const marker: TaskMarkerView = { taskId: task.id, title: task.title, stage, isOverdue };
 

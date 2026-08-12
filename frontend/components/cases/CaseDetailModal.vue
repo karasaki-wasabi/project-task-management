@@ -270,10 +270,10 @@ async function confirmDelete() {
             >
               <span
                 class="shrink-0 text-sm"
-                :class="task.status === 'done' ? 'text-green-600' : 'text-slate-400'"
-                :aria-label="task.status === 'done' ? '完了' : '未完了'"
+                :class="task.status === 'ready_for_handoff' ? 'text-green-600' : 'text-slate-400'"
+                :aria-label="task.status === 'ready_for_handoff' ? '完了' : '未完了'"
               >
-                {{ task.status === 'done' ? "✓" : "○" }}
+                {{ task.status === 'ready_for_handoff' ? "✓" : "○" }}
               </span>
               <span class="min-w-0 flex-1 truncate text-sm text-slate-800">{{ task.title }}</span>
               <Badge v-if="task.isRequiredForCase" tone="warning" label="必須" />

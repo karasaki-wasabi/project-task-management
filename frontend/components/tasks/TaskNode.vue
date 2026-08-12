@@ -44,8 +44,8 @@ function childrenOf(taskId: string): Task[] {
         @change="emit('statusChange', task.id, ($event.target as HTMLSelectElement).value as TaskStatus)"
       >
         <option value="not_started">未着手</option>
-        <option value="in_progress">進行中</option>
-        <option value="done">完了</option>
+        <option value="in_progress">作業中</option>
+        <option value="ready_for_handoff">引継待ち</option>
         <option value="on_hold">保留</option>
       </select>
       <button

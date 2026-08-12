@@ -39,6 +39,7 @@ function makeStage(overrides: Partial<DevelopmentStage> & { id: string }): Devel
   return {
     name: `stage-${overrides.id}`,
     order: 0,
+    kind: "normal",
     ...overrides,
   };
 }
@@ -120,7 +121,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-05")?.[0]?.stage).toBeNull();
   });
 
-  it("flags isOverdue when scheduledDate is before today and status is not done", () => {
+  it("flags isOverdue when scheduledDate is before today and status is not ready_for_handoff", () => {
     const tasks = [
       makeTask({ id: "t1", status: "in_progress", scheduledDate: "2026-08-01T00:00:00.000Z" }),
     ];
@@ -130,8 +131,10 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-01")?.[0]?.isOverdue).toBe(true);
   });
 
-  it("does not flag isOverdue when status is done, even if scheduledDate is in the past", () => {
-    const tasks = [makeTask({ id: "t1", status: "done", scheduledDate: "2026-08-01T00:00:00.000Z" })];
+  it("does not flag isOverdue when status is ready_for_handoff, even if scheduledDate is in the past", () => {
+    const tasks = [
+      makeTask({ id: "t1", status: "ready_for_handoff", scheduledDate: "2026-08-01T00:00:00.000Z" }),
+    ];
 
     const result = buildTaskMarkersByDate(tasks, stages, "2026-08-05");
 

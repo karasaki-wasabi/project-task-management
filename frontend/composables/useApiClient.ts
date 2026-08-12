@@ -8,8 +8,9 @@ export function joinApiUrl(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
 
-export type TaskStatus = "not_started" | "in_progress" | "done" | "on_hold";
+export type TaskStatus = "not_started" | "in_progress" | "ready_for_handoff" | "on_hold";
 export type Priority = "high" | "medium" | "low";
+export type DevelopmentStageKind = "normal" | "completed" | "cancelled";
 
 export interface Task {
   id: string;
@@ -175,6 +176,7 @@ export interface DevelopmentStage {
   id: string;
   name: string;
   order: number;
+  kind: DevelopmentStageKind;
 }
 
 /** design.md WORKSPACE_COLORS — fixed identifier colors for workspaces. */

@@ -150,6 +150,7 @@ function makeStage(overrides: Partial<DevelopmentStage> = {}): DevelopmentStage 
     id: "s1",
     name: "実装",
     order: 1,
+    kind: "normal",
     ...overrides,
   };
 }

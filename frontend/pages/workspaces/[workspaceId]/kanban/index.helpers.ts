@@ -26,7 +26,9 @@ export function computeFocusedTasks(tasks: Task[], selectedAssigneeUserId: strin
   if (selectedAssigneeUserId === "") {
     return [];
   }
-  return tasks.filter((task) => task.assigneeUserId === selectedAssigneeUserId && task.status !== "done");
+  return tasks.filter(
+    (task) => task.assigneeUserId === selectedAssigneeUserId && task.status !== "ready_for_handoff",
+  );
 }
 
 // Requirement 2.1/2.2/2.3: per-assignee counts of incomplete tasks that have
@@ -37,7 +39,7 @@ export function computeFocusedTasks(tasks: Task[], selectedAssigneeUserId: strin
 export function computeWorkloadCounts(tasks: Task[], users: User[]): WorkloadCount[] {
   const countByUserId = new Map<string, number>();
   for (const task of tasks) {
-    if (!task.developmentStageId || task.status === "done" || !task.assigneeUserId) {
+    if (!task.developmentStageId || task.status === "ready_for_handoff" || !task.assigneeUserId) {
       continue;
     }
     countByUserId.set(task.assigneeUserId, (countByUserId.get(task.assigneeUserId) ?? 0) + 1);
@@ -74,7 +76,7 @@ export function computeTaskProgressById(tasks: Task[]): Map<string, TaskProgress
     }
     const existing = progressByParentId.get(task.parentTaskId) ?? { completed: 0, total: 0 };
     existing.total += 1;
-    if (task.status === "done") {
+    if (task.status === "ready_for_handoff") {
       existing.completed += 1;
     }
     progressByParentId.set(task.parentTaskId, existing);
