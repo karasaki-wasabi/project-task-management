@@ -28,6 +28,13 @@ Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロント
 - バックエンドの各モジュールは`<name>.types.ts`にドメイン型・入力型・エラー型を集約し、`service.ts`/`repository.ts`/`routes.ts`から共有する
 - プロパティレベルの絞り込み(例: `obj.prop !== null`)は、その後の`obj.prop`の読み取りだけを絞り込み、`obj`自体を関数の引数として渡した際にその関数のパラメータ型には伝播しない。呼び出し元で絞り込み済みであっても、呼び出し先のパラメータ型が絞り込み前の広い型(`prop: T | null`)のままだと、呼び出し先の関数本体で型エラーになる。`as`/`!`によるキャストで黙らせるのではなく、`Omit<T, "prop"> & { prop: NonNullable<T["prop"]> }`のように絞り込み後の型を明示的に定義し、呼び出し元では絞り込んだ値を保持する`const`を用意した上で`{ ...obj, prop }`(スプレッドの後に上書きの形で置く)として渡すこと
 
+### Frontend (Vue / Nuxt typecheck)
+- `defineProps` で camelCase の prop（例: `ariaLabel`）を定義したコンポーネントへ渡すときは、テンプレートでも camelCase（`ariaLabel` / `:ariaLabel`）を使う
+  - 実行時は `aria-label` でも動くが、`vue-tsc`（`npm run typecheck`）は kebab-case を別属性扱いし、必須 prop 欠落として落とす
+  - ネイティブ HTML 要素のアクセシビリティ属性としての `aria-label` はそのまま kebab-case でよい。対象は自前コンポーネントの prop 渡しだけ
+- Tailwind の `darkMode` に `false` を渡さない
+  - 型は `'media'` / `'class'` 等。ライトテーマのみならキー自体を省略する
+
 ### Code Quality
 - Fastifyルートでのリクエストボディ/クエリ/パラメータ検証はZodスキーマ + `safeParse`で行い、失敗時は`badRequest(...)`(`shared/http-errors.ts`)に変換する([[error-handling]]参照)
 - モジュール間はサービスの公開インターフェース経由でのみ依存する(他モジュールのPrismaクエリやrepositoryへ直接アクセスしない)
@@ -47,6 +54,8 @@ Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロント
 # バックエンドテスト: docker compose run --rm -T backend npx vitest run --no-file-parallelism
 # バックエンドビルド: docker compose run --rm -T backend npm run build
 # フロントエンドテスト: docker compose run --rm --no-deps -T frontend npm run test
+# フロントエンド型チェック: docker compose run --rm --no-deps -T frontend npm run typecheck
+#   （ホスト直実行は frontend/.nuxt の所有者不一致で失敗しやすい。詳細は [[local-dev-pitfalls]]）
 # フロントエンドビルド: docker compose run --rm --no-deps -T frontend npm run generate
 # フロントエンドE2E: frontend/playwright.config.ts (E2E_BASE_URL で対象URL切り替え)
 # 手動確認用シード再投入: docker compose run --rm -T backend npx prisma db seed

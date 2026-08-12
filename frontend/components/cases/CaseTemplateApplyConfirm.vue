@@ -140,7 +140,7 @@ function onClose() {
   <!-- Nuxt auto-imports Modal in app; component tests stub Modal with slots. -->
   <Modal
     :open="open"
-    :aria-label="title"
+    :ariaLabel="title"
     @close="onClose"
   >
     <template #title>{{ title }}</template>

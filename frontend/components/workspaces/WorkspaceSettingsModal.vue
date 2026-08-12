@@ -81,7 +81,7 @@ async function submit() {
   <Modal
     class="workspace-settings-modal"
     :open="open"
-    aria-label="ワークスペース設定"
+    ariaLabel="ワークスペース設定"
     @close="emit('close')"
   >
     <template #title>ワークスペース設定</template>

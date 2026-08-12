@@ -16,7 +16,7 @@ vi.mock("../../../../composables/useCurrentWorkspace", () => ({
 }));
 
 vi.mock("../../../../composables/useApiClient", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../composables/useApiClient")>();
+  const actual = await importOriginal<typeof import("../../../../composables/useApiClient")>();
   return {
     ...actual,
     useApiClient: () => ({

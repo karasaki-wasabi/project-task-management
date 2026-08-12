@@ -43,7 +43,10 @@
 
 ## テスト
 
-- nuxt typecheck で 11 件の TS 型エラー
+- typecheck 時の vue-router/volar 警告は残るが失敗にはならない
+  - 原因調査
+- 一部テストの Failed to resolve component: Modal 警告は従来どおりのスタブ環境ノイズで、今回の失敗原因ではない
+  - でないようにならないか調査
 
 ## ドキュメント整理
 

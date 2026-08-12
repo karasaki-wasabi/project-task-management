@@ -11,6 +11,10 @@
   - 実HTTP経路（`buildApp` + `app.inject`）を通して検証し、サービス層を直接呼ぶ既存のユニット/統合テストでは見えない結合面の不備を検出する
 - フロントエンドユニットテスト
   - `frontend/composables/*.test.ts` などコロケーション。Vitest。DB非依存（モック中心）でテスト間干渉は起きにくい
+  - ファイルを深いディレクトリへ移したときは、`import` / `vi.mock` だけでなく `importOriginal<typeof import("...")>` 内の相対パスも同じ深さに揃える
+    - `vi.mock("../../../../composables/...")` だけ直して `typeof import("../../composables/...")` が旧パスのままだと、Vitest 実行は通っても `nuxt typecheck` が TS2307 で落とす
+  - `@vue/test-utils` の `wrapper.get(...)` は要素が無いと例外を投げる前提の API なので、戻り値に `.exists()` を呼ばない
+    - 存在確認が必要なら `find(...).exists()`。取得後に内容だけ見るなら `get(...)` のあとで属性・テキストをアサートする
 - E2E
   - `frontend/e2e/*.spec.ts`。Playwright
 - 認証済み E2E fixture

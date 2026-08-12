@@ -105,7 +105,7 @@ async function confirmDelete() {
 </script>
 
 <template>
-  <Modal class="recurrence-detail-modal" :open="isOpen" aria-label="テンプレートの詳細" @close="emit('close')">
+  <Modal class="recurrence-detail-modal" :open="isOpen" ariaLabel="テンプレートの詳細" @close="emit('close')">
     <template #title>{{ template ? template.title : "読み込み中…" }}</template>
 
     <ErrorAlert v-if="error" :message="error" />

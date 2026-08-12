@@ -49,7 +49,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <Modal class="overflow-list-popup" :open="open" :aria-label="title" @close="emit('close')">
+  <Modal class="overflow-list-popup" :open="open" :ariaLabel="title" @close="emit('close')">
     <template #title>{{ title }}</template>
 
     <ul class="max-h-80 divide-y divide-slate-100 overflow-y-auto">

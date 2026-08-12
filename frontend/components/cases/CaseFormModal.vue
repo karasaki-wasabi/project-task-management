@@ -204,7 +204,7 @@ async function retryFailedAssociations() {
 </script>
 
 <template>
-  <Modal class="case-form-modal" :open="open" aria-label="案件の登録" @close="emit('close')">
+  <Modal class="case-form-modal" :open="open" ariaLabel="案件の登録" @close="emit('close')">
     <template #title>案件を登録</template>
 
     <ErrorAlert v-if="error" :message="error" />
@@ -233,7 +233,7 @@ async function retryFailedAssociations() {
       <div class="flex flex-wrap items-end gap-2">
         <div class="flex flex-col gap-1">
           <span class="text-xs font-medium text-slate-500">開始日</span>
-          <DatePicker v-if="!createdCase" v-model="startDate" aria-label="開始日" />
+          <DatePicker v-if="!createdCase" v-model="startDate" ariaLabel="開始日" />
           <span v-else class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1.5 text-sm text-slate-500">
             {{ startDate || "未設定" }}
           </span>
@@ -241,7 +241,7 @@ async function retryFailedAssociations() {
 
         <div class="flex flex-col gap-1">
           <span class="text-xs font-medium text-slate-500">終了日</span>
-          <DatePicker v-if="!createdCase" v-model="endDate" aria-label="終了日" />
+          <DatePicker v-if="!createdCase" v-model="endDate" ariaLabel="終了日" />
           <span v-else class="rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1.5 text-sm text-slate-500">
             {{ endDate || "未設定" }}
           </span>

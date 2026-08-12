@@ -184,7 +184,7 @@ async function confirmDelete() {
 </script>
 
 <template>
-  <Modal class="task-detail-modal" :open="isOpen" aria-label="タスクの詳細" @close="emit('close')">
+  <Modal class="task-detail-modal" :open="isOpen" ariaLabel="タスクの詳細" @close="emit('close')">
     <template #title>{{ task ? title : "読み込み中…" }}</template>
 
     <ErrorAlert v-if="error" :message="error" />
