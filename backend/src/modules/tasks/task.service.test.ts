@@ -964,6 +964,84 @@ describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
     await hardDeleteStages([cancelled.id, completed.id]);
   });
 
+  // task-status-model 7.2: reject with open child, then succeed after child cancelled (5.1, 5.2).
+  it("rejects parent completed while child is open, then allows after that child is cancelled (5.1, 5.2)", async () => {
+    const parent = await tasksService.create({
+      title: "parent then cancel child",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!parent.ok) throw new Error("setup failed");
+    const child = await tasksService.addChild(parent.value.id, workspaceA, {
+      title: "open then cancelled",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!child.ok) throw new Error("setup failed");
+    const cancelled = await createStage("cancelled", 924);
+    const completed = await createStage("completed", 915);
+
+    const blocked = await tasksService.updateDevelopmentStage(
+      parent.value.id,
+      workspaceA,
+      completed.id,
+    );
+    expect(blocked.ok).toBe(false);
+    if (blocked.ok) return;
+    expect(blocked.error).toEqual({ type: "incomplete_children", taskId: parent.value.id });
+
+    const childCancelled = await tasksService.updateDevelopmentStage(
+      child.value.id,
+      workspaceA,
+      cancelled.id,
+    );
+    if (!childCancelled.ok) throw new Error("setup failed");
+
+    const allowed = await tasksService.updateDevelopmentStage(
+      parent.value.id,
+      workspaceA,
+      completed.id,
+    );
+    expect(allowed.ok).toBe(true);
+    if (!allowed.ok) return;
+    expect(allowed.value.completedAt).toBeInstanceOf(Date);
+
+    await hardDeleteTasks([child.value.id, parent.value.id]);
+    await hardDeleteStages([cancelled.id, completed.id]);
+  });
+
+  // task-status-model 7.2: soft-deleted children must not block parent completion.
+  it("allows move to completed when the only open child is soft-deleted", async () => {
+    const parent = await tasksService.create({
+      title: "parent soft-deleted child",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!parent.ok) throw new Error("setup failed");
+    const child = await tasksService.addChild(parent.value.id, workspaceA, {
+      title: "soft-deleted child",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!child.ok) throw new Error("setup failed");
+    const deleted = await tasksService.delete(child.value.id, workspaceA);
+    if (!deleted.ok) throw new Error("setup failed");
+    const completed = await createStage("completed", 916);
+
+    const result = await tasksService.updateDevelopmentStage(
+      parent.value.id,
+      workspaceA,
+      completed.id,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.completedAt).toBeInstanceOf(Date);
+
+    await hardDeleteTasks([child.value.id, parent.value.id]);
+    await hardDeleteStages([completed.id]);
+  });
+
   it("allows move to cancelled regardless of open children (5.3)", async () => {
     const parent = await tasksService.create({
       title: "cancel parent with open child",
