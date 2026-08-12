@@ -25,7 +25,7 @@
   - _Boundary: useCurrentWorkspace_
   - _Depends: 1.1_
 
-- [ ] 2. 非所属・不明の workspaceId を404にし、所属時はURLを現在WSへ同期する
+- [x] 2. 非所属・不明の workspaceId を404にし、所属時はURLを現在WSへ同期する
   - named middleware を親 `[workspaceId]` に適用し、管理画面 `/workspaces` には付けない
   - 親ルートは子ページ用の入れ物を持ち、業務子ページの中身は後続タスクで移す
   - 観測可能な完了状態: 非所属では 404 相当になり、所属では URL の workspaceId へ現在WSが同期されることを、middleware 単体（または同等）で確認できる
