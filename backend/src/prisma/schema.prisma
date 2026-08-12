@@ -25,8 +25,14 @@ datasource db {
 enum TaskStatus {
   not_started
   in_progress
-  done
+  ready_for_handoff
   on_hold
+}
+
+enum DevelopmentStageKind {
+  normal
+  completed
+  cancelled
 }
 
 enum Priority {
@@ -213,13 +219,14 @@ model NonBusinessDay {
 }
 
 model DevelopmentStage {
-  id          String    @id @default(uuid())
+  id          String                @id @default(uuid())
   name        String
   order       Int
-  workspaceId String    @map("workspace_id")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  deletedAt   DateTime? @map("deleted_at")
+  kind        DevelopmentStageKind  @default(normal)
+  workspaceId String                @map("workspace_id")
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+  deletedAt   DateTime?             @map("deleted_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id])
   tasks     Task[]

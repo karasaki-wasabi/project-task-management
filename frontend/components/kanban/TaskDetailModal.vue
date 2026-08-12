@@ -18,6 +18,10 @@
   Fetches the full task via GET /api/tasks/:id on open rather than trusting
   the (possibly stale) row from the board's `tasks` list.
 
+  task-status-model 5.3: view-mode stage uses StageBadge (modal prefix);
+  terminal stages omit StatusBadge; badge order keeps StageBadge fixed when
+  status is hidden (Priority → Stage → Status? → assignee → case).
+
   Starts in read-only "view" mode (Requirement 8.2) and switches to "edit"
   only via the explicit edit button (Requirement 8.3); saving returns to
   view mode rather than closing, so the user can see the result in place
@@ -45,6 +49,12 @@
   via ErrorAlert, per .kiro/steering/error-handling.md.
 -->
 <script setup lang="ts">
+import { computed, ref, watch } from "vue";
+import type { Case, DevelopmentStage, Priority, Task, User } from "../../composables/useApiClient";
+import { useApiClient } from "../../composables/useApiClient";
+import { isTaskClosed } from "../../composables/useTaskClosure";
+import StageBadge from "../shared/StageBadge.vue";
+
 const props = defineProps<{ taskId: string | null; users: User[]; stages: DevelopmentStage[]; cases: Case[] }>();
 const emit = defineEmits<{
   close: [];
@@ -71,8 +81,15 @@ const caseId = ref("");
 const isRequiredForCase = ref(false);
 
 const assigneeName = computed(() => props.users.find((u) => u.id === task.value?.assigneeUserId)?.name);
-const stageName = computed(() => props.stages.find((s) => s.id === task.value?.developmentStageId)?.name ?? "未設定");
 const caseName = computed(() => props.cases.find((c) => c.id === task.value?.caseId)?.name ?? "—");
+
+const stage = computed(() => {
+  const stageId = task.value?.developmentStageId;
+  if (stageId == null) return null;
+  return props.stages.find((entry) => entry.id === stageId) ?? null;
+});
+
+const closed = computed(() => (task.value ? isTaskClosed(task.value, props.stages) : false));
 
 function resetForm(loaded: Task) {
   title.value = loaded.title;
@@ -177,10 +194,10 @@ async function confirmDelete() {
     <template v-else-if="task">
       <!-- 閲覧モード(既定): 編集不可の表示のみ(Requirement 8.2) -->
       <div v-if="mode === 'view'" class="space-y-3">
-        <div class="flex flex-wrap items-center gap-2">
-          <StatusBadge :status="task.status" />
+        <div data-testid="task-detail-badges" class="flex flex-wrap items-center gap-2">
           <PriorityBadge :priority="task.priority" />
-          <Badge tone="neutral" :label="`開発段階: ${stageName}`" />
+          <StageBadge :kind="stage?.kind ?? null" :name="stage?.name ?? null" prefix-mode="modal" />
+          <StatusBadge v-if="!closed" :status="task.status" />
           <Badge tone="neutral" :label="`担当者: ${assigneeName ?? '未設定'}`" />
           <Badge tone="neutral" :label="`案件: ${caseName}${task.caseId && task.isRequiredForCase ? '(必須)' : ''}`" />
         </div>

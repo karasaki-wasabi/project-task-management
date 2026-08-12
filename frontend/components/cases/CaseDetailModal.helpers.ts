@@ -1,13 +1,41 @@
-// Pure logic for CaseDetailModal (task 6.3, design.md System Flow「案件編集保存」,
-// Requirements 4.1–4.13 + prior edit validation 5.x). Extracted so candidate
-// gating and PATCH body shape can be unit-tested without mounting the SFC.
-// Mount coverage for checklist → final confirm → PATCH lives in
-// CaseDetailModal.test.ts.
+// Pure logic for CaseDetailModal (task 6.3 + task-status-model 5.6,
+// design.md System Flow「案件編集保存」 / CaseDetailModal; Requirements
+// 4.1–4.13 + 6.6 / 8.3). Extracted so candidate gating, PATCH body shape,
+// and required-progress display decisions can be unit-tested without
+// mounting the SFC. Mount coverage for checklist → final confirm → PATCH
+// and completion marks lives in CaseDetailModal.test.ts.
 
+import type { CaseProgress, DevelopmentStage, Task } from "../../composables/useApiClient";
+import { isTaskCompleted, resolveTaskClosureState } from "../../composables/useTaskClosure";
 import {
   buildCaseTemplateApplyCandidates,
   type CaseTemplateApplyOperation,
 } from "./caseTemplateApplyCandidates";
+
+/** Requirement 6.6: mother 0 (all required tasks cancelled) hides progress. */
+export function shouldShowRequiredProgress(progress: CaseProgress | null | undefined): boolean {
+  return progress != null && progress.requiredTotal > 0;
+}
+
+/**
+ * Requirement 8.3 / task 5.6: mark required-task rows by stage kind.
+ * Cancelled must not remain as 「未完了」.
+ */
+export type RequiredTaskCompletionMark = "completed" | "cancelled" | "incomplete";
+
+export function requiredTaskCompletionMark(
+  task: Pick<Task, "developmentStageId">,
+  stages: readonly DevelopmentStage[],
+): RequiredTaskCompletionMark {
+  if (isTaskCompleted(task, stages)) {
+    return "completed";
+  }
+  if (resolveTaskClosureState(task, stages) === "cancelled") {
+    return "cancelled";
+  }
+  return "incomplete";
+}
+
 
 export interface CaseEditValidationResult {
   valid: boolean;

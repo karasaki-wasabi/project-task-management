@@ -1,16 +1,19 @@
 <!--
-  Case detail/edit/delete popup (task 6.3, design.md System Flow「案件編集保存(確認付き)」,
-  Requirements 4.1–4.13). Standalone — parent opens by setting `caseId`.
+  Case detail/edit/delete popup (task 6.3 + task-status-model 5.6,
+  design.md System Flow「案件編集保存(確認付き)」 / CaseDetailModal;
+  Requirements 4.1–4.13, 6.6, 8.3). Standalone — parent opens by setting
+  `caseId`.
 
   Chrome (overlay, open/close animation, focus trap, close button) is
   delegated to shared/Modal.vue. Fetch-on-open: listCases + find(id),
-  getCaseProgress, listTasks({ caseId }) in parallel.
+  getCaseProgress, listTasks({ caseId }), listDevelopmentStages in parallel
+  (stages are needed for isTaskCompleted marks; Task API has no kind).
 
   Edit save flow:
-  1. validate
-  2. resolveEditApplyCandidates(old, new)
-  3. no candidates → PATCH with templateOperations omitted
-  4. has candidates → CaseTemplateApplyConfirm B→C; cancel = no API;
+    1. validate
+    2. resolveEditApplyCandidates(old, new)
+    3. no candidates → PATCH with templateOperations omitted
+    4. has candidates → CaseTemplateApplyConfirm B→C; cancel = no API;
      approve → PATCH with selected templateOperations (may be [])
 
   Explicit Vue / useApiClient imports so vitest can mount without Nuxt
@@ -19,12 +22,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useApiClient } from "../../composables/useApiClient";
+import type { DevelopmentStage } from "../../composables/useApiClient";
 import type { CaseTemplateApplyOperation } from "./caseTemplateApplyCandidates";
 import CaseTemplateApplyConfirm from "./CaseTemplateApplyConfirm.vue";
 import {
   buildUpdateCaseInput,
+  requiredTaskCompletionMark,
   resolveEditApplyCandidates,
+  shouldShowRequiredProgress,
   validateCaseEditForm,
+  type RequiredTaskCompletionMark,
 } from "./CaseDetailModal.helpers";
 
 const props = defineProps<{ caseId: string | null }>();
@@ -46,6 +53,7 @@ const confirmingDelete = ref(false);
 const caseEntity = ref<Case | null>(null);
 const progress = ref<CaseProgress | null>(null);
 const relatedTasks = ref<Task[]>([]);
+const stages = ref<DevelopmentStage[]>([]);
 
 const name = ref("");
 const startDate = ref("");
@@ -73,6 +81,8 @@ const statusBadge = computed(() => {
   return { tone: "info" as const, label: "進行中" };
 });
 
+const showRequiredProgress = computed(() => shouldShowRequiredProgress(progress.value));
+
 const requiredProgressLabel = computed(() => {
   if (!progress.value) return "-";
   return `${progress.value.requiredCompleted} / ${progress.value.requiredTotal}`;
@@ -82,6 +92,22 @@ const requiredProgressRatio = computed(() => {
   if (!progress.value || progress.value.requiredTotal === 0) return 0;
   return Math.round((progress.value.requiredCompleted / progress.value.requiredTotal) * 100);
 });
+
+function completionMark(task: Task): RequiredTaskCompletionMark {
+  return requiredTaskCompletionMark(task, stages.value);
+}
+
+function completionMarkLabel(mark: RequiredTaskCompletionMark): string {
+  if (mark === "completed") return "完了";
+  if (mark === "cancelled") return "中止";
+  return "未完了";
+}
+
+function completionMarkGlyph(mark: RequiredTaskCompletionMark): string {
+  if (mark === "completed") return "✓";
+  if (mark === "cancelled") return "–";
+  return "○";
+}
 
 watch(
   () => props.caseId,
@@ -94,13 +120,15 @@ watch(
     caseEntity.value = null;
     progress.value = null;
     relatedTasks.value = [];
+    stages.value = [];
     if (!id) return;
     loading.value = true;
     try {
-      const [list, loadedProgress, tasks] = await Promise.all([
+      const [list, loadedProgress, tasks, loadedStages] = await Promise.all([
         api.listCases(),
         api.getCaseProgress(id),
         api.listTasks({ caseId: id }),
+        api.listDevelopmentStages(),
       ]);
       const loaded = list.find((item) => item.id === id);
       if (!loaded) {
@@ -109,6 +137,7 @@ watch(
       caseEntity.value = loaded;
       progress.value = loadedProgress;
       relatedTasks.value = tasks;
+      stages.value = loadedStages;
       resetForm(loaded);
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
@@ -251,12 +280,13 @@ async function confirmDelete() {
 
         <div class="flex flex-col gap-1">
           <span class="text-xs font-medium text-slate-500">必須タスク進捗</span>
-          <div class="flex items-center gap-2">
+          <div v-if="showRequiredProgress" data-testid="required-progress" class="flex items-center gap-2">
             <span class="text-sm text-slate-700">{{ requiredProgressLabel }}</span>
             <div class="h-1.5 w-32 overflow-hidden rounded-full bg-slate-100">
               <div class="h-full rounded-full bg-primary-500" :style="{ width: `${requiredProgressRatio}%` }" />
             </div>
           </div>
+          <p v-else class="text-sm text-slate-600">表示できる必須タスクがありません</p>
         </div>
 
         <div class="flex flex-col gap-1">
@@ -269,11 +299,12 @@ async function confirmDelete() {
               class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5"
             >
               <span
+                data-testid="required-task-mark"
                 class="shrink-0 text-sm"
-                :class="task.status === 'done' ? 'text-green-600' : 'text-slate-400'"
-                :aria-label="task.status === 'done' ? '完了' : '未完了'"
+                :class="completionMark(task) === 'completed' ? 'text-green-600' : 'text-slate-400'"
+                :aria-label="completionMarkLabel(completionMark(task))"
               >
-                {{ task.status === 'done' ? "✓" : "○" }}
+                {{ completionMarkGlyph(completionMark(task)) }}
               </span>
               <span class="min-w-0 flex-1 truncate text-sm text-slate-800">{{ task.title }}</span>
               <Badge v-if="task.isRequiredForCase" tone="warning" label="必須" />

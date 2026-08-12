@@ -17,7 +17,10 @@ import { err, ok, type Result } from "../../shared/result.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { caseRepository } from "../cases/case.repository.js";
+import { developmentStagesService } from "../development-stages/development-stage.service.js";
+import type { DevelopmentStageKind } from "../development-stages/development-stage.types.js";
 import { workspaceService } from "../workspaces/workspace.service.js";
+import { resolveClosureState } from "./task.closure.js";
 import { taskRepository } from "./task.repository.js";
 import type { CreateTaskInput, Task, TaskError, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
 
@@ -27,6 +30,22 @@ function isRecordNotFoundError(error: unknown): boolean {
 
 function isForeignKeyViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
+}
+
+// task-status-model 3.3: closed parents cannot receive open children (5.5, 5.6).
+async function assertParentCanTakeOpenChildren(
+  parent: Task,
+  workspaceId: VerifiedWorkspaceId,
+): Promise<Result<void, TaskError>> {
+  let kind: DevelopmentStageKind | null = null;
+  if (parent.developmentStageId != null) {
+    const stage = await developmentStagesService.getById(parent.developmentStageId, workspaceId);
+    kind = stage?.kind ?? null;
+  }
+  if (resolveClosureState(kind) !== "open") {
+    return err({ type: "closed_task_cannot_take_children", taskId: parent.id });
+  }
+  return ok(undefined);
 }
 
 async function assertAssigneeIsWorkspaceMember(
@@ -114,6 +133,20 @@ export const tasksService = {
       return relatedCheck;
     }
 
+    if (input.parentTaskId != null) {
+      const parent = await taskRepository.findById(input.parentTaskId, input.workspaceId, client);
+      if (!parent) {
+        return err({
+          type: "validation_error",
+          message: "parentTaskId does not exist in the current workspace",
+        });
+      }
+      const closedParentCheck = await assertParentCanTakeOpenChildren(parent, input.workspaceId);
+      if (!closedParentCheck.ok) {
+        return closedParentCheck;
+      }
+    }
+
     try {
       const task = await taskRepository.create({ ...input, title }, client);
       return ok(task);
@@ -133,6 +166,9 @@ export const tasksService = {
     return ok(task);
   },
 
+  // task-status-model 3.2: status is stage-internal work state only.
+  // Does not stamp/clear completedAt or enforce parent/child constraints (2.4, 4.2).
+  // Rejects edits while the task sits on a terminal stage (4.5).
   async updateStatus(
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
@@ -143,16 +179,15 @@ export const tasksService = {
       return err({ type: "not_found", taskId });
     }
 
-    if (status === "done") {
-      const incompleteChildren = await taskRepository.countIncompleteChildren(taskId);
-      if (incompleteChildren > 0) {
-        return err({ type: "incomplete_children", taskId });
+    if (current.developmentStageId != null) {
+      const stage = await developmentStagesService.getById(current.developmentStageId, workspaceId);
+      if (stage && (stage.kind === "completed" || stage.kind === "cancelled")) {
+        return err({ type: "status_not_applicable", taskId });
       }
     }
 
-    const completedAt = status === "done" ? new Date() : null;
     try {
-      const task = await taskRepository.updateStatus(taskId, workspaceId, status, completedAt);
+      const task = await taskRepository.updateStatus(taskId, workspaceId, status);
       return ok(task);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
@@ -162,11 +197,12 @@ export const tasksService = {
     }
   },
 
-  // design.md TasksService Postconditions: developmentStageId is always
-  // updated; assigneeUserId (from the request) is only applied when the
-  // task's current assigneeUserId is null, so a kanban card move never
-  // overwrites an already-assigned task's assignee (Requirements 12.6-12.8).
-  // Enforced here rather than trusted from the client.
+  // design.md System Flows "開発段階の変更": resolve kind → child check only
+  // for completed → stamp/clear completedAt → reset status only when the stage
+  // actually changes. assigneeUserId is only applied when currently null
+  // (Requirements 12.6-12.8 / kanban move).
+  // task-status-model 3.1: aggregates completedAt, status reset, and parent
+  // completion constraints here (Requirements 2.1-2.3, 2.5, 4.4, 5.1-5.4).
   async updateDevelopmentStage(
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
@@ -183,7 +219,38 @@ export const tasksService = {
       return relatedCheck;
     }
 
-    const data: { developmentStageId: string | null; assigneeUserId?: string } = { developmentStageId };
+    let stageKind: DevelopmentStageKind | null = null;
+    if (developmentStageId != null) {
+      const stage = await developmentStagesService.getById(developmentStageId, workspaceId);
+      if (!stage) {
+        return err({
+          type: "validation_error",
+          message: "developmentStageId does not exist in the current workspace",
+        });
+      }
+      stageKind = stage.kind;
+    }
+
+    if (stageKind === "completed") {
+      const incompleteChildren = await taskRepository.countIncompleteChildren(taskId);
+      if (incompleteChildren > 0) {
+        return err({ type: "incomplete_children", taskId });
+      }
+    }
+
+    const completedAt = stageKind === "completed" ? new Date() : null;
+    const stageChanged = current.developmentStageId !== developmentStageId;
+
+    const data: {
+      developmentStageId: string | null;
+      completedAt: Date | null;
+      status?: TaskStatus;
+      assigneeUserId?: string;
+    } = { developmentStageId, completedAt };
+    if (stageChanged) {
+      data.status = "not_started";
+    }
+
     if (assigneeUserId && current.assigneeUserId === null) {
       const assigneeCheck = await assertAssigneeIsWorkspaceMember(workspaceId, assigneeUserId);
       if (!assigneeCheck.ok) {
@@ -279,6 +346,11 @@ export const tasksService = {
       return err({ type: "not_found", taskId: parentTaskId });
     }
 
+    const closedParentCheck = await assertParentCanTakeOpenChildren(parent, workspaceId);
+    if (!closedParentCheck.ok) {
+      return closedParentCheck;
+    }
+
     const title = input.title.trim();
     if (title.length === 0) {
       return err({ type: "validation_error", message: "title is required" });
@@ -325,6 +397,11 @@ export const tasksService = {
     const original = await taskRepository.findById(taskId, workspaceId);
     if (!original) {
       return err({ type: "not_found", taskId });
+    }
+
+    const closedParentCheck = await assertParentCanTakeOpenChildren(original, workspaceId);
+    if (!closedParentCheck.ok) {
+      return closedParentCheck;
     }
 
     for (const part of parts) {

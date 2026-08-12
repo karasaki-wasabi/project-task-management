@@ -687,7 +687,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
       taskIds = before.map((t) => t.id);
       expect(before).toHaveLength(1);
 
-      await db.task.update({ where: { id: before[0].id }, data: { status: "done", completedAt: new Date() } });
+      await db.task.update({ where: { id: before[0].id }, data: { status: "ready_for_handoff", completedAt: new Date() } });
 
       await recurrenceService.applyToCase(caseEntity.id, ["start_delete"]);
 

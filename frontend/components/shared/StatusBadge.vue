@@ -1,15 +1,12 @@
-<!-- Task status badge (screen polish pass). -->
+<!-- Task status badge (task-status-model 4.1). -->
 <script setup lang="ts">
+import { computed } from "vue";
+import type { TaskStatus } from "../../composables/useApiClient";
+import { statusBadgeConfig } from "./StatusBadge.helpers";
+
 const props = defineProps<{ status: TaskStatus }>();
 
-const config: Record<TaskStatus, { tone: "neutral" | "info" | "success" | "warning"; label: string }> = {
-  not_started: { tone: "neutral", label: "未着手" },
-  in_progress: { tone: "info", label: "進行中" },
-  done: { tone: "success", label: "完了" },
-  on_hold: { tone: "warning", label: "保留" },
-};
-
-const current = computed(() => config[props.status]);
+const current = computed(() => statusBadgeConfig(props.status));
 </script>
 
 <template>

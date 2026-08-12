@@ -12,6 +12,7 @@ const updateTaskStatus = vi.fn();
 const splitTask = vi.fn();
 const listUsers = vi.fn();
 const listWorkspaceMembers = vi.fn();
+const listDevelopmentStages = vi.fn();
 const currentId = ref<string | null>("ws-1");
 const route = { query: {} as Record<string, string | undefined> };
 
@@ -30,6 +31,7 @@ vi.mock("../../../../composables/useApiClient", async (importOriginal) => {
       splitTask,
       listUsers,
       listWorkspaceMembers,
+      listDevelopmentStages,
     }),
   };
 });
@@ -53,9 +55,10 @@ const TaskNodeStub = defineComponent({
     task: { type: Object, required: true },
     children: { type: Array, default: () => [] },
     allTasks: { type: Array, default: () => [] },
+    stages: { type: Array, default: () => [] },
   },
   emits: ["status-change", "split"],
-  template: `<li data-testid="task-node">{{ task.title }}</li>`,
+  template: `<li data-testid="task-node" :data-stages-count="stages.length">{{ task.title }}</li>`,
 });
 
 const NuxtLinkStub = defineComponent({
@@ -116,11 +119,16 @@ describe("TasksPage assignee candidates (task 8.1, Req 4.1)", () => {
     splitTask.mockReset();
     listUsers.mockReset();
     listWorkspaceMembers.mockReset();
+    listDevelopmentStages.mockReset();
     currentId.value = "ws-1";
     route.query = {};
     vi.stubGlobal("useRoute", () => route);
     listTasks.mockResolvedValue([makeTask()]);
     createTask.mockResolvedValue(makeTask({ id: "t2" }));
+    listDevelopmentStages.mockResolvedValue([
+      { id: "s1", name: "作業中", order: 1, kind: "normal" },
+      { id: "s-done", name: "完了", order: 2, kind: "completed" },
+    ]);
     listWorkspaceMembers.mockResolvedValue([
       makeMember({ userId: "member-1", name: "ワークスペース太郎" }),
       makeMember({ userId: "member-2", name: "ワークスペース花子" }),
@@ -174,6 +182,16 @@ describe("TasksPage assignee candidates (task 8.1, Req 4.1)", () => {
 
     expect(listWorkspaceMembers).not.toHaveBeenCalled();
     expect(listUsers).not.toHaveBeenCalled();
+    expect(listDevelopmentStages).not.toHaveBeenCalled();
     expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(false);
+  });
+
+  it("loads development stages and passes them to TaskNode (task-status-model 5.2)", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(listDevelopmentStages).toHaveBeenCalled();
+    const node = wrapper.get('[data-testid="task-node"]');
+    expect(node.attributes("data-stages-count")).toBe("2");
   });
 });

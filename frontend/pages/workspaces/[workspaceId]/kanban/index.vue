@@ -18,10 +18,10 @@
   eagerly force-resynced on every drag end — that fights Sortable's own
   internal bookkeeping and its drop animation. A successful move flows
   back naturally (API call → `loadTasks()` → the `watch(tasks, ...)` below
-  recomputes everything). An ABORTED move (assignee-picker canceled) is
-  the only case needing an explicit revert, done once in
-  `cancelPendingMove()` — by then Sortable's transition has long finished,
-  so there's no timing race.
+  recomputes everything). An ABORTED move (assignee-picker canceled, or
+  a rejected stage drop / focus-tray assign) needs an explicit
+  `revertOptimisticMove()` — by then Sortable's transition has long
+  finished, so there's no timing race.
 
   Board-wide assignee filtering does not exist — filtering lives only in
   AssigneeFocusTray. A chip click drives only the focus tray, not also the
@@ -42,10 +42,14 @@
   Sortable group setting enforces "not itself a valid drop target"
   declaratively.
 
-  A failed focus-tray reassignment (a real API error) surfaces via
+  A failed focus-tray reassignment or stage-column drop (real API
+  errors, including expected incomplete_children refusals on the
+  completed column — task-status-model 6.1) surfaces via
   `focusTrayError` and the shared `ErrorAlert` (the same pattern every
   other page in this app uses for backend errors, per
-  `.kiro/steering/error-handling.md`) rather than reverting silently.
+  `.kiro/steering/error-handling.md`) plus `revertOptimisticMove()`,
+  rather than reverting silently. Errors stay until the next action
+  clears them; success toasts still auto-clear.
   (kanban-ux-redesign Requirement 9: dropping a card on the focus tray
   always reassigns it to the focused user, overwriting any existing
   assignee via the general `updateTask` API — this is a deliberate later
@@ -163,7 +167,7 @@ async function revertOptimisticMove() {
   // this same drag gesture settle first, so this revert is the last write.
   await nextTick();
   syncColumnTasks();
-  backlogPanelRef.value?.resync();
+  backlogPanelRef.value?.resync?.();
   boardRenderEpoch.value += 1;
 }
 
@@ -218,14 +222,17 @@ useDialogFocusTrap(
 // header comment) — drives only which assignee the focus tray shows.
 const selectedAssigneeUserId = ref("");
 
-// Requirement 1.2/1.3: selected assignee's incomplete tasks, any/no stage.
-const focusedTasks = computed(() => computeFocusedTasks(tasks.value, selectedAssigneeUserId.value));
-// Requirement 2.1-2.3: per-assignee counts, always all assignees.
-const workloadCounts = computed(() => computeWorkloadCounts(tasks.value, users.value));
+// Requirement 1.2/1.3 + task-status-model 8.7/8.8: selected assignee's
+// non-closed tasks, any/no stage.
+const focusedTasks = computed(() =>
+  computeFocusedTasks(tasks.value, selectedAssigneeUserId.value, stages.value),
+);
+// Requirement 2.1-2.3 + 8.7/8.8: per-assignee counts, always all assignees.
+const workloadCounts = computed(() => computeWorkloadCounts(tasks.value, users.value, stages.value));
 // Requirement 3.1/3.6: tasks with no development stage set.
 const backlogTasks = computed(() => computeBacklogTasks(tasks.value));
-// Requirement 5.4/5.5: completed/total child counts per parent task id.
-const taskProgressById = computed(() => computeTaskProgressById(tasks.value));
+// Requirement 8.6/8.9: completed/total child counts per parent (closure-based).
+const taskProgressById = computed(() => computeTaskProgressById(tasks.value, stages.value));
 
 // Sortable-mutable per-stage mirror of tasksForStage(stage.id) — see header
 // comment on resync strategy. Keyed by stage id.
@@ -265,6 +272,7 @@ function userName(userId: string | null | undefined): string | undefined {
 }
 
 async function onDropOnStage(targetStageId: string, taskId: string) {
+  focusTrayError.value = null;
   const task = tasks.value.find((t) => t.id === taskId);
   if (!task || task.developmentStageId === targetStageId) {
     // Sortable's `:model-value`/`@update:model-value` binding already
@@ -283,9 +291,20 @@ async function onDropOnStage(targetStageId: string, taskId: string) {
     pendingAssigneeUserId.value = "";
     return;
   }
-  await api.updateTaskDevelopmentStage(taskId, targetStageId);
-  await loadTasks();
-  announceMoveSuccess(`「${task.title}」を${stageName(targetStageId)}に移動しました`);
+
+  // task-status-model 6.1 / design.md "カンバンボードでの拒否の扱い":
+  // incomplete_children (and other stage-move failures) are expected
+  // business refusals on the completed column. Mirror handleFocusTrayAssign:
+  // surface via shared ErrorAlert and revertOptimisticMove() — no new
+  // recovery path.
+  try {
+    await api.updateTaskDevelopmentStage(taskId, targetStageId);
+    await loadTasks();
+    announceMoveSuccess(`「${task.title}」を${stageName(targetStageId)}に移動しました`);
+  } catch (e) {
+    focusTrayError.value = e instanceof Error ? e.message : String(e);
+    await revertOptimisticMove();
+  }
 }
 
 // Shared `end` handler for every stage column's VueDraggable. No eager
@@ -410,12 +429,21 @@ async function onTaskDetailDeleted(deleted: { id: string; title: string }) {
 async function confirmPendingMove() {
   if (!pendingMove.value || !pendingAssigneeUserId.value) return;
   const task = tasks.value.find((t) => t.id === pendingMove.value?.taskId);
-  const { targetStageId } = pendingMove.value;
-  await api.updateTaskDevelopmentStage(pendingMove.value.taskId, targetStageId, pendingAssigneeUserId.value);
-  pendingMove.value = null;
-  pendingAssigneeUserId.value = "";
-  await loadTasks();
-  if (task) announceMoveSuccess(`「${task.title}」を${stageName(targetStageId)}に移動しました`);
+  const { taskId, targetStageId } = pendingMove.value;
+  const assigneeUserId = pendingAssigneeUserId.value;
+  // Same recovery as onDropOnStage: assignee-picker confirm can also hit
+  // incomplete_children when the target is the completed column.
+  focusTrayError.value = null;
+  try {
+    await api.updateTaskDevelopmentStage(taskId, targetStageId, assigneeUserId);
+    pendingMove.value = null;
+    pendingAssigneeUserId.value = "";
+    await loadTasks();
+    if (task) announceMoveSuccess(`「${task.title}」を${stageName(targetStageId)}に移動しました`);
+  } catch (e) {
+    focusTrayError.value = e instanceof Error ? e.message : String(e);
+    await revertOptimisticMove();
+  }
 }
 
 // The only place that reverts an optimistic Sortable move (see header
@@ -481,6 +509,13 @@ watch(
       {{ moveStatusMessage }}
     </p>
 
+    <!-- Shared ErrorAlert for focus-tray assign failures and stage-drop
+         refusals (task-status-model 6.1). Kept outside the focus-tray
+         gate so a completed-column rejection is visible without an
+         assignee selected. Errors are not auto-cleared (contrast with
+         moveStatusMessage above). -->
+    <ErrorAlert v-if="focusTrayError" :message="focusTrayError" />
+
     <!-- sr-only-until-focus skip links, the standard "skip navigation"
          pattern — invisible to sighted mouse users (no permanent chrome
          added), but let a keyboard user jump straight to any lane instead
@@ -515,7 +550,6 @@ watch(
     <TeamWorkloadSummary v-model="selectedAssigneeUserId" :counts="workloadCounts" />
 
     <template v-if="selectedAssigneeUserId">
-      <ErrorAlert v-if="focusTrayError" :message="focusTrayError" />
       <AssigneeFocusTray
         ref="focusTrayRef"
         :tasks="focusedTasks"
@@ -620,6 +654,7 @@ watch(
             :task="task"
             :assignee-name="userName(task.assigneeUserId)"
             :progress="taskProgressById.get(task.id)"
+            :is-terminal-column="stage.kind === 'completed' || stage.kind === 'cancelled'"
             @activate="openTaskDetail(task.id)"
           />
         </VueDraggable>

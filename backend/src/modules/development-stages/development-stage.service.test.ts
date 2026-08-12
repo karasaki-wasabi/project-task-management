@@ -101,7 +101,7 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
       statusCode: 404,
     });
 
-    const stillThere = await developmentStagesService.findById(foreign.id, workspaceB);
+    const stillThere = await developmentStagesService.getById(foreign.id, workspaceB);
     expect(stillThere?.name).toBe(foreign.name);
   });
 
@@ -143,14 +143,58 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
     expect(ids).not.toContain(foreign.id);
   });
 
-  it("findById returns a stage in the workspace and null for another workspace (scoped reuse API)", async () => {
-    const stage = await createTracked(`find-${randomUUID()}`, workspaceA);
+  it("list includes kind for each stage (task-status-model 2.1, Requirements 1.1, 1.8)", async () => {
+    const stage = await createTracked(`kind-list-${randomUUID()}`, workspaceA);
+    await db.developmentStage.create({
+      data: {
+        name: `completed-${randomUUID()}`,
+        order: stage.order + 10,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    }).then((row) => createdStageIds.push(row.id));
+    await db.developmentStage.create({
+      data: {
+        name: `cancelled-${randomUUID()}`,
+        order: stage.order + 11,
+        kind: "cancelled",
+        workspaceId: workspaceA,
+      },
+    }).then((row) => createdStageIds.push(row.id));
 
-    expect(await developmentStagesService.findById(stage.id, workspaceA)).toMatchObject({
+    const list = await developmentStagesService.list(workspaceA);
+    const byId = new Map(list.map((s) => [s.id, s]));
+
+    expect(byId.get(stage.id)?.kind).toBe("normal");
+    expect(list.every((s) => s.kind === "normal" || s.kind === "completed" || s.kind === "cancelled")).toBe(
+      true,
+    );
+    expect(list.some((s) => s.kind === "completed")).toBe(true);
+    expect(list.some((s) => s.kind === "cancelled")).toBe(true);
+  });
+
+  it("getById returns a stage with kind in the workspace and null for another workspace (task-status-model 2.1)", async () => {
+    const stage = await createTracked(`find-${randomUUID()}`, workspaceA);
+    const completed = await db.developmentStage.create({
+      data: {
+        name: `find-completed-${randomUUID()}`,
+        order: stage.order + 20,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    createdStageIds.push(completed.id);
+
+    expect(await developmentStagesService.getById(stage.id, workspaceA)).toMatchObject({
       id: stage.id,
       workspaceId: workspaceA,
+      kind: "normal",
     });
-    expect(await developmentStagesService.findById(stage.id, workspaceB)).toBeNull();
+    expect(await developmentStagesService.getById(completed.id, workspaceA)).toMatchObject({
+      id: completed.id,
+      kind: "completed",
+    });
+    expect(await developmentStagesService.getById(stage.id, workspaceB)).toBeNull();
   });
 
   it("deleting a stage resets developmentStageId to null on tasks that referenced it, and excludes it from list (Requirement 12.5, 9.4)", async () => {
@@ -202,5 +246,102 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
 
     expect(c.order).not.toBe(b.order);
     expect(c.order).toBeGreaterThan(b.order);
+  });
+});
+
+describe("developmentStagesService kind invariants (task-status-model 2.2, Requirements 1.4–1.7)", () => {
+  async function seedTerminalsAfter(baseOrder: number, workspaceId: VerifiedWorkspaceId) {
+    const completed = await db.developmentStage.create({
+      data: {
+        name: `completed-${randomUUID()}`,
+        order: baseOrder + 1,
+        kind: "completed",
+        workspaceId,
+      },
+    });
+    const cancelled = await db.developmentStage.create({
+      data: {
+        name: `cancelled-${randomUUID()}`,
+        order: baseOrder + 2,
+        kind: "cancelled",
+        workspaceId,
+      },
+    });
+    createdStageIds.push(completed.id, cancelled.id);
+    return { completed, cancelled };
+  }
+
+  it("creates stages as kind normal (Requirement 1.4)", async () => {
+    const stage = await createTracked(`always-normal-${randomUUID()}`, workspaceA);
+
+    expect(stage.kind).toBe("normal");
+  });
+
+  it("inserts a new stage after the last normal stage, not after terminal stages (Requirement 1.4)", async () => {
+    const normal = await createTracked(`normal-before-${randomUUID()}`, workspaceA);
+    const { completed, cancelled } = await seedTerminalsAfter(normal.order, workspaceA);
+
+    const created = await createTracked(`inserted-${randomUUID()}`, workspaceA);
+
+    expect(created.kind).toBe("normal");
+    expect(created.order).toBe(normal.order + 1);
+
+    const refreshedCompleted = await developmentStagesService.getById(completed.id, workspaceA);
+    const refreshedCancelled = await developmentStagesService.getById(cancelled.id, workspaceA);
+    expect(refreshedCompleted?.order).toBe(normal.order + 2);
+    expect(refreshedCancelled?.order).toBe(normal.order + 3);
+
+    const list = await developmentStagesService.list(workspaceA);
+    const ids = list.map((s) => s.id);
+    expect(ids.indexOf(created.id)).toBeLessThan(ids.indexOf(completed.id));
+    expect(ids.indexOf(created.id)).toBeLessThan(ids.indexOf(cancelled.id));
+  });
+
+  it("rejects deleting a completed stage (Requirement 1.5)", async () => {
+    const normal = await createTracked(`keep-${randomUUID()}`, workspaceA);
+    const { completed } = await seedTerminalsAfter(normal.order, workspaceA);
+
+    await expect(developmentStagesService.delete(completed.id, workspaceA)).rejects.toMatchObject({
+      statusCode: 400,
+    });
+
+    expect(await developmentStagesService.getById(completed.id, workspaceA)).not.toBeNull();
+  });
+
+  it("rejects deleting a cancelled stage (Requirement 1.5)", async () => {
+    const normal = await createTracked(`keep-${randomUUID()}`, workspaceA);
+    const { cancelled } = await seedTerminalsAfter(normal.order, workspaceA);
+
+    await expect(developmentStagesService.delete(cancelled.id, workspaceA)).rejects.toMatchObject({
+      statusCode: 400,
+    });
+
+    expect(await developmentStagesService.getById(cancelled.id, workspaceA)).not.toBeNull();
+  });
+
+  it("allows renaming a terminal stage (Requirement 1.7)", async () => {
+    const normal = await createTracked(`rename-base-${randomUUID()}`, workspaceA);
+    const { completed } = await seedTerminalsAfter(normal.order, workspaceA);
+
+    const renamed = await developmentStagesService.rename(completed.id, workspaceA, "完了（改）");
+
+    expect(renamed).toMatchObject({ id: completed.id, name: "完了（改）", kind: "completed" });
+  });
+
+  it("allows reordering including terminal stages (Requirement 1.7)", async () => {
+    const normal = await createTracked(`reorder-base-${randomUUID()}`, workspaceA);
+    const { completed, cancelled } = await seedTerminalsAfter(normal.order, workspaceA);
+    const others = (await developmentStagesService.list(workspaceA))
+      .map((s) => s.id)
+      .filter((id) => id !== normal.id && id !== completed.id && id !== cancelled.id);
+
+    const reordered = await developmentStagesService.reorder(
+      [cancelled.id, normal.id, completed.id, ...others],
+      workspaceA,
+    );
+
+    expect(reordered.slice(0, 3).map((s) => s.id)).toEqual([cancelled.id, normal.id, completed.id]);
+    expect(reordered[0].kind).toBe("cancelled");
+    expect(reordered[2].kind).toBe("completed");
   });
 });

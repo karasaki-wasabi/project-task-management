@@ -39,6 +39,7 @@ function makeStage(overrides: Partial<DevelopmentStage> & { id: string }): Devel
   return {
     name: `stage-${overrides.id}`,
     order: 0,
+    kind: "normal",
     ...overrides,
   };
 }
@@ -120,9 +121,14 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-05")?.[0]?.stage).toBeNull();
   });
 
-  it("flags isOverdue when scheduledDate is before today and status is not done", () => {
+  it("flags isOverdue when scheduledDate is before today and the task is not closed (Requirement 8.4)", () => {
     const tasks = [
-      makeTask({ id: "t1", status: "in_progress", scheduledDate: "2026-08-01T00:00:00.000Z" }),
+      makeTask({
+        id: "t1",
+        status: "in_progress",
+        developmentStageId: "s1",
+        scheduledDate: "2026-08-01T00:00:00.000Z",
+      }),
     ];
 
     const result = buildTaskMarkersByDate(tasks, stages, "2026-08-05");
@@ -130,12 +136,57 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-01")?.[0]?.isOverdue).toBe(true);
   });
 
-  it("does not flag isOverdue when status is done, even if scheduledDate is in the past", () => {
-    const tasks = [makeTask({ id: "t1", status: "done", scheduledDate: "2026-08-01T00:00:00.000Z" })];
+  it("does not flag isOverdue for completed-stage tasks even when past due and status is open (Requirements 8.4, 8.5)", () => {
+    const withKinds = [
+      makeStage({ id: "s1", name: "設計", kind: "normal" }),
+      makeStage({ id: "s-done", name: "完了", kind: "completed" }),
+    ];
+    const tasks = [
+      makeTask({
+        id: "t1",
+        status: "not_started",
+        developmentStageId: "s-done",
+        scheduledDate: "2026-08-01T00:00:00.000Z",
+      }),
+    ];
+
+    const result = buildTaskMarkersByDate(tasks, withKinds, "2026-08-05");
+
+    expect(result.get("2026-08-01")?.[0]?.isOverdue).toBe(false);
+  });
+
+  it("does not flag isOverdue for cancelled-stage tasks even when past due (Requirements 8.4, 8.5)", () => {
+    const withKinds = [
+      makeStage({ id: "s1", name: "設計", kind: "normal" }),
+      makeStage({ id: "s-cancel", name: "中止", kind: "cancelled" }),
+    ];
+    const tasks = [
+      makeTask({
+        id: "t1",
+        status: "in_progress",
+        developmentStageId: "s-cancel",
+        scheduledDate: "2026-08-01T00:00:00.000Z",
+      }),
+    ];
+
+    const result = buildTaskMarkersByDate(tasks, withKinds, "2026-08-05");
+
+    expect(result.get("2026-08-01")?.[0]?.isOverdue).toBe(false);
+  });
+
+  it("still flags isOverdue for past-due open tasks even when status is ready_for_handoff (Requirement 8.5)", () => {
+    const tasks = [
+      makeTask({
+        id: "t1",
+        status: "ready_for_handoff",
+        developmentStageId: "s1",
+        scheduledDate: "2026-08-01T00:00:00.000Z",
+      }),
+    ];
 
     const result = buildTaskMarkersByDate(tasks, stages, "2026-08-05");
 
-    expect(result.get("2026-08-01")?.[0]?.isOverdue).toBe(false);
+    expect(result.get("2026-08-01")?.[0]?.isOverdue).toBe(true);
   });
 
   it("does not flag isOverdue when scheduledDate is today or in the future", () => {

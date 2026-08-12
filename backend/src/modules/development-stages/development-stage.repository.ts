@@ -9,19 +9,36 @@ import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/works
 import type { DevelopmentStage } from "./development-stage.types.js";
 
 function toDomain(row: PrismaDevelopmentStage): DevelopmentStage {
-  return { id: row.id, name: row.name, order: row.order, workspaceId: row.workspaceId };
+  return {
+    id: row.id,
+    name: row.name,
+    order: row.order,
+    kind: row.kind,
+    workspaceId: row.workspaceId,
+  };
 }
 
 export const developmentStageRepository = {
+  // Inserts at `order` and shifts later stages up by 1 so a new normal stage
+  // can sit before terminal stages (task-status-model 2.2 / design.md).
   async create(name: string, order: number, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage> {
-    const row = await db.developmentStage.create({
-      data: { name, order, workspaceId },
+    return db.$transaction(async (tx) => {
+      await tx.developmentStage.updateMany({
+        where: withWorkspaceScope({ order: { gte: order } }, workspaceId),
+        data: { order: { increment: 1 } },
+      });
+      const row = await tx.developmentStage.create({
+        data: { name, order, kind: "normal", workspaceId },
+      });
+      return toDomain(row);
     });
-    return toDomain(row);
   },
 
-  findById(id: string, workspaceId: VerifiedWorkspaceId): Promise<PrismaDevelopmentStage | null> {
-    return db.developmentStage.findFirst({ where: withWorkspaceScope({ id }, workspaceId) });
+  async findById(id: string, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage | null> {
+    const row = await db.developmentStage.findFirst({
+      where: withWorkspaceScope({ id }, workspaceId),
+    });
+    return row ? toDomain(row) : null;
   },
 
   async rename(id: string, workspaceId: VerifiedWorkspaceId, name: string): Promise<DevelopmentStage> {

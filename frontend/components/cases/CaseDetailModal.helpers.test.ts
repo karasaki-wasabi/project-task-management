@@ -1,9 +1,96 @@
 import { describe, expect, it } from "vitest";
+import type { CaseProgress, DevelopmentStage, Task } from "../../composables/useApiClient";
 import {
   buildUpdateCaseInput,
+  requiredTaskCompletionMark,
   resolveEditApplyCandidates,
+  shouldShowRequiredProgress,
   validateCaseEditForm,
 } from "./CaseDetailModal.helpers";
+
+function makeStage(overrides: Partial<DevelopmentStage> & { id: string }): DevelopmentStage {
+  return {
+    name: overrides.id,
+    order: 0,
+    kind: "normal",
+    ...overrides,
+  };
+}
+
+function makeTask(overrides: Partial<Task> & { id: string }): Task {
+  return {
+    title: overrides.id,
+    status: "not_started",
+    priority: "medium",
+    isRequiredForCase: true,
+    createdAt: "",
+    updatedAt: "",
+    ...overrides,
+  };
+}
+
+const stages: DevelopmentStage[] = [
+  makeStage({ id: "s-normal", kind: "normal" }),
+  makeStage({ id: "s-done", kind: "completed", name: "完了" }),
+  makeStage({ id: "s-cancel", kind: "cancelled", name: "中止" }),
+];
+
+describe("shouldShowRequiredProgress (task-status-model 5.6, Requirement 6.6)", () => {
+  it("returns false when progress is missing", () => {
+    expect(shouldShowRequiredProgress(null)).toBe(false);
+    expect(shouldShowRequiredProgress(undefined)).toBe(false);
+  });
+
+  it("returns false when requiredTotal is 0", () => {
+    const progress: CaseProgress = {
+      requiredTotal: 0,
+      requiredCompleted: 0,
+      requiredIncomplete: 0,
+      isOverdueWithIncomplete: false,
+    };
+    expect(shouldShowRequiredProgress(progress)).toBe(false);
+  });
+
+  it("returns true when requiredTotal is positive", () => {
+    const progress: CaseProgress = {
+      requiredTotal: 4,
+      requiredCompleted: 1,
+      requiredIncomplete: 3,
+      isOverdueWithIncomplete: false,
+    };
+    expect(shouldShowRequiredProgress(progress)).toBe(true);
+  });
+});
+
+describe("requiredTaskCompletionMark (task-status-model 5.6, Requirement 8.3)", () => {
+  it("marks completed-stage tasks as completed (not status-based)", () => {
+    expect(
+      requiredTaskCompletionMark(
+        makeTask({ id: "t1", developmentStageId: "s-done", status: "not_started" }),
+        stages,
+      ),
+    ).toBe("completed");
+  });
+
+  it("marks cancelled-stage tasks as cancelled so they are not left incomplete", () => {
+    expect(
+      requiredTaskCompletionMark(
+        makeTask({ id: "t2", developmentStageId: "s-cancel", status: "in_progress" }),
+        stages,
+      ),
+    ).toBe("cancelled");
+  });
+
+  it("marks open-stage tasks as incomplete even if status is ready_for_handoff", () => {
+    expect(
+      requiredTaskCompletionMark(
+        makeTask({ id: "t3", developmentStageId: "s-normal", status: "ready_for_handoff" }),
+        stages,
+      ),
+    ).toBe("incomplete");
+  });
+});
+
 
 describe("validateCaseEditForm (Requirement 5.3)", () => {
   it("accepts a valid edit form", () => {

@@ -4,7 +4,9 @@
   scanner can see every class literally and won't purge them.
 -->
 <script setup lang="ts">
-type Tone = "neutral" | "info" | "success" | "warning" | "danger";
+import { computed } from "vue";
+
+type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "handoff";
 
 const props = defineProps<{ tone: Tone; label: string }>();
 
@@ -14,6 +16,8 @@ const toneClasses: Record<Tone, string> = {
   success: "bg-green-100 text-green-700",
   warning: "bg-amber-100 text-amber-800",
   danger: "bg-red-100 text-red-700",
+  // task-status-model 4.1: 引継待ち専用。緑(success)は完了段階に予約。
+  handoff: "bg-[#ccfbf1] text-[#0f766e]",
 };
 
 const classes = computed(() => toneClasses[props.tone]);

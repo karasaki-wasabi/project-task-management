@@ -60,6 +60,12 @@ async function csrfToken(
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  if (table === "workspaces") {
+    await db.$executeRawUnsafe(
+      `DELETE FROM development_stages WHERE workspace_id IN (${ids.map(() => "?").join(",")})`,
+      ...ids,
+    );
+  }
   await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 

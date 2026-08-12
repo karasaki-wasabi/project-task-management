@@ -57,6 +57,14 @@ async function csrfToken(app: App, cookie: string): Promise<{ token: string; coo
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  // workspaceService.create provisions terminal development_stages (1.2/1.3);
+  // clear them before removing the workspace row (FK).
+  if (table === "workspaces") {
+    await db.$executeRawUnsafe(
+      `DELETE FROM development_stages WHERE workspace_id IN (${ids.map(() => "?").join(",")})`,
+      ...ids,
+    );
+  }
   await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
@@ -198,7 +206,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
         {
           method: "PATCH",
           url: `/api/tasks/${randomUUID()}/status`,
-          payload: { status: "done" },
+          payload: { status: "ready_for_handoff" },
         },
         memberCsrf.cookie,
         memberCsrf.token,
@@ -667,39 +675,54 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     await hardDelete("tasks", [originalId]);
   });
 
-  it("PATCH /api/tasks/:id/status returns 409 when the task has an incomplete child", async () => {
-    const parent = await app.inject(
+  // task-status-model 3.3: closed task split / closed parent → 409 (5.5, 5.6).
+  it("POST /api/tasks/:id/split returns 409 when the task is on a completed stage (5.5)", async () => {
+    const original = await app.inject(
       withWorkspace(
         {
           method: "POST",
           url: "/api/tasks",
-          payload: { title: "parent", priority: "medium" },
+          payload: { title: "closed split", priority: "medium" },
         },
         memberCsrf.cookie,
         memberCsrf.token,
         workspaceA,
       ),
     );
-    const parentId = parent.json().id;
-    const child = await app.inject(
+    const originalId = original.json().id as string;
+    const completedStage = await db.developmentStage.create({
+      data: {
+        name: `completed-split-${randomUUID()}`,
+        order: 960,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    const moved = await app.inject(
       withWorkspace(
         {
-          method: "POST",
-          url: `/api/tasks/${parentId}/children`,
-          payload: { title: "child", priority: "low" },
+          method: "PATCH",
+          url: `/api/tasks/${originalId}/development-stage`,
+          payload: { developmentStageId: completedStage.id },
         },
         memberCsrf.cookie,
         memberCsrf.token,
         workspaceA,
       ),
     );
+    expect(moved.statusCode).toBe(200);
 
     const response = await app.inject(
       withWorkspace(
         {
-          method: "PATCH",
-          url: `/api/tasks/${parentId}/status`,
-          payload: { status: "done" },
+          method: "POST",
+          url: `/api/tasks/${originalId}/split`,
+          payload: {
+            parts: [
+              { title: "part 1", priority: "low" },
+              { title: "part 2", priority: "low" },
+            ],
+          },
         },
         memberCsrf.cookie,
         memberCsrf.token,
@@ -708,8 +731,165 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     );
 
     expect(response.statusCode).toBe(409);
+    expect(response.json().error).toMatch(/closed task cannot take children/i);
 
-    await hardDelete("tasks", [child.json().id, parentId]);
+    const leakedParts =
+      response.statusCode === 201
+        ? (response.json() as { id: string }[]).map((p) => p.id)
+        : [];
+    await hardDelete("tasks", [...leakedParts, originalId]);
+    await hardDelete("development_stages", [completedStage.id]);
+  });
+
+  it("POST /api/tasks returns 409 when parentTaskId is a completed-stage task (5.6)", async () => {
+    const parent = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "closed parent", priority: "medium" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const parentId = parent.json().id as string;
+    const completedStage = await db.developmentStage.create({
+      data: {
+        name: `completed-parent-${randomUUID()}`,
+        order: 961,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    const moved = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${parentId}/development-stage`,
+          payload: { developmentStageId: completedStage.id },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(moved.statusCode).toBe(200);
+
+    const response = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: {
+            title: "child under closed",
+            priority: "low",
+            parentTaskId: parentId,
+          },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toMatch(/closed task cannot take children/i);
+
+    const leakedChild = response.statusCode === 201 ? [response.json().id as string] : [];
+    await hardDelete("tasks", [...leakedChild, parentId]);
+    await hardDelete("development_stages", [completedStage.id]);
+  });
+
+  // task-status-model 3.2: terminal-stage status edits → status_not_applicable (409).
+  it("PATCH /api/tasks/:id/status returns 409 when the task is on a terminal stage (4.5)", async () => {
+    const created = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "terminal status route", priority: "medium" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const taskId = created.json().id as string;
+    const completedStage = await db.developmentStage.create({
+      data: {
+        name: `completed-route-${randomUUID()}`,
+        order: 950,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    const moved = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${taskId}/development-stage`,
+          payload: { developmentStageId: completedStage.id },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(moved.statusCode).toBe(200);
+
+    const response = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${taskId}/status`,
+          payload: { status: "in_progress" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toMatch(/status not applicable/i);
+
+    await hardDelete("tasks", [taskId]);
+    await hardDelete("development_stages", [completedStage.id]);
+  });
+
+  it("PATCH /api/tasks/:id does not accept completedAt (2.6)", async () => {
+    const created = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "no direct completedAt", priority: "low" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const taskId = created.json().id as string;
+
+    const response = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${taskId}`,
+          payload: { completedAt: new Date().toISOString() },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    expect(response.statusCode).toBe(400);
+
+    await hardDelete("tasks", [taskId]);
   });
 
   it("PATCH /api/tasks/:id/development-stage updates developmentStageId and returns 200 (task 15.1)", async () => {

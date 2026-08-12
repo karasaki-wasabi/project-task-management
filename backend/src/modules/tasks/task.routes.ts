@@ -12,7 +12,7 @@ import { tasksService } from "./task.service.js";
 import type { TaskError } from "./task.types.js";
 
 const priority = z.enum(["high", "medium", "low"]);
-const taskStatus = z.enum(["not_started", "in_progress", "done", "on_hold"]);
+const taskStatus = z.enum(["not_started", "in_progress", "ready_for_handoff", "on_hold"]);
 
 const createTaskBodySchema = z.object({
   title: z.string(),
@@ -69,6 +69,8 @@ function taskErrorStatusCode(error: TaskError): number {
     case "not_found":
       return 404;
     case "incomplete_children":
+    case "status_not_applicable":
+    case "closed_task_cannot_take_children":
       return 409;
     case "validation_error":
       return 400;
@@ -81,6 +83,10 @@ function taskErrorMessage(error: TaskError): string {
       return `Task not found: ${error.taskId}`;
     case "incomplete_children":
       return `Task has incomplete children: ${error.taskId}`;
+    case "status_not_applicable":
+      return `Status not applicable: ${error.taskId}`;
+    case "closed_task_cannot_take_children":
+      return `Closed task cannot take children: ${error.taskId}`;
     case "validation_error":
       return error.message;
   }

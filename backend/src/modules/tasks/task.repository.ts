@@ -7,6 +7,7 @@
 import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
+import { openTaskFilter } from "./task.closure.js";
 import type { CreateTaskInput, Task, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
 
 export const taskRepository = {
@@ -35,22 +36,23 @@ export const taskRepository = {
     return client.task.findFirst({ where: withWorkspaceScope({ id }, workspaceId) });
   },
 
-  updateStatus(
-    id: string,
-    workspaceId: VerifiedWorkspaceId,
-    status: TaskStatus,
-    completedAt: Date | null,
-  ): Promise<Task> {
+  // task-status-model 3.2: status only — completedAt is owned by updateDevelopmentStage.
+  updateStatus(id: string, workspaceId: VerifiedWorkspaceId, status: TaskStatus): Promise<Task> {
     return db.task.update({
       where: withWorkspaceScope({ id }, workspaceId),
-      data: { status, completedAt },
+      data: { status },
     });
   },
 
   updateDevelopmentStage(
     id: string,
     workspaceId: VerifiedWorkspaceId,
-    data: { developmentStageId: string | null; assigneeUserId?: string },
+    data: {
+      developmentStageId: string | null;
+      assigneeUserId?: string;
+      status?: TaskStatus;
+      completedAt?: Date | null;
+    },
   ): Promise<Task> {
     return db.task.update({ where: withWorkspaceScope({ id }, workspaceId), data });
   },
@@ -80,9 +82,10 @@ export const taskRepository = {
   },
 
   // Soft-deleted children are excluded by the shared `db` client's default
-  // filter, so a deleted (rather than done) child never blocks completion.
+  // filter, so a deleted (rather than closed) child never blocks completion.
+  // Open = not on a completed/cancelled stage (task-status-model 3.1 / 5.1).
   countIncompleteChildren(parentTaskId: string): Promise<number> {
-    return db.task.count({ where: { parentTaskId, status: { not: "done" } } });
+    return db.task.count({ where: { parentTaskId, ...openTaskFilter } });
   },
 
   // Interactive-transaction callback form; equivalent to the `$transaction([...])`
