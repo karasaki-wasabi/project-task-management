@@ -63,7 +63,13 @@ const emit = defineEmits<{
 }>();
 
 const api = useApiClient();
+const route = useRoute();
 const isOpen = computed(() => props.taskId !== null);
+const taskDetailPath = computed(() => {
+  const workspaceId = route.params.workspaceId;
+  if (!props.taskId || typeof workspaceId !== "string") return null;
+  return `/workspaces/${workspaceId}/tasks/${props.taskId}`;
+});
 
 const mode = ref<"view" | "edit">("view");
 const loading = ref(false);
@@ -185,7 +191,18 @@ async function confirmDelete() {
 
 <template>
   <Modal class="task-detail-modal" :open="isOpen" ariaLabel="タスクの詳細" @close="emit('close')">
-    <template #title>{{ task ? title : "読み込み中…" }}</template>
+    <template #title>
+      <div class="flex items-start justify-between gap-3">
+        <span class="min-w-0 truncate">{{ task ? title : "読み込み中…" }}</span>
+        <NuxtLink
+          v-if="taskDetailPath"
+          :to="taskDetailPath"
+          class="shrink-0 text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline"
+        >
+          詳細ページを開く ↗
+        </NuxtLink>
+      </div>
+    </template>
 
     <ErrorAlert v-if="error" :message="error" />
 
