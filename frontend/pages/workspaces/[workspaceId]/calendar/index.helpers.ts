@@ -1,11 +1,8 @@
-// Pure derived-data logic for the calendar page (task 7.2, design.md
-// "Components and Interfaces > Frontend/calendar > CalendarHelpers" Service
-// Interface, Requirement 2.1-2.6, 3.1-3.6, 4.1-4.3). Extracted from the
-// .vue SFC so it can be unit-tested without mounting a component (this repo
-// has no @vue/test-utils / DOM test environment configured, see
-// frontend/vitest.config.ts) — same pattern as
-// frontend/pages/kanban/index.helpers.ts and
-// frontend/components/shared/DatePicker.helpers.ts.
+// Pure derived-data logic for the calendar page (task 7.2 +
+// task-status-model 5.7, design.md CalendarHelpers / Requirements 8.4, 8.5;
+// also prior Requirement 2.1-2.6, 3.1-3.6, 4.1-4.3). Extracted from the
+// .vue SFC so it can be unit-tested without mounting a component — same
+// pattern as frontend/pages/kanban/index.helpers.ts.
 //
 // This module supersedes task 3.1/3.2's simpler per-day-cell segment
 // approach: research.md "ビジュアルデザイン確定" (claude design) settled on
@@ -14,15 +11,12 @@
 // single) has been replaced by `buildWeekCaseLanes` + `computeWeekRowBudget`
 // below.
 //
-// A runtime (non-type-only) import is needed here for `parseLocalDateOnly`,
-// so this uses a relative path rather than the `~/` alias: this repo's bare
-// `vitest.config.ts` (frontend/vitest.config.ts) has no `~/` alias
-// resolution configured (only Nuxt itself provides that at build/dev time),
-// so every other `~/`-aliased import in this codebase's `.helpers.ts` files
-// is `import type` only (erased entirely by TS, never actually resolved at
-// runtime) — see e.g. frontend/pages/kanban/index.helpers.ts. A relative
-// import works in both the Nuxt app and this Vitest suite.
+// A runtime (non-type-only) import is needed here for `parseLocalDateOnly`
+// and `isTaskClosed`, so this uses relative paths rather than the `~/`
+// alias: this repo's bare `vitest.config.ts` has no `~/` alias resolution
+// (only Nuxt does at build/dev time).
 import { parseLocalDateOnly, type DateCell } from "../../../../components/shared/DatePicker.helpers";
+import { isTaskClosed } from "../../../../composables/useTaskClosure";
 
 // Map keys throughout this module are `YYYY-MM-DD` local-calendar-day
 // strings, matching frontend/components/shared/DatePicker.helpers.ts's
@@ -32,7 +26,7 @@ export interface TaskMarkerView {
   taskId: string;
   title: string;
   stage: string | null; // resolved developmentStageId -> DevelopmentStage.name
-  isOverdue: boolean; // scheduledDate < 本日 かつ status !== "ready_for_handoff"
+  isOverdue: boolean; // scheduledDate < 本日 かつ クローズ済みでない (8.4/8.5)
 }
 
 export interface DayVisibleMarkers {
@@ -94,10 +88,9 @@ export function buildTaskMarkersByDate(
       ? (stages.find((s) => s.id === task.developmentStageId)?.name ?? task.developmentStageId)
       : null;
 
-    // Requirement 2.4: date-only string comparison is safe here because
-    // both sides are `YYYY-MM-DD` (lexicographic order matches calendar
-    // order for this fixed-width format).
-    const isOverdue = dateKey < todayIso && task.status !== "ready_for_handoff";
+    // Requirement 2.4 + task-status-model 8.4/8.5: past scheduledDate and
+    // not closed (completed/cancelled stage). Status must not decide overdue.
+    const isOverdue = dateKey < todayIso && !isTaskClosed(task, stages);
 
     const marker: TaskMarkerView = { taskId: task.id, title: task.title, stage, isOverdue };
 
