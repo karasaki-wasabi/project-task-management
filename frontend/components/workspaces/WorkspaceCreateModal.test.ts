@@ -10,8 +10,13 @@ import type { Workspace } from "../../composables/useApiClient";
 const createWorkspace = vi.fn();
 const refresh = vi.fn();
 const select = vi.fn();
+const navigateTo = vi.fn();
 const currentId = ref<string | null>(null);
 const workspaces = ref<Workspace[]>([]);
+const route = { path: "/workspaces", query: {} as Record<string, string> };
+
+vi.stubGlobal("navigateTo", navigateTo);
+vi.stubGlobal("useRoute", () => route);
 
 vi.mock("../../composables/useApiClient", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../composables/useApiClient")>();
@@ -97,10 +102,14 @@ describe("WorkspaceCreateModal (task 6.1)", () => {
     createWorkspace.mockReset();
     refresh.mockReset();
     select.mockReset();
+    navigateTo.mockReset();
     currentId.value = null;
     workspaces.value = [];
+    route.path = "/workspaces";
+    route.query = {};
     createWorkspace.mockResolvedValue(makeWorkspace());
     refresh.mockResolvedValue(undefined);
+    navigateTo.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -166,7 +175,25 @@ describe("WorkspaceCreateModal (task 6.1)", () => {
     expect(refresh).toHaveBeenCalledOnce();
     expect(select).toHaveBeenCalledWith("ws-created");
     expect(callOrder).toEqual(["create", "refresh", "select"]);
+    expect(navigateTo).toHaveBeenCalledWith("/workspaces/ws-created");
     expect(wrapper.emitted("close")).toBeTruthy();
+  });
+
+  it("scoped 上で作成すると同一画面種の新ワークスペースへ進む（workspace-url-routing 4.3）", async () => {
+    route.path = "/workspaces/ws-old/tasks";
+    route.query = { caseId: "c1" };
+    const created = makeWorkspace({ id: "ws-new", name: "新WS" });
+    createWorkspace.mockResolvedValue(created);
+
+    const wrapper = mountModal();
+    await flushPromises();
+    await wrapper.get("#workspace-create-name").setValue("新WS");
+    await submitForm(wrapper);
+
+    expect(navigateTo).toHaveBeenCalledWith({
+      path: "/workspaces/ws-new/tasks",
+      query: { caseId: "c1" },
+    });
   });
 
   it("キャンセルで close を emit する", async () => {

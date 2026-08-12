@@ -14,7 +14,12 @@
 // whichever column had last been hovered permanently highlighted
 // (Impeccable fourth critique P1, fixed by emitting whenever there's a
 // taskId, matching UnassignedBacklogPanel's identical handler).
-import { expect, registerWorkspaceMember, test } from "./fixtures";
+import {
+  expect,
+  registerWorkspaceMember,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 
 test("dragging a card out of the focus tray and back into itself leaves it there with no stuck highlight (regression)", async ({
   page,
@@ -28,20 +33,20 @@ test("dragging a card out of the focus tray and back into itself leaves it there
 
   await registerWorkspaceMember(page, request, workspace.id, userName);
 
-  await page.goto("/kanban/stages");
+  await page.goto(workspacePagePath(workspace.id, "kanban/stages"));
   await page.getByPlaceholder("段階名(例: 仕様未確定)").fill(stageName);
   await page.getByRole("button", { name: "登録" }).click();
   await expect(page.locator(".stage-list", { hasText: stageName })).toBeVisible();
 
   // Task assigned to the user at creation time and placed into the stage,
   // so it appears in that user's focus tray once selected.
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   await page.getByPlaceholder("タスク名").fill(taskTitle);
   await page.locator("form select").nth(1).selectOption({ label: userName });
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: taskTitle }).first()).toBeVisible();
 
-  await page.goto("/kanban");
+  await page.goto(workspacePagePath(workspace.id, "kanban"));
   await page.waitForLoadState("networkidle");
   const stageColumn = page.locator(".column[data-stage-id]", { hasText: stageName });
   const stageCardList = stageColumn.locator(".card-list");

@@ -31,7 +31,11 @@
 //     (CaseFormModal's `created` payload is exactly this response body)
 //     and drills down by navigating directly to `/tasks?caseId=<id>`,
 //     rather than clicking a same-row dashboard link.
-import { expect, test } from "./fixtures";
+import {
+  expect,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 
 // CaseFormModal opens CaseTemplateApplyConfirm (Screen A) when start and/or
 // end date is unset; approve with 「作成する」 to finish create.
@@ -81,17 +85,18 @@ async function setDateViaPicker(
 
 test("dashboard shows an overdue case and drills down to the task list (Requirements 11.2-11.4)", async ({
   page,
+  workspace,
 }) => {
   const suffix = Date.now();
   const caseName = `e2e-dash-case-${suffix}`;
   const requiredTaskTitle = `e2e-dash-required-task-${suffix}`;
 
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   await page.getByPlaceholder("タスク名").fill(requiredTaskTitle);
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: requiredTaskTitle }).first()).toBeVisible();
 
-  await page.goto("/cases");
+  await page.goto(workspacePagePath(workspace.id, "cases"));
   await page.getByRole("button", { name: "案件を登録" }).click();
 
   const formModal = page.locator(".case-form-modal");
@@ -129,18 +134,12 @@ test("dashboard shows an overdue case and drills down to the task list (Requirem
 
   await expect(page.locator("tbody tr", { hasText: caseName })).toBeVisible();
 
-  await page.goto("/");
+  await page.goto(workspacePagePath(workspace.id, ""));
 
-  // The dashboard's overdue panel (frontend/pages/index.vue) slices its
-  // list to the first DISPLAY_LIMIT=5 items before rendering, and does not
-  // sort them first (the bug this remediation targets for `caseName`). The
-  // dev DB this suite runs against accumulates overdue-case rows across
-  // every prior E2E run (no reset between runs), so a freshly created case
-  // almost never lands in that capped, unsorted top-5 slice. So the panel's
-  // specific-item-by-name assertion is not reliable against this shared,
-  // never-reset dev DB — only assert that the SECTION renders with a
-  // non-empty state; the case's real presence is verified via /cases'
-  // search box below.
+  // The dashboard's overdue panel slices its list to the first
+  // DISPLAY_LIMIT=5 items before rendering, and does not sort them first.
+  // Only assert that the SECTION renders with a non-empty state; the case's
+  // real presence is verified via /cases' search box below.
   await expect(page.getByRole("heading", { name: "期限超過・未完了の案件" })).toBeVisible();
   await expect(page.getByText("期限超過の案件はありません")).not.toBeVisible();
 
@@ -148,7 +147,7 @@ test("dashboard shows an overdue case and drills down to the task list (Requirem
   // search box, which has no display cap (already proven reliable in
   // cases.spec.ts, task 9.2), so this holds regardless of how much overdue
   // data has accumulated from prior runs.
-  await page.goto("/cases");
+  await page.goto(workspacePagePath(workspace.id, "cases"));
   const searchBox = page.getByPlaceholder("案件名で絞り込み");
   await searchBox.fill(caseName);
   const caseRow = page.locator("tbody tr", { hasText: caseName });
@@ -158,6 +157,6 @@ test("dashboard shows an overdue case and drills down to the task list (Requirem
   // Drill-down to the task list: navigate directly using the case id
   // captured from the createCase response, rather than clicking a
   // same-row dashboard link.
-  await page.goto(`/tasks?caseId=${createdCase.id}`);
+  await page.goto(`${workspacePagePath(workspace.id, "tasks")}?caseId=${createdCase.id}`);
   await expect(page.locator("li", { hasText: requiredTaskTitle }).first()).toBeVisible();
 });

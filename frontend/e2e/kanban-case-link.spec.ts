@@ -13,17 +13,29 @@
 // seeding helper exists in this e2e/ directory). Requires the backend
 // (+MySQL) and frontend to already be running (`docker compose up`); see
 // playwright.config.ts.
-import { expect, test } from "./fixtures";
+import {
+  expect,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 
-async function createTask(page: import("@playwright/test").Page, title: string) {
-  await page.goto("/tasks");
+async function createTask(
+  page: import("@playwright/test").Page,
+  workspaceId: string,
+  title: string,
+) {
+  await page.goto(workspacePagePath(workspaceId, "tasks"));
   await page.getByPlaceholder("タスク名").fill(title);
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: title }).first()).toBeVisible();
 }
 
-async function createCase(page: import("@playwright/test").Page, name: string) {
-  await page.goto("/cases");
+async function createCase(
+  page: import("@playwright/test").Page,
+  workspaceId: string,
+  name: string,
+) {
+  await page.goto(workspacePagePath(workspaceId, "cases"));
   await page.getByRole("button", { name: "案件を登録" }).click();
   const formModal = page.locator(".case-form-modal");
   await expect(formModal).toBeVisible();
@@ -45,8 +57,12 @@ async function createCase(page: import("@playwright/test").Page, name: string) {
 // Opens the task detail popup for `title` from a fresh /kanban navigation
 // (so each call re-fetches the task via GET /api/tasks/:id, proving
 // server-side persistence rather than lingering client state).
-async function openTaskDetail(page: import("@playwright/test").Page, title: string) {
-  await page.goto("/kanban");
+async function openTaskDetail(
+  page: import("@playwright/test").Page,
+  workspaceId: string,
+  title: string,
+) {
+  await page.goto(workspacePagePath(workspaceId, "kanban"));
   // A freshly created task has no development stage/assignee yet, so it
   // starts out in the collapsed "未割り当て" backlog panel (same as
   // kanban.spec.ts) rather than any stage column. Each call here is a fresh
@@ -62,15 +78,16 @@ async function openTaskDetail(page: import("@playwright/test").Page, title: stri
 
 test("タスク詳細ポップアップで案件を関連付け・必須指定して保存すると再表示で反映され、未設定に戻すと必須表示も解除される (Requirements 4.1-4.4, 4.6, 4.7)", async ({
   page,
+  workspace,
 }) => {
   const suffix = Date.now();
   const taskTitle = `e2e-kanban-case-link-task-${suffix}`;
   const caseName = `e2e-kanban-case-link-case-${suffix}`;
 
-  await createTask(page, taskTitle);
-  await createCase(page, caseName);
+  await createTask(page, workspace.id, taskTitle);
+  await createCase(page, workspace.id, caseName);
 
-  let modal = await openTaskDetail(page, taskTitle);
+  let modal = await openTaskDetail(page, workspace.id, taskTitle);
 
   // View mode starts with no case associated (Requirement 4.1).
   await expect(modal.getByText("案件: —", { exact: true })).toBeVisible();
@@ -87,7 +104,7 @@ test("タスク詳細ポップアップで案件を関連付け・必須指定�
   await modal.getByRole("button", { name: "閉じる", exact: true }).last().click();
   await expect(modal).toBeHidden();
 
-  modal = await openTaskDetail(page, taskTitle);
+  modal = await openTaskDetail(page, workspace.id, taskTitle);
   await expect(modal.getByText(`案件: ${caseName}(必須)`, { exact: true })).toBeVisible();
 
   await modal.getByRole("button", { name: "編集" }).click();
@@ -109,19 +126,20 @@ test("タスク詳細ポップアップで案件を関連付け・必須指定�
   await modal.getByRole("button", { name: "閉じる", exact: true }).last().click();
   await expect(modal).toBeHidden();
 
-  modal = await openTaskDetail(page, taskTitle);
+  modal = await openTaskDetail(page, workspace.id, taskTitle);
   await expect(modal.getByText("案件: —", { exact: true })).toBeVisible();
 });
 
-test("必須トグルは案件未選択時のみ非活性になる (Requirement 4.5)", async ({ page }) => {
+test("必須トグルは案件未選択時のみ非活性になる (Requirement 4.5)", async ({ page,
+  workspace }) => {
   const suffix = Date.now();
   const taskTitle = `e2e-kanban-case-toggle-task-${suffix}`;
   const caseName = `e2e-kanban-case-toggle-case-${suffix}`;
 
-  await createTask(page, taskTitle);
-  await createCase(page, caseName);
+  await createTask(page, workspace.id, taskTitle);
+  await createCase(page, workspace.id, caseName);
 
-  const modal = await openTaskDetail(page, taskTitle);
+  const modal = await openTaskDetail(page, workspace.id, taskTitle);
   await modal.getByRole("button", { name: "編集" }).click();
 
   const requiredSwitch = modal.getByRole("switch", { name: "この案件の必須タスクにする" });

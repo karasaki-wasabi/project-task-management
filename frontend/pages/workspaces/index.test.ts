@@ -14,6 +14,7 @@ import WorkspacesPage from "./index.vue";
 
 const refresh = vi.fn();
 const select = vi.fn();
+const relocateAfterWorkspaceLost = vi.fn();
 const clearCurrentIf = vi.fn((id: string) => {
   if (currentId.value === id) {
     currentId.value = null;
@@ -35,6 +36,7 @@ vi.mock("../../composables/useCurrentWorkspace", () => ({
     refresh,
     select,
     clearCurrentIf,
+    relocateAfterWorkspaceLost,
   }),
 }));
 
@@ -169,6 +171,7 @@ describe("WorkspacesPage (task 6.3)", () => {
     refresh.mockReset();
     select.mockReset();
     clearCurrentIf.mockClear();
+    relocateAfterWorkspaceLost.mockClear();
     listWorkspaceMembers.mockReset();
     searchAddableWorkspaceUsers.mockReset();
     addWorkspaceMember.mockReset();
@@ -538,6 +541,7 @@ describe("WorkspacesPage creator-only delete (task 6.6)", () => {
     expect(deleteWorkspace).toHaveBeenCalledWith("ws-1");
     expect(clearCurrentIf).toHaveBeenCalledWith("ws-1");
     expect(refresh).toHaveBeenCalled();
+    expect(relocateAfterWorkspaceLost).toHaveBeenCalledWith("ws-1");
     expect(currentId.value).toBeNull();
     expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="workspace-delete-modal"]').exists()).toBe(false);

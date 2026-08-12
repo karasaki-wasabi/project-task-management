@@ -56,6 +56,7 @@ import {
   test,
   workspaceScopedHeaders,
   type WorkspaceInfo,
+  workspacePagePath,
 } from "./fixtures";
 
 // Backend URL for setup/teardown helpers. Mirrors events-removed.spec.ts;
@@ -110,8 +111,13 @@ type ApiTemplate = {
 // Registers a case_start template (offset 0, as_is) via the create Modal so
 // a later case create with startDate=today yields scheduledDate=today
 // without holiday skip/shift.
-async function registerCaseStartTemplate(page: Page, title: string, priorityLabel: "高" | "中" | "低") {
-  await page.goto("/recurrence");
+async function registerCaseStartTemplate(
+  page: Page,
+  workspaceId: string,
+  title: string,
+  priorityLabel: "高" | "中" | "低",
+) {
+  await page.goto(workspacePagePath(workspaceId, "recurrence"));
   await page.getByRole("button", { name: "テンプレートを登録" }).click();
   const modal = page.locator(".recurrence-form-modal");
   await expect(modal).toBeVisible();
@@ -150,8 +156,13 @@ async function stopTemplatesByTitle(
 // the calendar page reuses this exact modal component, but this setup step
 // avoids depending on the task's marker being reachable on the calendar's
 // (potentially overflowed) day cell.
-async function assignViaKanbanBacklog(page: Page, taskTitle: string, userName: string) {
-  await page.goto("/kanban");
+async function assignViaKanbanBacklog(
+  page: Page,
+  workspaceId: string,
+  taskTitle: string,
+  userName: string,
+) {
+  await page.goto(workspacePagePath(workspaceId, "kanban"));
   await page.getByRole("button", { name: /展開/ }).click();
   await page.locator(".card[data-task-id]", { hasText: taskTitle }).click();
   const modal = page.locator(".task-detail-modal");
@@ -268,10 +279,11 @@ async function setDateViaPicker(container: Locator, triggerName: string, iso: st
 // templateOperations → server full candidates). Missing dates approve Screen A.
 async function createCaseApplyingTemplates(
   page: Page,
+  workspaceId: string,
   name: string,
   opts: { startDate: string; endDate: string },
 ) {
-  await page.goto("/cases");
+  await page.goto(workspacePagePath(workspaceId, "cases"));
   await page.getByRole("button", { name: "案件を登録" }).click();
   const formModal = page.locator(".case-form-modal");
   await expect(formModal).toBeVisible();
@@ -322,7 +334,7 @@ test("期限日を持つタスクの表示・開発段階バッジ・担当者�
   // Requirement 2.2: a task with no scheduledDate is created (via the
   // ordinary /tasks form, which has no scheduledDate field at all) and
   // must never appear on the calendar.
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   await page.getByPlaceholder("タスク名").fill(noDateTaskTitle);
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: noDateTaskTitle }).first()).toBeVisible();
@@ -334,15 +346,18 @@ test("期限日を持つタスクの表示・開発段階バッジ・担当者�
   // longer asserted on the calendar marker after the visual refresh.
   const now = new Date();
   const today = isoDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
-  await registerCaseStartTemplate(page, taskATitle, "高");
-  await registerCaseStartTemplate(page, taskBTitle, "低");
-  await createCaseApplyingTemplates(page, seedCaseName, { startDate: today, endDate: today });
+  await registerCaseStartTemplate(page, workspace.id, taskATitle, "高");
+  await registerCaseStartTemplate(page, workspace.id, taskBTitle, "低");
+  await createCaseApplyingTemplates(page, workspace.id, seedCaseName, {
+    startDate: today,
+    endDate: today,
+  });
   await stopTemplatesByTitle(page.request, workspace.id, [taskATitle, taskBTitle]);
 
-  await assignViaKanbanBacklog(page, taskATitle, userAName);
-  await assignViaKanbanBacklog(page, taskBTitle, userBName);
+  await assignViaKanbanBacklog(page, workspace.id, taskATitle, userAName);
+  await assignViaKanbanBacklog(page, workspace.id, taskBTitle, userBName);
 
-  await page.goto("/calendar");
+  await page.goto(workspacePagePath(workspace.id, "calendar"));
   await expect(page.getByRole("heading", { name: "カレンダー" })).toBeVisible();
 
   const currentLabel = monthLabel(now.getFullYear(), now.getMonth() + 1);
@@ -462,7 +477,7 @@ test("案件期間バー・片側日付・完了状態・詳細モーダル・�
   // calendar.
   await createCaseFixture(api, workspace.id, noDateCaseName);
 
-  await page.goto("/calendar");
+  await page.goto(workspacePagePath(workspace.id, "calendar"));
   await expect(monthHeading(page)).toHaveText(currentLabel);
 
   // Requirement 4.1: moving to next month updates the displayed month.
@@ -564,7 +579,7 @@ test("案件が3件を超える週の「他N件」から一覧ポップアップ
     await createCaseFixture(api, workspace.id, name, { startDate: rangeStart, endDate: rangeEnd });
   }
 
-  await page.goto("/calendar");
+  await page.goto(workspacePagePath(workspace.id, "calendar"));
   await goToMonth(page, targetYear, targetMonth);
 
   const overflowChip = page.getByRole("button", { name: /\d+件の案件を一覧表示/ });
@@ -612,7 +627,7 @@ test("案件バー表示切替スイッチでバーの表示・非表示が切�
 
   await createCaseFixture(api, workspace.id, caseName, { startDate: rangeStart, endDate: rangeEnd });
 
-  await page.goto("/calendar");
+  await page.goto(workspacePagePath(workspace.id, "calendar"));
   await goToMonth(page, targetYear, targetMonth);
 
   const bar = page.getByRole("button", { name: `${caseName} の詳細を開く` });

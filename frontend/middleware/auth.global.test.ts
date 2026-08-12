@@ -18,12 +18,19 @@ describe("auth.global middleware (task 6.2)", () => {
     navigateTo.mockReturnValue("login-navigation");
     const { default: middleware } = await import("./auth.global");
 
-    await expect(middleware({ path: "/tasks", fullPath: "/tasks?view=mine" } as never, {} as never))
-      .resolves.toBe("login-navigation");
+    await expect(
+      middleware(
+        {
+          path: "/workspaces/ws-1/tasks",
+          fullPath: "/workspaces/ws-1/tasks?caseId=c1",
+        } as never,
+        {} as never,
+      ),
+    ).resolves.toBe("login-navigation");
 
     expect(navigateTo).toHaveBeenCalledWith({
       path: "/login",
-      query: { redirect: "/tasks?view=mine" },
+      query: { redirect: "/workspaces/ws-1/tasks?caseId=c1" },
     });
   });
 
@@ -50,7 +57,12 @@ describe("auth.global middleware (task 6.2)", () => {
     refresh.mockResolvedValue({ id: "user-1" });
     const { default: middleware } = await import("./auth.global");
 
-    await expect(middleware({ path: "/tasks", fullPath: "/tasks" } as never, {} as never)).resolves.toBeUndefined();
+    await expect(
+      middleware(
+        { path: "/workspaces/ws-1/tasks", fullPath: "/workspaces/ws-1/tasks" } as never,
+        {} as never,
+      ),
+    ).resolves.toBeUndefined();
 
     expect(navigateTo).not.toHaveBeenCalled();
   });

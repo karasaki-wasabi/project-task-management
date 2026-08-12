@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { createAndSelectWorkspace, registerUser, type RegisteredUser } from "./fixtures";
+import {
+  createAndSelectWorkspace,
+  registerUser,
+  workspacePagePath,
+  type RegisteredUser,
+} from "./fixtures";
 
 function uniqueUser(name: string): RegisteredUser {
   const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -24,7 +29,7 @@ async function registerFromPage(
   await expect(page).toHaveURL("/");
 }
 
-test("登録後のダッシュボードに表示名を表示する", async ({ page }) => {
+test("登録後のランディングに表示名を表示する", async ({ page }) => {
   const user = uniqueUser("E2E 登録ユーザー");
 
   await registerFromPage(page, user);
@@ -49,34 +54,48 @@ test("ログアウト後は業務画面へアクセスできない", async ({ pa
   const user = uniqueUser("E2E ログアウトユーザー");
 
   await registerFromPage(page, user);
-  await expect(page).toHaveURL("/");
+  const workspace = await createAndSelectWorkspace(page, `e2e-logout-ws-${Date.now()}`);
   await page.getByRole("button", { name: "ログアウト" }).click();
   await expect(page).toHaveURL("/login");
 
-  await page.goto("/tasks");
-  await expect(page).toHaveURL(/\/login\?redirect=\/tasks$/);
+  const target = workspacePagePath(workspace.id, "tasks");
+  await page.goto(target);
+  await expect(page).toHaveURL(/\/login\?redirect=/);
+  expect(new URL(page.url()).searchParams.get("redirect")).toBe(target);
 });
 
-test("未ログインで tasks へアクセス後、ログインすると元の画面へ戻る", async ({ page, request }) => {
+test("未ログインで scoped tasks へアクセス後、ログインすると元の画面へ戻る", async ({
+  page,
+  request,
+}) => {
   const user = await registerUser(request, "E2E リダイレクトユーザー");
 
-  await page.goto("/tasks");
-  await expect(page).toHaveURL(/\/login\?redirect=\/tasks$/);
+  await page.goto("/login");
+  await page.getByLabel("メールアドレス").fill(user.email);
+  await page.locator("#password").fill(user.password);
+  await page.getByRole("button", { name: "ログイン", exact: true }).click();
+  await expect(page).toHaveURL("/");
+
+  const workspace = await createAndSelectWorkspace(page, `e2e-redirect-ws-${Date.now()}`);
+  const target = `${workspacePagePath(workspace.id, "tasks")}?caseId=c1`;
+  await page.getByRole("button", { name: "ログアウト" }).click();
+  await expect(page).toHaveURL("/login");
+
+  await page.goto(target);
+  await expect(page).toHaveURL(/\/login\?redirect=/);
   await page.getByLabel("メールアドレス").fill(user.email);
   await page.locator("#password").fill(user.password);
   await page.getByRole("button", { name: "ログイン", exact: true }).click();
 
-  await expect(page).toHaveURL("/tasks");
-  // No workspace yet: empty state replaces the task list (workspace-resource-scope).
-  await expect(page.getByTestId("workspace-empty-state")).toBeVisible();
+  await expect(page).toHaveURL(target);
 });
 
 test("担当者候補に自己登録アカウントの表示名を表示する", async ({ page }) => {
   const user = uniqueUser("E2E 担当者候補ユーザー");
 
   await registerFromPage(page, user);
-  await createAndSelectWorkspace(page, `e2e-auth-ws-${Date.now()}`);
-  await page.goto("/tasks");
+  const workspace = await createAndSelectWorkspace(page, `e2e-auth-ws-${Date.now()}`);
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
 
   await expect(page.locator("select").filter({ hasText: "すべて" })).toContainText(user.name);
   await expect(page.locator("form select").last()).toContainText(user.name);

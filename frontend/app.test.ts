@@ -14,10 +14,20 @@ const WorkspaceSwitcherStub = {
 const route = reactive({ path: "/", meta: {} as Record<string, unknown> });
 const logout = vi.fn();
 const navigateTo = vi.fn();
+const currentId = ref<string | null>(null);
 const auth = {
   user: ref<{ name: string } | null>(null),
   logout,
 };
+
+vi.mock("./composables/useCurrentWorkspace", () => ({
+  useCurrentWorkspace: () => ({
+    currentId,
+    workspaces: ref([]),
+    refresh: vi.fn(),
+    select: vi.fn(),
+  }),
+}));
 
 function mountApp(stubs: Record<string, unknown> = {}) {
   return mount(App, {
@@ -45,6 +55,7 @@ beforeEach(() => {
   logout.mockReset();
   navigateTo.mockReset();
   auth.user.value = null;
+  currentId.value = null;
   vi.stubGlobal("useRoute", () => route);
   vi.stubGlobal("useAuth", () => auth);
   vi.stubGlobal("navigateTo", navigateTo);
@@ -105,5 +116,42 @@ describe("App shell (task 6.4 / 6.2)", () => {
     expect(switcherIdx).toBeGreaterThan(-1);
     expect(nameIdx).toBeGreaterThan(-1);
     expect(switcherIdx).toBeLessThan(nameIdx);
+  });
+
+  it("currentId があるとき業務ナビは同一 workspaceId の scoped path になる（workspace-url-routing 4.1）", () => {
+    currentId.value = "ws-1";
+    auth.user.value = { name: "山田 太郎" };
+    const wrapper = mountApp({
+      NuxtLink: {
+        props: ["to"],
+        template: '<a :href="typeof to === \'string\' ? to : \'#\'"><slot /></a>',
+      },
+    });
+
+    const hrefs = wrapper
+      .findAll("nav a")
+      .map((a) => a.attributes("href"))
+      .filter((href): href is string => Boolean(href));
+    expect(hrefs).toContain("/workspaces/ws-1/tasks");
+    expect(hrefs).toContain("/workspaces/ws-1/kanban");
+    expect(hrefs).toContain("/workspaces");
+    expect(hrefs).not.toContain("/tasks");
+  });
+
+  it("currentId が null のときナビは / と /workspaces のみ（workspace-url-routing 4.1）", () => {
+    currentId.value = null;
+    auth.user.value = { name: "山田 太郎" };
+    const wrapper = mountApp({
+      NuxtLink: {
+        props: ["to"],
+        template: '<a :href="typeof to === \'string\' ? to : \'#\'"><slot /></a>',
+      },
+    });
+
+    const hrefs = wrapper
+      .findAll("nav a")
+      .map((a) => a.attributes("href"))
+      .filter((href): href is string => Boolean(href));
+    expect(hrefs).toEqual(["/", "/workspaces"]);
   });
 });
