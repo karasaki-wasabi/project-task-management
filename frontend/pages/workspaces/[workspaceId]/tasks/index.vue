@@ -10,6 +10,7 @@
 import { computed, ref, watch } from "vue";
 import {
   useApiClient,
+  type DevelopmentStage,
   type Priority,
   type Task,
   type TaskStatus,
@@ -21,6 +22,7 @@ const api = useApiClient();
 const { currentId } = useCurrentWorkspace();
 
 const tasks = ref<Task[]>([]);
+const stages = ref<DevelopmentStage[]>([]);
 const assigneeUserId = ref("");
 const caseId = ref((useRoute().query.caseId as string | undefined) ?? "");
 
@@ -42,10 +44,15 @@ function childrenOf(taskId: string): Task[] {
 
 async function load() {
   if (currentId.value === null) return;
-  tasks.value = await api.listTasks({
-    assigneeUserId: assigneeUserId.value || undefined,
-    caseId: caseId.value || undefined,
-  });
+  const [taskList, stageList] = await Promise.all([
+    api.listTasks({
+      assigneeUserId: assigneeUserId.value || undefined,
+      caseId: caseId.value || undefined,
+    }),
+    api.listDevelopmentStages(),
+  ]);
+  tasks.value = taskList;
+  stages.value = stageList;
 }
 
 async function createTask() {
@@ -106,6 +113,7 @@ watch(
   (id) => {
     if (id === null) {
       tasks.value = [];
+      stages.value = [];
       users.value = [];
       splitTarget.value = null;
       error.value = null;
@@ -185,6 +193,7 @@ watch(
         :task="task"
         :children="childrenOf(task.id)"
         :all-tasks="tasks"
+        :stages="stages"
         @status-change="onStatusChange"
         @split="openSplit"
       />
