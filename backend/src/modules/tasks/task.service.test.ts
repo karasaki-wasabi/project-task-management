@@ -100,17 +100,37 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
   });
 
-  it("stores a free-form memo (Requirement 1.6)", async () => {
+  it("stores free-form detail and omits memo/scheduledDate (Requirement 1.1, 1.2, 2.1, 2.2)", async () => {
     const result = await tasksService.create({
-      title: "task with memo",
+      title: "task with detail",
       priority: "medium",
-      memo: "call the client",
+      detail: "call the client",
       workspaceId: workspaceA,
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.memo).toBe("call the client");
+    expect(result.value.detail).toBe("call the client");
+    expect(result.value).not.toHaveProperty("memo");
+    expect(result.value).not.toHaveProperty("scheduledDate");
+    expect(Object.hasOwn(result.value, "scheduledEndDate")).toBe(true);
+
+    await hardDeleteTasks([result.value.id]);
+  });
+
+  it("stores scheduledEndDate when provided (Requirement 2.1, 2.3)", async () => {
+    const scheduledEndDate = new Date("2026-08-15");
+    const result = await tasksService.create({
+      title: "task with end date",
+      priority: "medium",
+      scheduledEndDate,
+      workspaceId: workspaceA,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.scheduledEndDate).toEqual(scheduledEndDate);
+    expect(result.value).not.toHaveProperty("scheduledDate");
 
     await hardDeleteTasks([result.value.id]);
   });
@@ -274,11 +294,11 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([created.value.id]);
   });
 
-  it("updates title, priority, and memo (Requirement 1.1, 1.5, 1.6)", async () => {
+  it("updates title, priority, and detail (Requirement 1.1, 1.3)", async () => {
     const created = await tasksService.create({
       title: "original",
       priority: "low",
-      memo: "old memo",
+      detail: "old detail",
       workspaceId: workspaceA,
     });
     if (!created.ok) throw new Error("setup failed");
@@ -286,14 +306,15 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     const result = await tasksService.update(created.value.id, workspaceA, {
       title: "renamed",
       priority: "high",
-      memo: "new memo",
+      detail: "new detail",
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.title).toBe("renamed");
     expect(result.value.priority).toBe("high");
-    expect(result.value.memo).toBe("new memo");
+    expect(result.value.detail).toBe("new detail");
+    expect(result.value).not.toHaveProperty("memo");
 
     await hardDeleteTasks([created.value.id]);
   });
