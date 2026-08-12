@@ -696,15 +696,16 @@ describe("task-status-model schema (task 1.1)", () => {
     expect(statusColumn[0]?.Type).not.toContain("'done'");
   });
 
-  it("keeps a migrate-dev warning in the hand-written migration SQL", () => {
+  it("keeps generate-column hand-edit and migrate-dev warning in the single init SQL", () => {
     const migrationPath = resolve(
       __dirname,
-      "migrations/20260812000000_add_development_stage_kind/migration.sql",
+      "migrations/20260805030211_init_domain_schema/migration.sql",
     );
     const sql = readFileSync(migrationPath, "utf8");
     expect(sql).toMatch(/prisma migrate dev/);
     expect(sql).toMatch(/STORED GENERATED COLUMN|生成列/);
-    expect(sql).toMatch(/prisma migrate deploy/);
+    expect(sql).toMatch(/prisma-migrations\.md|migrate reset/);
+    expect(sql).toMatch(/`kind` ENUM\('normal', 'completed', 'cancelled'\)/);
   });
 
   it("ensures each workspace has one completed and one cancelled stage; completedAt tasks sit on completed", async () => {
@@ -845,18 +846,22 @@ describe("task-field-rename schema (task 1.1)", () => {
     expect(schema).not.toMatch(/scheduledStartDate|scheduled_start_date/);
   });
 
-  it("keeps a migrate-dev warning in the rename migration SQL", () => {
+  it("keeps renamed columns and generated key over scheduled_end_date in the single init SQL", () => {
     const migrationPath = resolve(
       __dirname,
-      "migrations/20260812100000_rename_task_detail_and_scheduled_end/migration.sql",
+      "migrations/20260805030211_init_domain_schema/migration.sql",
     );
     const sql = readFileSync(migrationPath, "utf8");
     expect(sql).toMatch(/prisma migrate dev/);
     expect(sql).toMatch(/STORED GENERATED COLUMN/);
-    expect(sql).toMatch(/prisma migrate deploy/);
-    expect(sql).toMatch(/scheduled_end_date/);
-    expect(sql).toMatch(/RENAME COLUMN `memo` TO `detail`/);
-    expect(sql).toMatch(/RENAME COLUMN `default_memo` TO `default_detail`/);
+    expect(sql).toMatch(/`detail` TEXT NULL/);
+    expect(sql).toMatch(/`scheduled_end_date` DATE NULL/);
+    expect(sql).toMatch(/`default_detail` TEXT NULL/);
+    expect(sql).toMatch(/DATE_FORMAT\(`scheduled_end_date`/);
+    expect(sql).not.toMatch(/`memo` TEXT/);
+    expect(sql).not.toMatch(/`scheduled_date`/);
+    expect(sql).not.toMatch(/`default_memo`/);
+    expect(sql).not.toMatch(/RENAME COLUMN/);
   });
 
   it("provides renamed physical columns and generated key over scheduled_end_date", async () => {

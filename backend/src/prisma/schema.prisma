@@ -1,8 +1,8 @@
 // Full domain data model.
 // Physical shape follows design.md. Generated columns that Prisma cannot express
 // natively are modeled as Unsupported() here; the actual column + unique index
-// are added by hand-editing the generated migration SQL (see design.md Physical
-// and research.md for the MySQL partial-unique-index workaround).
+// are hand-edited into the single init migration SQL (see
+// .kiro/steering/prisma-migrations.md — do not add follow-up migrations).
 //
 // - `non_business_days.date_active_key`: active-date uniqueness for holidays
 // - `tasks.template_case_date_active_key`: active-row uniqueness for
