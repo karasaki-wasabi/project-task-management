@@ -17,6 +17,36 @@ import type {
   UpdateTaskInput,
 } from "./task.types.js";
 
+async function findSubtreeIds(
+  rootTaskId: string,
+  workspaceId: VerifiedWorkspaceId,
+): Promise<string[]> {
+  const tasks = await db.task.findMany({
+    where: withWorkspaceScope({ deletedAt: undefined }, workspaceId),
+    select: { id: true, parentTaskId: true },
+  });
+  const childrenByParent = new Map<string, string[]>();
+  for (const task of tasks) {
+    if (task.parentTaskId === null) continue;
+    const children = childrenByParent.get(task.parentTaskId) ?? [];
+    children.push(task.id);
+    childrenByParent.set(task.parentTaskId, children);
+  }
+
+  const subtreeIds = new Set([rootTaskId]);
+  const pending = [rootTaskId];
+  while (pending.length > 0) {
+    const parentId = pending.pop();
+    if (parentId === undefined) break;
+    for (const childId of childrenByParent.get(parentId) ?? []) {
+      if (subtreeIds.has(childId)) continue;
+      subtreeIds.add(childId);
+      pending.push(childId);
+    }
+  }
+  return [...subtreeIds];
+}
+
 export const taskRepository = {
   create(input: CreateTaskInput, client: DbClient = db): Promise<Task> {
     return client.task.create({
@@ -78,7 +108,12 @@ export const taskRepository = {
     return client.task.delete({ where: withWorkspaceScope({ id, deletedAt: null }, workspaceId) });
   },
 
-  list(filter: TaskListFilter): Promise<Task[]> {
+  async list(filter: TaskListFilter): Promise<Task[]> {
+    const excludedTaskIds =
+      filter.excludeSubtreeOf === undefined
+        ? undefined
+        : await findSubtreeIds(filter.excludeSubtreeOf, filter.workspaceId);
+
     return db.task.findMany({
       where: withWorkspaceScope(
         {
@@ -87,6 +122,9 @@ export const taskRepository = {
           // also present on the filter.
           caseId: filter.unassignedCase ? null : filter.caseId,
           assigneeUserId: filter.assigneeUserId,
+          title: filter.titleContains ? { contains: filter.titleContains } : undefined,
+          id: excludedTaskIds === undefined ? undefined : { notIn: excludedTaskIds },
+          ...(filter.excludeClosed ? openTaskFilter : {}),
         },
         filter.workspaceId,
       ),

@@ -46,6 +46,9 @@ const taskIdParamsSchema = z.object({ id: z.string() });
 const listQuerySchema = z.object({
   caseId: z.string().optional(),
   assigneeUserId: z.string().optional(),
+  titleContains: z.string().optional(),
+  excludeSubtreeOf: z.string().optional(),
+  excludeClosed: z.literal("true").optional(),
   // design.md "Backend/tasks > TasksService.list 未割当フィルタ拡張":
   // z.literal("true") rather than z.coerce.boolean(), since z.coerce.boolean()
   // treats the string "false" as truthy.
@@ -207,6 +210,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     return tasksService.list({
       caseId: query.caseId,
       assigneeUserId: query.assigneeUserId,
+      titleContains: query.titleContains,
+      excludeSubtreeOf: query.excludeSubtreeOf,
+      excludeClosed: query.excludeClosed === "true",
       unassignedCase: query.unassignedCase === "true",
       workspaceId,
     });

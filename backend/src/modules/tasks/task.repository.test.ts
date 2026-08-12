@@ -96,6 +96,73 @@ describe("taskRepository (workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [inA.id, inB.id]);
   });
 
+  it("filters parent candidates by title while excluding the selected subtree and closed tasks", async () => {
+    const closedStage = await db.developmentStage.create({
+      data: {
+        name: `closed-parent-candidate-${randomUUID()}`,
+        order: 940,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    const root = await taskRepository.create({
+      title: "candidate root",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    const child = await taskRepository.create({
+      title: "candidate child",
+      priority: "low",
+      parentTaskId: root.id,
+      workspaceId: workspaceA,
+    });
+    const grandchild = await taskRepository.create({
+      title: "candidate grandchild",
+      priority: "low",
+      parentTaskId: child.id,
+      workspaceId: workspaceA,
+    });
+    const matchingOpen = await taskRepository.create({
+      title: "available candidate",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    const nonMatchingOpen = await taskRepository.create({
+      title: "available parent",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    const matchingClosed = await taskRepository.create({
+      title: "closed candidate",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    await taskRepository.updateDevelopmentStage(matchingClosed.id, workspaceA, {
+      developmentStageId: closedStage.id,
+    });
+
+    try {
+      const candidates = await taskRepository.list({
+        workspaceId: workspaceA,
+        titleContains: "candidate",
+        excludeSubtreeOf: root.id,
+        excludeClosed: true,
+      });
+
+      expect(candidates.map((task) => task.id)).toEqual([matchingOpen.id]);
+    } finally {
+      await hardDelete("tasks", [
+        grandchild.id,
+        child.id,
+        root.id,
+        matchingOpen.id,
+        nonMatchingOpen.id,
+        matchingClosed.id,
+      ]);
+      await hardDelete("development_stages", [closedStage.id]);
+    }
+  });
+
   it("update fails when the task belongs to another workspace (Requirement 3.3)", async () => {
     const created = await taskRepository.create({
       title: "update other",

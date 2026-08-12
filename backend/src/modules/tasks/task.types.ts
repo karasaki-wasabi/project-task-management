@@ -34,6 +34,9 @@ export interface CreateTaskInput {
 export interface TaskListFilter {
   caseId?: string;
   assigneeUserId?: string;
+  titleContains?: string;
+  excludeSubtreeOf?: string;
+  excludeClosed?: boolean;
   // design.md "Backend/tasks > TasksService.list 未割当フィルタ拡張": when
   // truthy, exclusively filters caseId IS NULL regardless of any other
   // caseId value also present on this filter.

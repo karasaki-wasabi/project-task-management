@@ -661,6 +661,74 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("cases", [caseRecord.id]);
   });
 
+  it("GET /api/tasks filters parent candidates by title, subtree, and closure state", async () => {
+    const token = `parent-candidate-${randomUUID()}`;
+    const completedStage = await db.developmentStage.findFirstOrThrow({
+      where: { workspaceId: workspaceA, kind: "completed" },
+    });
+    const root = await db.task.create({
+      data: { title: `${token}-root`, priority: "low", workspaceId: workspaceA },
+    });
+    const child = await db.task.create({
+      data: {
+        title: `${token}-child`,
+        priority: "low",
+        parentTaskId: root.id,
+        workspaceId: workspaceA,
+      },
+    });
+    const grandchild = await db.task.create({
+      data: {
+        title: `${token}-grandchild`,
+        priority: "low",
+        parentTaskId: child.id,
+        workspaceId: workspaceA,
+      },
+    });
+    const matchingOpen = await db.task.create({
+      data: { title: `${token}-available`, priority: "low", workspaceId: workspaceA },
+    });
+    const matchingClosed = await db.task.create({
+      data: {
+        title: `${token}-closed`,
+        priority: "low",
+        developmentStageId: completedStage.id,
+        workspaceId: workspaceA,
+      },
+    });
+    const nonMatchingOpen = await db.task.create({
+      data: { title: `other-${randomUUID()}`, priority: "low", workspaceId: workspaceA },
+    });
+
+    try {
+      const response = await app.inject(
+        withWorkspace(
+          {
+            method: "GET",
+            url:
+              `/api/tasks?titleContains=${encodeURIComponent(token)}` +
+              `&excludeSubtreeOf=${root.id}&excludeClosed=true`,
+          },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().map((task: { id: string }) => task.id)).toEqual([matchingOpen.id]);
+    } finally {
+      await hardDelete("tasks", [
+        grandchild.id,
+        child.id,
+        root.id,
+        matchingOpen.id,
+        matchingClosed.id,
+        nonMatchingOpen.id,
+      ]);
+    }
+  });
+
   it('GET /api/tasks?unassignedCase=false is rejected (only the literal "true" is accepted)', async () => {
     const response = await app.inject(
       withWorkspace(
