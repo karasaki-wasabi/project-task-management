@@ -218,14 +218,17 @@ useDialogFocusTrap(
 // header comment) — drives only which assignee the focus tray shows.
 const selectedAssigneeUserId = ref("");
 
-// Requirement 1.2/1.3: selected assignee's incomplete tasks, any/no stage.
-const focusedTasks = computed(() => computeFocusedTasks(tasks.value, selectedAssigneeUserId.value));
-// Requirement 2.1-2.3: per-assignee counts, always all assignees.
-const workloadCounts = computed(() => computeWorkloadCounts(tasks.value, users.value));
+// Requirement 1.2/1.3 + task-status-model 8.7/8.8: selected assignee's
+// non-closed tasks, any/no stage.
+const focusedTasks = computed(() =>
+  computeFocusedTasks(tasks.value, selectedAssigneeUserId.value, stages.value),
+);
+// Requirement 2.1-2.3 + 8.7/8.8: per-assignee counts, always all assignees.
+const workloadCounts = computed(() => computeWorkloadCounts(tasks.value, users.value, stages.value));
 // Requirement 3.1/3.6: tasks with no development stage set.
 const backlogTasks = computed(() => computeBacklogTasks(tasks.value));
-// Requirement 5.4/5.5: completed/total child counts per parent task id.
-const taskProgressById = computed(() => computeTaskProgressById(tasks.value));
+// Requirement 8.6/8.9: completed/total child counts per parent (closure-based).
+const taskProgressById = computed(() => computeTaskProgressById(tasks.value, stages.value));
 
 // Sortable-mutable per-stage mirror of tasksForStage(stage.id) — see header
 // comment on resync strategy. Keyed by stage id.
