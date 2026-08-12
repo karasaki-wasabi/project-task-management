@@ -67,7 +67,7 @@ function makeTemplate(overrides: Partial<RecurringTaskTemplate> = {}): Recurring
     priority: "high",
     caseAnchor: "case_end",
     caseOffsetDays: 14,
-    defaultMemo: "チェック",
+    defaultDetail: "チェック",
     nonBusinessDayPolicy: "next_business_day",
     isActive: true,
     createdAt: "2026-01-01T00:00:00.000Z",

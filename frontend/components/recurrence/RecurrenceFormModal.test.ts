@@ -49,7 +49,7 @@ function makeTemplate(overrides: Partial<RecurringTaskTemplate> = {}): Recurring
     priority: "high",
     caseAnchor: "case_end",
     caseOffsetDays: 14,
-    defaultMemo: "チェック",
+    defaultDetail: "チェック",
     nonBusinessDayPolicy: "next_business_day",
     isActive: true,
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -96,7 +96,7 @@ describe("RecurrenceFormModal (task 7.1)", () => {
     expect(wrapper.find("#recurrence-form-case-anchor").exists()).toBe(true);
     expect(wrapper.find("#recurrence-form-offset").exists()).toBe(true);
     expect(wrapper.find("#recurrence-form-policy").exists()).toBe(true);
-    expect(wrapper.find("#recurrence-form-memo").exists()).toBe(true);
+    expect(wrapper.find("#recurrence-form-default-detail").exists()).toBe(true);
 
     const anchorText = wrapper.get("#recurrence-form-case-anchor").text();
     expect(anchorText).toContain("案件開始日");
@@ -120,7 +120,7 @@ describe("RecurrenceFormModal (task 7.1)", () => {
     await wrapper.get("#recurrence-form-case-anchor").setValue("case_start");
     await wrapper.get("#recurrence-form-offset").setValue("3");
     await wrapper.get("#recurrence-form-policy").setValue("as_is");
-    await wrapper.get("#recurrence-form-memo").setValue("議事録テンプレ");
+    await wrapper.get("#recurrence-form-default-detail").setValue("議事録テンプレ");
 
     await wrapper.get("#recurrence-form").trigger("submit");
     await flushPromises();
@@ -133,7 +133,7 @@ describe("RecurrenceFormModal (task 7.1)", () => {
       caseAnchor: "case_start",
       caseOffsetDays: 3,
       nonBusinessDayPolicy: "as_is",
-      defaultMemo: "議事録テンプレ",
+      defaultDetail: "議事録テンプレ",
     });
     expect(wrapper.emitted("created")?.[0]).toEqual([created]);
     expect(wrapper.emitted("close")).toBeTruthy();

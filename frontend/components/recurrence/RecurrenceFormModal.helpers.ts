@@ -13,7 +13,7 @@ export interface RecurrenceFormFields {
   caseAnchor: CaseRelativeAnchor;
   caseOffsetDays: number;
   nonBusinessDayPolicy: NonBusinessDayPolicy;
-  defaultMemo: string;
+  defaultDetail: string;
 }
 
 export function validateRecurrenceForm(fields: RecurrenceFormFields): { valid: boolean; error?: string } {
@@ -33,6 +33,6 @@ export function buildRegisterTemplateInput(fields: RecurrenceFormFields): Regist
     caseAnchor: fields.caseAnchor,
     caseOffsetDays: fields.caseOffsetDays,
     nonBusinessDayPolicy: fields.nonBusinessDayPolicy,
-    ...(fields.defaultMemo.trim() ? { defaultMemo: fields.defaultMemo.trim() } : {}),
+    ...(fields.defaultDetail.trim() ? { defaultDetail: fields.defaultDetail.trim() } : {}),
   };
 }

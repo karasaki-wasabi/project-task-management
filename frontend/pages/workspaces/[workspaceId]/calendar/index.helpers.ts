@@ -26,7 +26,7 @@ export interface TaskMarkerView {
   taskId: string;
   title: string;
   stage: string | null; // resolved developmentStageId -> DevelopmentStage.name
-  isOverdue: boolean; // scheduledDate < 本日 かつ クローズ済みでない (8.4/8.5)
+  isOverdue: boolean; // scheduledEndDate < 本日 かつ クローズ済みでない (8.4/8.5)
 }
 
 export interface DayVisibleMarkers {
@@ -34,7 +34,7 @@ export interface DayVisibleMarkers {
   overflowCount: number;
 }
 
-// `Task.scheduledDate` (frontend/composables/useApiClient.ts) is backed by a
+// `Task.scheduledEndDate` (frontend/composables/useApiClient.ts) is backed by a
 // Prisma `@db.Date` column (backend/src/prisma/schema.prisma), which Fastify
 // serializes as an ISO datetime string at UTC midnight of the stored
 // calendar day (e.g. "2026-08-05T00:00:00.000Z"). Unlike
@@ -50,7 +50,7 @@ function toLocalDateKey(dateOnly: string): string {
   return dateOnly.slice(0, 10);
 }
 
-// Requirement 2.1, 2.2, 2.3, 2.4: groups tasks that have a scheduledDate by
+// Requirement 2.1, 2.2, 2.3, 2.4: groups tasks that have a scheduledEndDate by
 // date key; tasks without one (undefined or null) are excluded entirely so
 // they never appear on the calendar.
 //
@@ -74,11 +74,11 @@ export function buildTaskMarkersByDate(
   const markersByDate = new Map<string, TaskMarkerView[]>();
 
   for (const task of tasks) {
-    if (!task.scheduledDate) {
+    if (!task.scheduledEndDate) {
       continue;
     }
 
-    const dateKey = toLocalDateKey(task.scheduledDate);
+    const dateKey = toLocalDateKey(task.scheduledEndDate);
 
     // Requirement 2.3: developmentStageId unset -> null; set but not found
     // in the provided list falls back to the raw id (same forgiving
@@ -88,7 +88,7 @@ export function buildTaskMarkersByDate(
       ? (stages.find((s) => s.id === task.developmentStageId)?.name ?? task.developmentStageId)
       : null;
 
-    // Requirement 2.4 + task-status-model 8.4/8.5: past scheduledDate and
+    // Requirement 2.4 + task-status-model 8.4/8.5: past scheduledEndDate and
     // not closed (completed/cancelled stage). Status must not decide overdue.
     const isOverdue = dateKey < todayIso && !isTaskClosed(task, stages);
 

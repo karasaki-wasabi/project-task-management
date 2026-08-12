@@ -32,7 +32,7 @@
   rather than only updating on save.
 
   Saving splits into two API calls: `PATCH /api/tasks/:id` (title/priority/
-  memo/assignee/caseId/isRequiredForCase — task-delivery-management task 3.3,
+  detail/assignee/caseId/isRequiredForCase — task-delivery-management task 3.3,
   case-management-ux task 7) always runs, and `PATCH /api/tasks/:id/
   development-stage` only runs when the stage field actually changed (that
   endpoint is otherwise unrelated to this edit and has its own
@@ -74,7 +74,7 @@ const confirmingDelete = ref(false);
 
 const title = ref("");
 const priority = ref<Priority>("medium");
-const memo = ref("");
+const detail = ref("");
 const assigneeUserId = ref("");
 const developmentStageId = ref("");
 const caseId = ref("");
@@ -94,7 +94,7 @@ const closed = computed(() => (task.value ? isTaskClosed(task.value, props.stage
 function resetForm(loaded: Task) {
   title.value = loaded.title;
   priority.value = loaded.priority;
-  memo.value = loaded.memo ?? "";
+  detail.value = loaded.detail ?? "";
   assigneeUserId.value = loaded.assigneeUserId ?? "";
   developmentStageId.value = loaded.developmentStageId ?? "";
   caseId.value = loaded.caseId ?? "";
@@ -148,7 +148,7 @@ async function save() {
     let updated = await api.updateTask(props.taskId, {
       title: title.value,
       priority: priority.value,
-      memo: memo.value.trim().length > 0 ? memo.value : null,
+      detail: detail.value.trim().length > 0 ? detail.value : null,
       assigneeUserId: assigneeUserId.value || null,
       caseId: caseId.value || null,
       isRequiredForCase: isRequiredForCase.value,
@@ -203,9 +203,9 @@ async function confirmDelete() {
         </div>
 
         <div class="flex flex-col gap-1">
-          <span class="text-xs font-medium text-slate-500">詳細(メモ)</span>
+          <span class="text-xs font-medium text-slate-500">詳細</span>
           <p class="whitespace-pre-wrap rounded-md bg-slate-50 px-2.5 py-2 text-sm text-slate-700">
-            {{ task.memo || "(メモなし)" }}
+            {{ task.detail?.trim() ? task.detail : "—" }}
           </p>
         </div>
       </div>
@@ -298,10 +298,10 @@ async function confirmDelete() {
         </div>
 
         <div class="flex flex-col gap-1">
-          <label class="text-xs font-medium text-slate-500" for="task-detail-memo">詳細(メモ)</label>
+          <label class="text-xs font-medium text-slate-500" for="task-detail-detail">詳細</label>
           <textarea
-            id="task-detail-memo"
-            v-model="memo"
+            id="task-detail-detail"
+            v-model="detail"
             rows="4"
             class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />

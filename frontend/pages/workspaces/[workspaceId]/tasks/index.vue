@@ -28,7 +28,7 @@ const caseId = ref((useRoute().query.caseId as string | undefined) ?? "");
 
 const newTitle = ref("");
 const newPriority = ref<Priority>("medium");
-const newMemo = ref("");
+const newDetail = ref("");
 const newAssigneeUserId = ref("");
 const newIsRequiredForCase = ref(false);
 const users = ref<User[]>([]);
@@ -59,7 +59,7 @@ async function createTask() {
   await api.createTask({
     title: newTitle.value,
     priority: newPriority.value,
-    memo: newMemo.value || undefined,
+    detail: newDetail.value || undefined,
     caseId: caseId.value || undefined,
     // Requirement 3.3: only meaningful when the task is linked to a
     // case; found missing entirely from this form while writing task
@@ -70,7 +70,7 @@ async function createTask() {
     assigneeUserId: newAssigneeUserId.value || undefined,
   });
   newTitle.value = "";
-  newMemo.value = "";
+  newDetail.value = "";
   newIsRequiredForCase.value = false;
   await load();
 }
@@ -163,8 +163,8 @@ watch(
         <option value="low">低</option>
       </select>
       <input
-        v-model="newMemo"
-        placeholder="メモ"
+        v-model="newDetail"
+        placeholder="詳細"
         class="min-w-32 flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
       <select

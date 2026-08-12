@@ -21,7 +21,7 @@
 //   approve with 「作成する」. Case-bar fixtures POST with
 //   `templateOperations: []` so leftover active templates do not inject
 //   tasks into shared-dev-DB runs.
-// - Tasks: there is no UI path to set an arbitrary task's `scheduledDate`
+// - Tasks: there is no UI path to set an arbitrary task's `scheduledEndDate`
 //   directly (task.routes.ts's Zod create/update schemas don't accept it).
 //   The legitimate UI path is case-relative templates (/recurrence Modal)
 //   plus case create with both dates set (omit `templateOperations` →
@@ -109,7 +109,7 @@ type ApiTemplate = {
 };
 
 // Registers a case_start template (offset 0, as_is) via the create Modal so
-// a later case create with startDate=today yields scheduledDate=today
+// a later case create with startDate=today yields scheduledEndDate=today
 // without holiday skip/shift.
 async function registerCaseStartTemplate(
   page: Page,
@@ -331,8 +331,8 @@ test("期限日を持つタスクの表示・開発段階バッジ・担当者�
   await createUser(page, request, workspace, userAName);
   await createUser(page, request, workspace, userBName);
 
-  // Requirement 2.2: a task with no scheduledDate is created (via the
-  // ordinary /tasks form, which has no scheduledDate field at all) and
+  // Requirement 2.2: a task with no scheduledEndDate is created (via the
+  // ordinary /tasks form, which has no scheduledEndDate field at all) and
   // must never appear on the calendar.
   await page.goto(workspacePagePath(workspace.id, "tasks"));
   await page.getByPlaceholder("タスク名").fill(noDateTaskTitle);
@@ -415,7 +415,7 @@ test("期限日を持つタスクの表示・開発段階バッジ・担当者�
   // Requirement 5.1: "すべて" aggregates tasks across all assignees.
   // Sum footprints across every day cell (task markers live inside cells;
   // case bars live in the week overlay and are excluded). Do not pin to
-  // the amber "today" cell: generated `scheduledDate` follows the API
+  // the amber "today" cell: generated `scheduledEndDate` follows the API
   // host clock and can disagree with the browser's local `isToday`.
   async function gridTaskFootprint(): Promise<number> {
     const cells = dayCells(page);

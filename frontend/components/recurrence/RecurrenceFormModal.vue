@@ -34,7 +34,7 @@ const priority = ref<Priority>("medium");
 const caseAnchor = ref<CaseRelativeAnchor>("case_end");
 const caseOffsetDays = ref(0);
 const nonBusinessDayPolicy = ref<NonBusinessDayPolicy>("as_is");
-const defaultMemo = ref("");
+const defaultDetail = ref("");
 
 const saving = ref(false);
 const error = ref<string | null>(null);
@@ -45,7 +45,7 @@ function resetForm() {
   caseAnchor.value = "case_end";
   caseOffsetDays.value = 0;
   nonBusinessDayPolicy.value = "as_is";
-  defaultMemo.value = "";
+  defaultDetail.value = "";
   error.value = null;
 }
 
@@ -66,7 +66,7 @@ async function submit() {
     caseAnchor: caseAnchor.value,
     caseOffsetDays: Number(caseOffsetDays.value),
     nonBusinessDayPolicy: nonBusinessDayPolicy.value,
-    defaultMemo: defaultMemo.value,
+    defaultDetail: defaultDetail.value,
   };
   const validation = validateRecurrenceForm(fields);
   if (!validation.valid) {
@@ -156,10 +156,10 @@ async function submit() {
       </div>
 
       <div class="flex flex-col gap-1">
-        <label class="text-xs font-medium text-slate-500" for="recurrence-form-memo">既定メモ(全インスタンス共通・任意)</label>
+        <label class="text-xs font-medium text-slate-500" for="recurrence-form-default-detail">既定詳細(全インスタンス共通・任意)</label>
         <input
-          id="recurrence-form-memo"
-          v-model="defaultMemo"
+          id="recurrence-form-default-detail"
+          v-model="defaultDetail"
           class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
       </div>

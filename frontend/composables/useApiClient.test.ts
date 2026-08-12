@@ -124,6 +124,17 @@ describe("useApiClient auth and CSRF contract (task 6.1)", () => {
   });
 });
 
+describe("useApiClient task-field-rename contract (task-field-rename 5.1)", () => {
+  it("client types use detail / scheduledEndDate / defaultDetail and drop old names", () => {
+    expect(clientSource).toMatch(/\bdetail\??:/);
+    expect(clientSource).toMatch(/\bscheduledEndDate\??:/);
+    expect(clientSource).toMatch(/\bdefaultDetail\??:/);
+    expect(clientSource).not.toMatch(/\bmemo\??:/);
+    expect(clientSource).not.toMatch(/\bscheduledDate\??:/);
+    expect(clientSource).not.toMatch(/\bdefaultMemo\??:/);
+  });
+});
+
 describe("useApiClient recurrence + case templateOperations contract (task 5.1)", () => {
   it("client source drops fixed_interval / generate-due and types caseAnchor + templateOperations", () => {
     expect(clientSource).not.toMatch(/fixed_interval/);
@@ -173,7 +184,7 @@ describe("useApiClient recurrence + case templateOperations contract (task 5.1)"
       caseAnchor: "period_month_end",
       caseOffsetDays: 0,
       nonBusinessDayPolicy: "next_business_day",
-      defaultMemo: "memo",
+      defaultDetail: "detail",
     };
     await api.registerRecurringTemplate(input);
 
