@@ -46,7 +46,7 @@
 - `development-stages` モジュールの `kind`（公開レスポンス経由、読み取りのみ）
 - `workspace-scope.guard.ts` のワークスペース所属強制（既存パターンをそのまま踏襲、新規ガード実装は不要）
 - `users`/`workspaces` モジュール（担当者候補・アクター表示名の解決に既存の使い方をそのまま利用）
-- 新設する `comments`・`activity-logs` モジュールは、`tasks` モジュールおよびタイムライン集約ルートから一方向に依存される（`comments`・`activity-logs` が `tasks` の内部実装へ依存することはない）
+- 新設する `comments`・`activity-logs` モジュールは、`tasks` モジュールおよびタイムライン集約ルートから一方向に依存される。`comments` がタスクの存在／削除状態を確認するときは `TasksService.getById`（公開サービス）経由のみとし、`task` テーブルや `taskRepository` へ直接アクセスしない
 
 ### Revalidation Triggers
 - `TaskStatus` の語彙変更、`DevelopmentStageKind` の意味変更（`task-status-model`）→ ステータス非表示条件・自動リセット時のログ抑制ロジック・タイムライン文言テンプレート
@@ -310,7 +310,7 @@ interface ActivityLogService {
 - 投稿者本人以外の編集・削除リクエストは403相当で拒否する
 - 空文字のみの本文は400相当で拒否する
 - 編集時は `editedAt` を打刻し、以後「編集済み」として表示可能にする（Requirement 6.7 が参照）
-- 対象タスクが論理削除済みの場合、投稿・編集・削除はすべて 409 で拒否する（Requirement 1.4。タイムライン読み取りは task routes 側で許可）
+- 対象タスクが論理削除済みの場合、投稿・編集・削除はすべて 409 で拒否する（Requirement 1.4。タイムライン読み取りは task routes 側で許可）。判定は `TasksService.getById(taskId, workspaceId, { includeDeleted: true })` の結果で行い、削除済みは 409、未存在／他ワークスペースは 404 とする
 
 **Contracts**: Service [x] / API [x]
 

@@ -1,8 +1,8 @@
 import { db } from "../../shared/db.js";
 import { badRequest, forbidden, HttpError, notFound } from "../../shared/http-errors.js";
-import type { SoftDeleteTx } from "../../shared/soft-delete.repository.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { activityLogService } from "../activity-logs/activity-log.service.js";
+import { tasksService } from "../tasks/task.service.js";
 import { commentRepository } from "./comment.repository.js";
 import type { Comment } from "./comment.types.js";
 
@@ -15,13 +15,12 @@ function assertBody(body: string): void {
 async function assertTaskWritable(
   taskId: string,
   workspaceId: VerifiedWorkspaceId,
-  client: SoftDeleteTx,
 ): Promise<void> {
-  const state = await commentRepository.getTaskWriteState(taskId, workspaceId, client);
-  if (state === "missing") {
+  const result = await tasksService.getById(taskId, workspaceId, { includeDeleted: true });
+  if (!result.ok) {
     throw notFound(`Task not found: ${taskId}`);
   }
-  if (state === "deleted") {
+  if (result.value.deletedAt !== null) {
     throw new HttpError(409, `Task is deleted: ${taskId}`);
   }
 }
@@ -38,9 +37,9 @@ export const commentService = {
     body: string,
   ): Promise<Comment> {
     assertBody(body);
+    await assertTaskWritable(taskId, workspaceId);
 
     return db.$transaction(async (tx) => {
-      await assertTaskWritable(taskId, workspaceId, tx);
       const comment = await commentRepository.create(taskId, authorUserId, body, tx);
       await activityLogService.record(
         {
@@ -62,9 +61,9 @@ export const commentService = {
     body: string,
   ): Promise<Comment> {
     assertBody(body);
+    await assertTaskWritable(taskId, workspaceId);
 
     return db.$transaction(async (tx) => {
-      await assertTaskWritable(taskId, workspaceId, tx);
       const current = await commentRepository.findByIdForTask(commentId, taskId, tx);
       if (!current) {
         throw notFound(`Comment not found: ${commentId}`);
@@ -92,8 +91,9 @@ export const commentService = {
     commentId: string,
     requesterUserId: string,
   ): Promise<void> {
+    await assertTaskWritable(taskId, workspaceId);
+
     await db.$transaction(async (tx) => {
-      await assertTaskWritable(taskId, workspaceId, tx);
       const current = await commentRepository.findByIdForTask(commentId, taskId, tx);
       if (!current) {
         throw notFound(`Comment not found: ${commentId}`);

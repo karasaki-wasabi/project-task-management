@@ -1,33 +1,8 @@
 import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
-import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import type { Comment } from "./comment.types.js";
 
-export type TaskWriteState = "active" | "deleted" | "missing";
-
 export const commentRepository = {
-  async getTaskWriteState(
-    taskId: string,
-    workspaceId: VerifiedWorkspaceId,
-    client: DbClient = db,
-  ): Promise<TaskWriteState> {
-    const activeTask = await client.task.findFirst({
-      where: { id: taskId, workspaceId },
-      select: { id: true },
-    });
-    if (activeTask) return "active";
-
-    const deletedTask = await client.task.findFirst({
-      where: {
-        id: taskId,
-        workspaceId,
-        deletedAt: { not: null },
-      },
-      select: { id: true },
-    });
-    return deletedTask ? "deleted" : "missing";
-  },
-
   list(taskId: string): Promise<Comment[]> {
     return db.comment.findMany({
       where: { taskId },

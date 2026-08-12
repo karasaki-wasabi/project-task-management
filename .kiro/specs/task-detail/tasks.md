@@ -151,3 +151,4 @@
 - ActivityLog は deletedAt を持たないため、ソフトデリート拡張は対象モデルに限定する必要がある（task 2）
 - タイムラインの操作者・関連値は詳細ページの候補一覧（users/cases/stages/tasks）から表示名解決する。見つからない値は ID のまま表示する（validate-impl 指摘）
 - TaskDetailModal は簡易表示（ステータス編集なし）。削除済みは `deletedAt` で参照専用。非所属ワークスペースの単一取得は 404（存在有無を漏らさない）
+- CommentService の書き込み前チェックは `TasksService.getById({ includeDeleted: true })` 経由（Prisma の task 直読みはしない）
