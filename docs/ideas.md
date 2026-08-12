@@ -47,8 +47,6 @@
 
 ## ドキュメント整理
 
-- 完了スペックの親タスクチェックボックスを揃える
-  - `implementation-complete` なのに親が `[ ]` のまま残っている例がある
 - `.kiro/steering/roadmap.md` を整備する
   - これまで `kiro-spec-init` 単体で進めてきたため未作成
   - 完了済みスペック・着手中・ideas からの候補の依存順を可視化する
