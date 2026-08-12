@@ -8,7 +8,7 @@
 
 タスク詳細の検討過程で、ステータスと開発段階に軸が混在しており、タスク全体の完了をシステムが判定できない（＝消化数を自動集計できない）ことが判明した。完了判定を開発段階の種別へ移す task-status-model を切り出し、操作ログがステータス語彙を永続化し始める前に先行させる。
 
-あわせて、表示名と API／DB 名のずれ（メモ／`memo`、予定日／`scheduledDate`）を task-detail より前に解消する。完了済み仕様文書は触らず、task-field-rename でコード側を `detail` / `scheduledEndDate` に揃える（将来の開始予定日は `scheduledStartDate`）。
+あわせて、表示名と API／DB 名のずれ（メモ／`memo`、予定日／`scheduledDate`）は task-detail より前に task-field-rename で解消済み。完了済み仕様文書は触らず、コード側を `detail` / `scheduledEndDate` に揃えた（将来の開始予定日は `scheduledStartDate`）。
 
 ## Approach Decision
 
@@ -66,7 +66,7 @@
 - [x] workspace-membership -- ワークスペース作成・所属・ユーザー検索でのメンバー追加・現在ワークスペース選択。Dependencies: user-auth
 - [x] workspace-resource-scope -- 案件・タスク等をワークスペース配下へ移行し、所属外アクセスを拒否する。Dependencies: workspace-membership
 - [x] task-status-model -- 開発段階に種別（通常/完了/中止）を持たせ、完了判定と `completedAt` 打刻をステータスから段階到達へ移す。ステータスは段階内の作業状態へ再定義する。Dependencies: none（ワークスペース系とは独立。操作ログが記録するステータス語彙を確定させるため task-detail より先行させる）
-- [ ] task-field-rename -- `memo`→`detail`、`scheduledDate`→`scheduledEndDate` の API／DB／文言揃え。将来の開始予定日は `scheduledStartDate` と命名予約（カラム追加はしない）。完了済み仕様文書は更新しない。Dependencies: none（task-detail より先行）
+- [x] task-field-rename -- `memo`→`detail`、`scheduledDate`→`scheduledEndDate` の API／DB／文言揃え。将来の開始予定日は `scheduledStartDate` と命名予約（カラム追加はしない）。完了済み仕様文書は更新しない。Dependencies: none（task-detail より先行）
 - [ ] task-detail -- モーダルは簡易表示のまま、詳細画面でコメント・操作ログ・CRUD を提供する。Dependencies: workspace-resource-scope, task-status-model, task-field-rename
 - [ ] velocity-dashboard -- ストーリーポイントと消化ペース／案件見通しのダッシュボード。Dependencies: workspace-resource-scope, task-detail, task-status-model
 
