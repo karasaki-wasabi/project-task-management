@@ -15,6 +15,9 @@ import { joinApiUrl, useApiClient } from "./useApiClient";
 
 const fetchMock = vi.fn();
 const currentId = ref<string | null>(null);
+const workspaces = ref<{ id: string }[]>([]);
+const refresh = vi.fn();
+const relocateAfterWorkspaceLost = vi.fn();
 const clientSource = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "useApiClient.ts"),
   "utf8",
@@ -24,12 +27,19 @@ beforeEach(() => {
   fetchMock.mockReset();
   fetchMock.mockResolvedValue(undefined);
   currentId.value = null;
+  workspaces.value = [];
+  refresh.mockReset();
+  relocateAfterWorkspaceLost.mockReset();
+  refresh.mockResolvedValue(undefined);
   vi.stubGlobal("$fetch", fetchMock);
   vi.stubGlobal("useRuntimeConfig", () => ({
     public: { apiBaseUrl: "http://backend:3000" },
   }));
   vi.stubGlobal("useCurrentWorkspace", () => ({
     currentId,
+    workspaces,
+    refresh,
+    relocateAfterWorkspaceLost,
   }));
 });
 
@@ -395,5 +405,47 @@ describe("useApiClient workspace scope header (task 7.1)", () => {
       credentials: "include",
       headers: { "csrf-token": "csrf-token", "x-workspace-id": "ws-1" },
     });
+  });
+
+  it("scoped 403 で所属から消えていれば refresh 後に退避する（workspace-url-routing 5.2）", async () => {
+    currentId.value = "ws-lost";
+    workspaces.value = [{ id: "ws-lost" }];
+    refresh.mockImplementation(async () => {
+      workspaces.value = [{ id: "ws-other" }];
+    });
+    fetchMock.mockImplementation((url: string) => {
+      if (String(url).includes("/api/auth/csrf")) {
+        return Promise.resolve({ token: "csrf" });
+      }
+      return Promise.reject({ statusCode: 403, message: "Forbidden" });
+    });
+
+    const api = useApiClient();
+    await Promise.resolve();
+    await expect(api.listCases()).rejects.toMatchObject({ statusCode: 403 });
+
+    expect(refresh).toHaveBeenCalled();
+    expect(relocateAfterWorkspaceLost).toHaveBeenCalledWith("ws-lost");
+  });
+
+  it("scoped 403 でも所属に残っていれば退避しない", async () => {
+    currentId.value = "ws-1";
+    workspaces.value = [{ id: "ws-1" }];
+    refresh.mockImplementation(async () => {
+      workspaces.value = [{ id: "ws-1" }];
+    });
+    fetchMock.mockImplementation((url: string) => {
+      if (String(url).includes("/api/auth/csrf")) {
+        return Promise.resolve({ token: "csrf" });
+      }
+      return Promise.reject({ statusCode: 403, message: "Forbidden" });
+    });
+
+    const api = useApiClient();
+    await Promise.resolve();
+    await expect(api.listCases()).rejects.toMatchObject({ statusCode: 403 });
+
+    expect(refresh).toHaveBeenCalled();
+    expect(relocateAfterWorkspaceLost).not.toHaveBeenCalled();
   });
 });

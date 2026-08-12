@@ -25,7 +25,8 @@ import {
 
 const api = useApiClient();
 const { user } = useAuth();
-const { workspaces, currentId, refresh, clearCurrentIf } = useCurrentWorkspace();
+const { workspaces, currentId, refresh, clearCurrentIf, relocateAfterWorkspaceLost } =
+  useCurrentWorkspace();
 
 const members = ref<WorkspaceUserSummary[]>([]);
 const loaded = ref(false);
@@ -229,10 +230,11 @@ async function confirmDelete() {
   try {
     const deletedId = workspace.id;
     await api.deleteWorkspace(deletedId);
-    // Requirement 7.4: clear via useCurrentWorkspace so localStorage stays behind the composable boundary.
+    // Requirement 7.4 / workspace-url-routing 5.1: clear then relocate away from lost WS.
     clearCurrentIf(deletedId);
     await refresh();
     deleteConfirmOpen.value = false;
+    relocateAfterWorkspaceLost(deletedId);
   } catch (e) {
     deleteError.value = e instanceof Error ? e.message : String(e);
   } finally {

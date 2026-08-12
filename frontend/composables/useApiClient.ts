@@ -226,9 +226,21 @@ function isWorkspaceScopedPath(path: string): boolean {
   return WORKSPACE_SCOPED_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
+function fetchStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+  const candidate = error as {
+    statusCode?: number;
+    status?: number;
+    response?: { status?: number };
+  };
+  return candidate.statusCode ?? candidate.status ?? candidate.response?.status;
+}
+
 export function useApiClient() {
   const config = useRuntimeConfig();
-  const { currentId } = useCurrentWorkspace();
+  const { currentId, workspaces, refresh, relocateAfterWorkspaceLost } = useCurrentWorkspace();
   let csrfToken: string | undefined;
   let csrfInitialization: Promise<void> | undefined;
 
@@ -250,11 +262,26 @@ export function useApiClient() {
       headers = { ...headers, "x-workspace-id": workspaceId };
     }
 
-    return $fetch<T>(joinApiUrl(config.public.apiBaseUrl, path), {
-      ...options,
-      credentials: "include",
-      ...(headers ? { headers } : {}),
-    });
+    try {
+      return await $fetch<T>(joinApiUrl(config.public.apiBaseUrl, path), {
+        ...options,
+        credentials: "include",
+        ...(headers ? { headers } : {}),
+      });
+    } catch (error) {
+      // workspace-url-routing 5.2: membership rejection on scoped APIs → refresh + relocate if lost.
+      if (
+        fetchStatusCode(error) === 403 &&
+        isWorkspaceScopedPath(path) &&
+        workspaceId
+      ) {
+        await refresh();
+        if (!workspaces.value.some((workspace) => workspace.id === workspaceId)) {
+          relocateAfterWorkspaceLost(workspaceId);
+        }
+      }
+      throw error;
+    }
   }
 
   async function csrf(): Promise<string> {

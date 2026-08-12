@@ -9,8 +9,10 @@ import type { Workspace } from "../../composables/useApiClient";
 
 const refresh = vi.fn();
 const select = vi.fn();
+const navigateTo = vi.fn();
 const currentId = ref<string | null>(null);
 const workspaces = ref<Workspace[]>([]);
+const route = { path: "/workspaces", query: {} as Record<string, string> };
 
 vi.mock("../../composables/useCurrentWorkspace", () => ({
   useCurrentWorkspace: () => ({
@@ -20,6 +22,9 @@ vi.mock("../../composables/useCurrentWorkspace", () => ({
     select,
   }),
 }));
+
+vi.stubGlobal("navigateTo", navigateTo);
+vi.stubGlobal("useRoute", () => route);
 
 const WorkspaceCreateModalStub = defineComponent({
   name: "WorkspaceCreateModal",
@@ -74,8 +79,11 @@ describe("WorkspaceSwitcher (task 6.2)", () => {
   beforeEach(() => {
     refresh.mockReset();
     select.mockReset();
+    navigateTo.mockReset();
     currentId.value = null;
     workspaces.value = [];
+    route.path = "/workspaces";
+    route.query = {};
     refresh.mockResolvedValue(undefined);
   });
 
@@ -136,6 +144,42 @@ describe("WorkspaceSwitcher (task 6.2)", () => {
 
     await buttonByText(wrapper, "Beta").trigger("click");
     expect(select).toHaveBeenCalledWith("ws-2");
+  });
+
+  it("scoped 上では同一画面種のまま workspaceId を差し替えクエリを維持する（workspace-url-routing 4.2）", async () => {
+    route.path = "/workspaces/ws-1/kanban";
+    route.query = { caseId: "c1" };
+    workspaces.value = [
+      makeWorkspace({ id: "ws-1", name: "Alpha" }),
+      makeWorkspace({ id: "ws-2", name: "Beta" }),
+    ];
+    currentId.value = "ws-1";
+    const wrapper = mountSwitcher();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="workspace-switcher-trigger"]').trigger("click");
+    await nextTick();
+    await buttonByText(wrapper, "Beta").trigger("click");
+
+    expect(select).toHaveBeenCalledWith("ws-2");
+    expect(navigateTo).toHaveBeenCalledWith({
+      path: "/workspaces/ws-2/kanban",
+      query: { caseId: "c1" },
+    });
+  });
+
+  it("/ 上で選ぶとダッシュボードへ進む", async () => {
+    route.path = "/";
+    workspaces.value = [makeWorkspace({ id: "ws-2", name: "Beta" })];
+    currentId.value = null;
+    const wrapper = mountSwitcher();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="workspace-switcher-trigger"]').trigger("click");
+    await nextTick();
+    await buttonByText(wrapper, "Beta").trigger("click");
+
+    expect(navigateTo).toHaveBeenCalledWith("/workspaces/ws-2");
   });
 
   it("作成導線で WorkspaceCreateModal を開き、閉じられる（Req 1.3 導線）", async () => {
