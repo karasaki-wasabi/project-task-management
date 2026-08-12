@@ -16,7 +16,12 @@
 // board's horizontally-scrolling row alongside the many demo/other-spec
 // stages, and dragCardTo already handles scrolling both the source and
 // target into view before/after picking up the card.
-import { expect, registerWorkspaceMember, test } from "./fixtures";
+import {
+  expect,
+  registerWorkspaceMember,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 import { dragCardTo } from "./drag";
 
 test("dragging an unassigned backlog card into the focus tray assigns it, and dragging a tray card into a stage column moves it (Requirements 1.2-1.5)", async ({
@@ -37,12 +42,12 @@ test("dragging an unassigned backlog card into the focus tray assigns it, and dr
 
   await registerWorkspaceMember(page, request, workspace.id, userName);
 
-  await page.goto("/kanban/stages");
+  await page.goto(workspacePagePath(workspace.id, "kanban/stages"));
   await page.getByPlaceholder("段階名(例: 仕様未確定)").fill(stageName);
   await page.getByRole("button", { name: "登録" }).click();
   await expect(page.locator(".stage-list", { hasText: stageName })).toBeVisible();
 
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   await page.getByPlaceholder("タスク名").fill(taskTitle);
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: taskTitle }).first()).toBeVisible();
@@ -52,7 +57,7 @@ test("dragging an unassigned backlog card into the focus tray assigns it, and dr
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: chipSeedTitle }).first()).toBeVisible();
 
-  await page.goto("/kanban");
+  await page.goto(workspacePagePath(workspace.id, "kanban"));
   await page.waitForLoadState("networkidle");
   const stageColumn = page.locator(".column[data-stage-id]", { hasText: stageName });
   const stageCardList = stageColumn.locator(".card-list");

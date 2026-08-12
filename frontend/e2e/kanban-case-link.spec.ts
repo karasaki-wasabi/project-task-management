@@ -13,17 +13,21 @@
 // seeding helper exists in this e2e/ directory). Requires the backend
 // (+MySQL) and frontend to already be running (`docker compose up`); see
 // playwright.config.ts.
-import { expect, test } from "./fixtures";
+import {
+  expect,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 
 async function createTask(page: import("@playwright/test").Page, title: string) {
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   await page.getByPlaceholder("タスク名").fill(title);
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: title }).first()).toBeVisible();
 }
 
 async function createCase(page: import("@playwright/test").Page, name: string) {
-  await page.goto("/cases");
+  await page.goto(workspacePagePath(workspace.id, "cases"));
   await page.getByRole("button", { name: "案件を登録" }).click();
   const formModal = page.locator(".case-form-modal");
   await expect(formModal).toBeVisible();
@@ -46,7 +50,7 @@ async function createCase(page: import("@playwright/test").Page, name: string) {
 // (so each call re-fetches the task via GET /api/tasks/:id, proving
 // server-side persistence rather than lingering client state).
 async function openTaskDetail(page: import("@playwright/test").Page, title: string) {
-  await page.goto("/kanban");
+  await page.goto(workspacePagePath(workspace.id, "kanban"));
   // A freshly created task has no development stage/assignee yet, so it
   // starts out in the collapsed "未割り当て" backlog panel (same as
   // kanban.spec.ts) rather than any stage column. Each call here is a fresh
@@ -62,6 +66,7 @@ async function openTaskDetail(page: import("@playwright/test").Page, title: stri
 
 test("タスク詳細ポップアップで案件を関連付け・必須指定して保存すると再表示で反映され、未設定に戻すと必須表示も解除される (Requirements 4.1-4.4, 4.6, 4.7)", async ({
   page,
+  workspace,
 }) => {
   const suffix = Date.now();
   const taskTitle = `e2e-kanban-case-link-task-${suffix}`;
@@ -113,7 +118,8 @@ test("タスク詳細ポップアップで案件を関連付け・必須指定�
   await expect(modal.getByText("案件: —", { exact: true })).toBeVisible();
 });
 
-test("必須トグルは案件未選択時のみ非活性になる (Requirement 4.5)", async ({ page }) => {
+test("必須トグルは案件未選択時のみ非活性になる (Requirement 4.5)", async ({ page,
+  workspace }) => {
   const suffix = Date.now();
   const taskTitle = `e2e-kanban-case-toggle-task-${suffix}`;
   const caseName = `e2e-kanban-case-toggle-case-${suffix}`;

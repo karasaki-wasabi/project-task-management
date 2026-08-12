@@ -15,7 +15,12 @@
 // kanban/index.vue only prompts when task.assigneeUserId is unset), keeping
 // this test focused purely on assignee-filter behavior rather than the
 // move-with-assignee-prompt flow already covered by kanban.spec.ts.
-import { expect, registerWorkspaceMember, test } from "./fixtures";
+import {
+  expect,
+  registerWorkspaceMember,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 import { dragCardTo } from "./drag";
 
 test("selecting an assignee in the kanban filter links the focus tray and stage board to that assignee, and clearing it hides the tray again (Requirements 1.1, 1.2, 4.2, 4.3)", async ({
@@ -35,7 +40,7 @@ test("selecting an assignee in the kanban filter links the focus tray and stage 
   await registerWorkspaceMember(page, request, workspace.id, userBName);
 
   // 2. Create a development stage.
-  await page.goto("/kanban/stages");
+  await page.goto(workspacePagePath(workspace.id, "kanban/stages"));
   await page.getByPlaceholder("段階名(例: 仕様未確定)").fill(stageName);
   await page.getByRole("button", { name: "登録" }).click();
   await expect(page.locator(".stage-list", { hasText: stageName })).toBeVisible();
@@ -44,7 +49,7 @@ test("selecting an assignee in the kanban filter links the focus tray and stage 
   // via the /tasks form's assignee <select> (simpler and more reliable than
   // driving the kanban board's move-with-assignee-picker flow, since it
   // sidesteps that dialog entirely).
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   // The create form has two <select>s (priority, then assignee); target the
   // assignee one by position since it has no distinguishing role/label.
   const newTaskAssigneeSelect = page.locator("form select").nth(1);
@@ -62,7 +67,7 @@ test("selecting an assignee in the kanban filter links the focus tray and stage 
   // Move both tasks onto the newly created stage column so the board's
   // per-stage list has something to filter (Requirement 4.2/4.3). Both
   // tasks already have an assignee, so no assignee-picker dialog appears.
-  await page.goto("/kanban");
+  await page.goto(workspacePagePath(workspace.id, "kanban"));
   const stageColumn = page.locator(".column[data-stage-id]", { hasText: stageName });
   await expect(stageColumn).toBeVisible();
   const stageCardList = stageColumn.locator(".card-list");

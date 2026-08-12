@@ -15,7 +15,12 @@
 // (`forceFallback` mode) doesn't use native HTML5 drag events, so this
 // needs a real multi-hop mouse down/move/move/up sequence, not
 // `locator.dragTo()`.
-import { expect, registerWorkspaceMember, test } from "./fixtures";
+import {
+  expect,
+  registerWorkspaceMember,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 
 test("dragging a card out to another column and back to its origin before releasing leaves it in the origin column (regression)", async ({
   page,
@@ -30,7 +35,7 @@ test("dragging a card out to another column and back to its origin before releas
 
   await registerWorkspaceMember(page, request, workspace.id, userName);
 
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   await page.getByPlaceholder("タスク名").fill(taskTitle);
   // Assign at creation time so the drag below never triggers the
   // assignee-picker dialog — this test is only about same-origin cancel.
@@ -38,7 +43,7 @@ test("dragging a card out to another column and back to its origin before releas
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: taskTitle }).first()).toBeVisible();
 
-  await page.goto("/kanban/stages");
+  await page.goto(workspacePagePath(workspace.id, "kanban/stages"));
   await page.getByPlaceholder("段階名(例: 仕様未確定)").fill(stageAName);
   await page.getByRole("button", { name: "登録" }).click();
   await expect(page.locator(".stage-list", { hasText: stageAName })).toBeVisible();
@@ -46,7 +51,7 @@ test("dragging a card out to another column and back to its origin before releas
   await page.getByRole("button", { name: "登録" }).click();
   await expect(page.locator(".stage-list", { hasText: stageBName })).toBeVisible();
 
-  await page.goto("/kanban");
+  await page.goto(workspacePagePath(workspace.id, "kanban"));
   await page.waitForLoadState("networkidle");
   const columnA = page.locator(".column[data-stage-id]", { hasText: stageAName });
   const columnB = page.locator(".column[data-stage-id]", { hasText: stageBName });

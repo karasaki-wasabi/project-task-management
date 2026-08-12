@@ -22,7 +22,12 @@
 // events, so neither `locator.dragTo()` nor manually dispatching
 // dragstart/dragover/drop events (this file's earlier approach) exercises
 // the real interaction anymore.
-import { expect, registerWorkspaceMember, test } from "./fixtures";
+import {
+  expect,
+  registerWorkspaceMember,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 import { dragCardTo } from "./drag";
 
 test("expanding the unassigned backlog reveals search/sort, and dragging an expanded row onto a stage prompts for an assignee before moving (Requirements 3.2, 3.3, 3.4, 3.5)", async ({
@@ -43,7 +48,7 @@ test("expanding the unassigned backlog reveals search/sort, and dragging an expa
   // 1. Record the badge count *before* creating our fixtures, so we can
   // assert an exact delta later regardless of any pre-existing unassigned
   // tasks in the shared dev DB (Requirement 3.2/3.6 badge count).
-  await page.goto("/kanban");
+  await page.goto(workspacePagePath(workspace.id, "kanban"));
   await page.waitForLoadState("networkidle");
   const badge = page.locator(".backlog-count");
   await expect(badge).toBeVisible();
@@ -51,7 +56,7 @@ test("expanding the unassigned backlog reveals search/sort, and dragging an expa
   const initialCount = Number((initialCountText ?? "0件").replace(/[^\d]/g, ""));
 
   // 2. Create a development stage as a drop target.
-  await page.goto("/kanban/stages");
+  await page.goto(workspacePagePath(workspace.id, "kanban/stages"));
   await page.getByPlaceholder("段階名(例: 仕様未確定)").fill(stageName);
   await page.getByRole("button", { name: "登録" }).click();
   await expect(page.locator(".stage-list", { hasText: stageName })).toBeVisible();
@@ -64,7 +69,7 @@ test("expanding the unassigned backlog reveals search/sort, and dragging an expa
   // backlog and dragging one later triggers the assignee-picker. The
   // create form has a priority <select> then an assignee <select>; leave
   // the assignee <select> untouched (defaults to "担当者未設定").
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   const priorityOptions: Record<string, string> = { [alphaTitle]: "高", [betaTitle]: "低", [gammaTitle]: "中" };
   const newTaskPrioritySelect = page.locator("form select").nth(0);
 
@@ -78,7 +83,7 @@ test("expanding the unassigned backlog reveals search/sort, and dragging an expa
   // 5. Back on /kanban: badge reflects the +3 delta (Requirement 3.2/3.6),
   // and none of the three tasks are rendered anywhere on the page while
   // the panel is collapsed (Requirement 3.2).
-  await page.goto("/kanban");
+  await page.goto(workspacePagePath(workspace.id, "kanban"));
   await page.waitForLoadState("networkidle");
   await expect(badge).toHaveText(`${initialCount + 3}件`);
   await expect(page.locator(".card", { hasText: alphaTitle })).not.toBeVisible();

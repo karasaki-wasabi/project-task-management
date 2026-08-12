@@ -11,6 +11,7 @@ import {
   expect,
   registerAndLogin,
   workspaceScopedHeaders,
+  workspacePagePath,
 } from "./fixtures";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL ?? "http://localhost:3400";
@@ -44,6 +45,7 @@ async function createTask(
 
 test("所属外ワークスペースの案件・タスクは一覧にもURL直接操作でも到達できない (Requirements 3.1-3.4)", async ({
   page,
+  workspace,
   browser,
 }) => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -67,19 +69,19 @@ test("所属外ワークスペースの案件・タスクは一覧にもURL直�
   await contextB.close();
 
   // --- List: only current-workspace resources (Requirement 3.1) ---
-  await page.goto("/cases");
+  await page.goto(workspacePagePath(workspace.id, "cases"));
   const searchBox = page.getByPlaceholder("案件名で絞り込み");
   await searchBox.fill(caseBName);
   await expect(page.locator("tbody tr", { hasText: caseBName })).toHaveCount(0);
   await searchBox.fill(caseAName);
   await expect(page.locator("tbody tr", { hasText: caseAName })).toBeVisible();
 
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   await expect(page.locator("li", { hasText: taskBTitle })).toHaveCount(0);
   await expect(page.locator("li", { hasText: taskATitle }).first()).toBeVisible();
 
   // --- Deep-link URL must not surface foreign workspace data (Requirement 3.3) ---
-  await page.goto(`/tasks?caseId=${caseB.id}`);
+  await page.goto(`${workspacePagePath(workspace.id, "tasks")}?caseId=${caseB.id}`);
   await expect(page.locator("li", { hasText: taskBTitle })).toHaveCount(0);
 
   // Own resource remains reachable (Requirement 3.2).
