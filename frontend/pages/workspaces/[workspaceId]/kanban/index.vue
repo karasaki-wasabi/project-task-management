@@ -623,6 +623,7 @@ watch(
             :task="task"
             :assignee-name="userName(task.assigneeUserId)"
             :progress="taskProgressById.get(task.id)"
+            :is-terminal-column="stage.kind === 'completed' || stage.kind === 'cancelled'"
             @activate="openTaskDetail(task.id)"
           />
         </VueDraggable>
