@@ -318,12 +318,29 @@ interface ActivityLogService {
 ```typescript
 interface CommentService {
   list(taskId: string): Promise<Comment[]>; // GET /api/tasks/:id/timeline からのみ呼ばれる（サービスメソッドとしては公開するが、単独のGETルートは持たない）
-  create(taskId: string, authorUserId: string, body: string): Promise<Comment>;
-  update(commentId: string, requesterUserId: string, body: string): Promise<Comment>;
-  delete(commentId: string, requesterUserId: string): Promise<void>;
+  create(
+    taskId: string,
+    workspaceId: VerifiedWorkspaceId,
+    authorUserId: string,
+    body: string,
+  ): Promise<Comment>;
+  update(
+    taskId: string,
+    workspaceId: VerifiedWorkspaceId,
+    commentId: string,
+    requesterUserId: string,
+    body: string,
+  ): Promise<Comment>;
+  delete(
+    taskId: string,
+    workspaceId: VerifiedWorkspaceId,
+    commentId: string,
+    requesterUserId: string,
+  ): Promise<void>;
 }
 ```
 
+書き込み系は `workspaceId` と `taskId` を受け取り、対象タスクが現在ワークスペースに属し、かつ論理削除されていないことを確認してからコメントを操作する。更新・削除は URL の `taskId` とコメント行の `taskId` が一致することも要求する（他タスク配下のコメント ID を流用できないようにする）。
 ##### API Contract
 | Method | Endpoint | Request | Response | Errors |
 |--------|----------|---------|----------|--------|
@@ -504,7 +521,7 @@ erDiagram
 ### Physical Data Model
 
 **Comment**
-- `id` (cuid, PK), `taskId` (FK Task, 削除不可の参照 = onDelete: Restrict は取らない。タスクはソフトデリートのため物理削除されず問題にならない), `authorUserId` (FK User), `body` (Text), `editedAt` (DateTime, nullable), `createdAt`, `updatedAt`, `deletedAt` (nullable, ソフトデリート拡張対象)
+- `id` (cuid, PK), `taskId` (FK Task, `ON DELETE RESTRICT`。タスクはソフトデリートのため物理削除されず、コメント行は残る), `authorUserId` (FK User, `ON DELETE RESTRICT`), `body` (Text), `editedAt` (DateTime, nullable), `createdAt`, `updatedAt`, `deletedAt` (nullable, ソフトデリート拡張対象)
 - Index: `(taskId, createdAt)` — タイムライン取得のクエリパターンに合わせる
 
 **ActivityLog**
