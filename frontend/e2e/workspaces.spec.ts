@@ -1,7 +1,5 @@
-// E2E: workspace critical path (task 7.2, design.md Testing Strategy "E2E/UI Tests",
-// Requirements 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 6.1, 6.3, 7.1, 7.4).
-// Flow: empty → create → header switch → member search/add → settings → creator delete.
-// Requires backend (+MySQL) and frontend via `docker compose up`; see playwright.config.ts.
+// E2E: workspace critical path (workspace-url-routing + membership).
+// Flow: empty → create → manage → header switch → member add → settings → delete/relocate.
 import { authTest as test, expect, registerUser } from "./fixtures";
 
 const ALT_COLOR = "#0f766e";
@@ -21,32 +19,37 @@ test("ワークスペースのクリティカルパスを一通り操作でき�
   await expect(page.getByTestId("workspace-empty-state")).toBeVisible();
   await expect(page.getByTestId("workspace-switcher-trigger")).toContainText("ワークスペース未選択");
 
-  // --- 作成 A（空状態 CTA）→ 自動選択 ---
+  // --- 作成 A（空状態 CTA）→ 新 WS ダッシュボードへ ---
   await page.getByRole("button", { name: "ワークスペースを作成", exact: true }).click();
   const createModal = page.getByRole("dialog", { name: "ワークスペースを作成" });
   await expect(createModal).toBeVisible();
   await createModal.locator("#workspace-create-name").fill(workspaceA);
   await createModal.getByRole("button", { name: "作成", exact: true }).click();
   await expect(createModal).toBeHidden();
-
-  await expect(page.getByTestId("workspace-heading")).toContainText(workspaceA);
+  await page.waitForURL((url) => /^\/workspaces\/[^/]+$/.test(url.pathname));
   await expect(page.getByTestId("workspace-switcher-trigger")).toContainText(workspaceA);
+
+  await page.goto("/workspaces");
+  await expect(page.getByTestId("workspace-heading")).toContainText(workspaceA);
   await expect(page.getByTestId("member-name")).toHaveCount(1);
 
-  // --- 作成 B（ヘッダースイッチャー）→ 切替 ---
+  // --- 作成 B（ヘッダースイッチャー）→ 新 WS ダッシュボードへ ---
   await page.getByTestId("workspace-switcher-trigger").click();
   await page.getByRole("button", { name: "＋ ワークスペースを作成", exact: true }).click();
   await expect(createModal).toBeVisible();
   await createModal.locator("#workspace-create-name").fill(workspaceB);
   await createModal.getByRole("button", { name: "作成", exact: true }).click();
   await expect(createModal).toBeHidden();
-
-  await expect(page.getByTestId("workspace-heading")).toContainText(workspaceB);
+  await page.waitForURL((url) => /^\/workspaces\/[^/]+$/.test(url.pathname));
   await expect(page.getByTestId("workspace-switcher-trigger")).toContainText(workspaceB);
 
-  // A へ切替
+  await page.goto("/workspaces");
+  await expect(page.getByTestId("workspace-heading")).toContainText(workspaceB);
+
+  // 管理画面上で A へ切替（path 据え置き）
   await page.getByTestId("workspace-switcher-trigger").click();
   await page.getByRole("option", { name: workspaceA }).click();
+  await expect(page).toHaveURL(/\/workspaces$/);
   await expect(page.getByTestId("workspace-heading")).toContainText(workspaceA);
   await expect(page.getByTestId("workspace-switcher-trigger")).toContainText(workspaceA);
 
@@ -72,7 +75,6 @@ test("ワークスペースのクリティカルパスを一通り操作でき�
   await expect(page.getByTestId("member-name").filter({ hasText: member.name })).toBeVisible();
   await expect(page.getByText("メンバー 2人")).toBeVisible();
 
-  // 再検索で追加済みユーザーが除外される
   await page.getByTestId("member-search-input").fill("");
   await page.getByTestId("member-search-input").fill(member.name);
   await expect(page.getByTestId("member-search-empty")).toBeVisible();
@@ -95,7 +97,7 @@ test("ワークスペースのクリティカルパスを一通り操作でき�
     "rgb(15, 118, 110)",
   );
 
-  // --- 作成者による削除 ---
+  // --- 作成者による削除 → 他所属のダッシュボードへ退避 ---
   await expect(page.getByTestId("workspace-delete-button")).toBeVisible();
   await page.getByTestId("workspace-delete-button").click();
   const deleteModal = page.getByRole("dialog", { name: "ワークスペースの削除確認" });
@@ -103,19 +105,20 @@ test("ワークスペースのクリティカルパスを一通り操作でき�
   await deleteModal.getByTestId("workspace-delete-confirm").click();
   await expect(deleteModal).toBeHidden();
 
-  // 削除済み B は一覧から消え、残存 A が現在選択になる（useCurrentWorkspace の先頭自動選択）
-  await expect(page.getByTestId("workspace-heading")).toContainText(workspaceA);
+  await page.waitForURL((url) => /^\/workspaces\/[^/]+$/.test(url.pathname));
+  await expect(page.getByTestId("workspace-switcher-trigger")).toContainText(workspaceA);
   await page.getByTestId("workspace-switcher-trigger").click();
   await expect(page.getByRole("option", { name: workspaceA })).toBeVisible();
   await expect(page.getByRole("option", { name: renamedB })).toHaveCount(0);
-  // ドロップダウンを閉じる（外側クリック）
   await page.locator("main").click({ position: { x: 8, y: 8 } });
 
-  // 最後のワークスペースを削除すると空状態へ戻る（Requirement 7.4）
+  // 最後のワークスペースを削除すると / の一覧・追加へ戻る
+  await page.goto("/workspaces");
   await page.getByTestId("workspace-delete-button").click();
   await expect(deleteModal).toBeVisible();
   await deleteModal.getByTestId("workspace-delete-confirm").click();
   await expect(deleteModal).toBeHidden();
+  await expect(page).toHaveURL("/");
   await expect(page.getByTestId("workspace-empty-state")).toBeVisible();
   await expect(page.getByTestId("workspace-switcher-trigger")).toContainText("ワークスペース未選択");
 });

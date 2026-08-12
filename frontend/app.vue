@@ -10,7 +10,7 @@
                active classes on the same node. -->
           <NuxtLink v-for="link in navLinks" :key="link.to" :to="link.to" custom v-slot="{ href, navigate, isActive }">
             <a
-              v-if="isActive"
+              v-if="navIsActive(link.to, isActive)"
               :href="href ?? undefined"
               class="rounded-md bg-blue-50 px-2.5 py-1.5 font-medium text-blue-700"
               @click="navigate"
@@ -66,12 +66,26 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { navLinks } from "./app.helpers";
+import { buildNavLinks } from "./app.helpers";
+import { useCurrentWorkspace } from "./composables/useCurrentWorkspace";
 
 const route = useRoute();
 const { user, logout } = useAuth();
+const { currentId } = useCurrentWorkspace();
+const navLinks = computed(() => buildNavLinks(currentId.value));
 const isAuthScreen = computed(() => route.path === "/login" || route.path === "/register");
 const logoutError = ref<string | null>(null);
+
+/** Dashboard `/workspaces/:id` must not stay active on nested business paths. */
+function navIsActive(linkTo: string, nuxtActive: boolean): boolean {
+  if (linkTo === "/workspaces") {
+    return route.path === "/workspaces";
+  }
+  if (/^\/workspaces\/[^/]+$/.test(linkTo)) {
+    return route.path === linkTo;
+  }
+  return nuxtActive || route.path === linkTo || route.path.startsWith(`${linkTo}/`);
+}
 
 async function handleLogout() {
   logoutError.value = null;

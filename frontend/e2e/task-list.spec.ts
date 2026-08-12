@@ -2,14 +2,19 @@
 // (task 12.1, Requirements 1.2, 1.4). Requires the backend (+MySQL) and
 // frontend to already be running (`docker compose up`); see
 // playwright.config.ts.
-import { expect, test } from "./fixtures";
+import {
+  expect,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 
 test("task list shows status/priority at a glance, and an on_hold task stays in the list (Requirements 1.2, 1.4)", async ({
   page,
+  workspace,
 }) => {
   const title = `e2e-task-${Date.now()}`;
 
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   await page.getByPlaceholder("タスク名").fill(title);
   await page.locator("form select").first().selectOption("high");
   await page.getByRole("button", { name: "タスク登録" }).click();

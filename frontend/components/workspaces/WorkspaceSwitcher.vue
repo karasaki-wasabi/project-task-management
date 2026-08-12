@@ -12,7 +12,12 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
 import type { Workspace } from "../../composables/useApiClient";
+import {
+  replaceWorkspaceIdInPath,
+  workspacePath,
+} from "../../utils/workspacePath";
 
+const route = useRoute();
 const { workspaces, currentId, refresh, select } = useCurrentWorkspace();
 
 const open = ref(false);
@@ -57,6 +62,16 @@ function toggle() {
 function choose(id: string) {
   select(id);
   open.value = false;
+
+  const replaced = replaceWorkspaceIdInPath(route.path, id);
+  if (replaced) {
+    void navigateTo({ path: replaced, query: route.query });
+    return;
+  }
+  if (route.path === "/") {
+    void navigateTo(workspacePath(id, ""));
+  }
+  // /workspaces (manage) and auth screens: selection only, stay on path.
 }
 
 function openCreate() {

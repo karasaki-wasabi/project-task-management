@@ -11,7 +11,11 @@
 // task created without a caseId query param is unassigned by construction
 // (tasks/index.vue's createTask() only sets caseId when the page's own
 // caseId ref is populated from the route query).
-import { expect, test } from "./fixtures";
+import {
+  expect,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 
 // Drives shared/DatePicker.vue (task 11.2/14.1) to an exact date via its
 // real UI (month nav + day-cell click + 決定) — no bypassing the picker.
@@ -48,8 +52,12 @@ async function setDateViaPicker(
   await expect(popover).toBeHidden();
 }
 
-async function createUnassignedTask(page: import("@playwright/test").Page, title: string) {
-  await page.goto("/tasks");
+async function createUnassignedTask(
+  page: import("@playwright/test").Page,
+  workspaceId: string,
+  title: string,
+) {
+  await page.goto(workspacePagePath(workspaceId, "tasks"));
   await page.getByPlaceholder("タスク名").fill(title);
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: title }).first()).toBeVisible();
@@ -66,16 +74,17 @@ async function approveMissingDatesConfirm(page: import("@playwright/test").Page)
 
 test("案件を登録すると進捗が反映され、名称検索とステータスチップで絞り込める (Requirements 2.1, 2.2, 3.1-3.3, 7.1-7.3)", async ({
   page,
+  workspace,
 }) => {
   const suffix = Date.now();
   const taskATitle = `e2e-case-task-a-${suffix}`;
   const taskBTitle = `e2e-case-task-b-${suffix}`;
   const caseName = `e2e-case-${suffix}`;
 
-  await createUnassignedTask(page, taskATitle);
-  await createUnassignedTask(page, taskBTitle);
+  await createUnassignedTask(page, workspace.id, taskATitle);
+  await createUnassignedTask(page, workspace.id, taskBTitle);
 
-  await page.goto("/cases");
+  await page.goto(workspacePagePath(workspace.id, "cases"));
   await page.getByRole("button", { name: "案件を登録" }).click();
 
   const formModal = page.locator(".case-form-modal");
@@ -139,14 +148,15 @@ test("案件を登録すると進捗が反映され、名称検索とステー�
 
 test("終了日超過かつ必須タスク未完了の案件は期限超過表示され、完了にすると表示が消える (Requirements 6.1, 6.3, 7.1, 7.2)", async ({
   page,
+  workspace,
 }) => {
   const suffix = Date.now();
   const overdueTaskTitle = `e2e-case-overdue-task-${suffix}`;
   const overdueCaseName = `e2e-case-overdue-${suffix}`;
 
-  await createUnassignedTask(page, overdueTaskTitle);
+  await createUnassignedTask(page, workspace.id, overdueTaskTitle);
 
-  await page.goto("/cases");
+  await page.goto(workspacePagePath(workspace.id, "cases"));
   await page.getByRole("button", { name: "案件を登録" }).click();
 
   const formModal = page.locator(".case-form-modal");
@@ -227,8 +237,9 @@ test("終了日超過かつ必須タスク未完了の案件は期限超過表�
 // non-mutating scenario first means it isn't collateral damage of that bug.
 test("DatePickerのクイック選択・カレンダー選択・決定・キャンセル・クリアが入力欄に正しく反映される (Requirements 10.1, 10.3, 10.4, 10.5, 10.6)", async ({
   page,
+  workspace,
 }) => {
-  await page.goto("/cases");
+  await page.goto(workspacePagePath(workspace.id, "cases"));
   await page.getByRole("button", { name: "案件を登録" }).click();
 
   const formModal = page.locator(".case-form-modal");
@@ -282,11 +293,12 @@ test("DatePickerのクイック選択・カレンダー選択・決定・キャ�
   await expect(formModal).toBeHidden();
 });
 
-test("開始日・終了日を未入力のまま案件を登録できる (Requirement 2.4)", async ({ page }) => {
+test("開始日・終了日を未入力のまま案件を登録できる (Requirement 2.4)", async ({ page,
+  workspace }) => {
   const suffix = Date.now();
   const caseName = `e2e-case-nodate-${suffix}`;
 
-  await page.goto("/cases");
+  await page.goto(workspacePagePath(workspace.id, "cases"));
   await page.getByRole("button", { name: "案件を登録" }).click();
 
   const formModal = page.locator(".case-form-modal");

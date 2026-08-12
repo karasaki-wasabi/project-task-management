@@ -1,6 +1,11 @@
 // E2E: assignee filter narrows the tasks list (task 12.3, Requirement
 // 7.2).
-import { expect, registerWorkspaceMember, test } from "./fixtures";
+import {
+  expect,
+  registerWorkspaceMember,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 
 test("filtering by assignee narrows the task list to only that assignee's tasks (Requirement 7.2)", async ({
   page,
@@ -14,7 +19,7 @@ test("filtering by assignee narrows the task list to only that assignee's tasks 
 
   await registerWorkspaceMember(page, request, workspace.id, userName);
 
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   await page.getByPlaceholder("タスク名").fill(nonMatchingTitle);
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: nonMatchingTitle }).first()).toBeVisible();

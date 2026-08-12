@@ -1,4 +1,6 @@
 import { expect, test as base, type APIRequestContext, type Page } from "@playwright/test";
+import type { WorkspacePageKind } from "../utils/workspacePath";
+import { workspacePath } from "../utils/workspacePath";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL ?? "http://localhost:3400";
 const PASSWORD = "e2e-password-123";
@@ -14,6 +16,14 @@ export type WorkspaceInfo = {
   id: string;
   name: string;
 };
+
+/** Scoped app path helper for E2E (workspace-url-routing). */
+export function workspacePagePath(
+  workspaceId: string,
+  kind: WorkspacePageKind = "",
+): string {
+  return workspacePath(workspaceId, kind);
+}
 
 function createCredentials(name: string): Omit<RegisteredUser, "id"> {
   const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -78,10 +88,13 @@ export async function createAndSelectWorkspace(page: Page, name: string): Promis
   await createModal.locator("#workspace-create-name").fill(name);
   await createModal.getByRole("button", { name: "作成", exact: true }).click();
   await expect(createModal).toBeHidden();
+  // CreateModal navigates to the new workspace dashboard.
+  await page.waitForURL((url) => /^\/workspaces\/[^/]+$/.test(url.pathname));
   await expect(page.getByTestId("workspace-switcher-trigger")).toContainText(name);
 
   const id = await page.evaluate(() => localStorage.getItem("currentWorkspaceId"));
   expect(id).toBeTruthy();
+  expect(page.url()).toContain(`/workspaces/${id}`);
   return { id: id!, name };
 }
 

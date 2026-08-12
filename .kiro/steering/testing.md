@@ -116,7 +116,7 @@ E2E_BASE_URL=http://localhost:3401 npm --prefix frontend run test:e2e -- auth.sp
 
 ### ドラッグ&ドロップ(HTML5 Drag and Drop API)のテスト
 
-カンバンのカード移動（`frontend/pages/kanban/index.vue`、ブラウザ標準のHTML5 Drag and Drop API）は、Playwrightの`locator.dragTo()`で検証できる。ネイティブの`dragstart`/`dragover`/`drop`イベントシーケンスを内部で発行するため、独自にイベントを手動ディスパッチする必要はない。`frontend/e2e/kanban.spec.ts`が実例。ドラッグ元・ドロップ先ともロケータで要素を絞り込んだ上で`sourceLocator.dragTo(targetLocator)`を呼ぶだけでよい。
+カンバンのカード移動（`frontend/pages/workspaces/[workspaceId]/kanban/index.vue`、ブラウザ標準のHTML5 Drag and Drop API）は、Playwrightの`locator.dragTo()`で検証できる。ネイティブの`dragstart`/`dragover`/`drop`イベントシーケンスを内部で発行するため、独自にイベントを手動ディスパッチする必要はない。`frontend/e2e/kanban.spec.ts`が実例。ドラッグ元・ドロップ先ともロケータで要素を絞り込んだ上で`sourceLocator.dragTo(targetLocator)`を呼ぶだけでよい。業務画面の E2E 遷移先は `workspacePagePath`（`frontend/e2e/fixtures.ts`）経由の scoped path を使う。
 
 ## 方針
 

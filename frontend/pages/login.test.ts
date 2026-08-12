@@ -43,7 +43,7 @@ describe("LoginPage (task 6.3)", () => {
   it("ログイン成功時は認証状態を保存し、redirect 先へ遷移する", async () => {
     const user = { id: "user-1", name: "利用者", email: "member@example.com" };
     login.mockResolvedValue(user);
-    route.query = { redirect: "/tasks?view=mine" };
+    route.query = { redirect: "/workspaces/ws-1/tasks?caseId=c1" };
     const wrapper = mountPage();
 
     await wrapper.get("#email").setValue("member@example.com");
@@ -56,7 +56,7 @@ describe("LoginPage (task 6.3)", () => {
       password: "correct-password",
     });
     expect(authUser.value).toEqual(user);
-    expect(navigateTo).toHaveBeenCalledWith("/tasks?view=mine");
+    expect(navigateTo).toHaveBeenCalledWith("/workspaces/ws-1/tasks?caseId=c1");
   });
 
   it("ログイン失敗時は固定文言をフォーム上部に表示する", async () => {

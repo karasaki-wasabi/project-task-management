@@ -15,7 +15,10 @@
 // This file intentionally only makes negative assertions ("X is not
 // present"). Positive assertions for the replacement calendar feature live
 // in calendar.spec.ts (task 6.1) and are out of this file's scope.
-import { expect, test } from "./fixtures";
+import {
+  expect,
+  test,
+} from "./fixtures";
 
 test("old /events path does not render the former timeline UI (Requirement 7.2)", async ({ page }) => {
   await page.goto("/events");
@@ -38,24 +41,31 @@ test("old /events path does not render the former timeline UI (Requirement 7.2)"
 
 test("global navigation has no non-task-event entry and does list カレンダー (Requirement 7.2)", async ({
   page,
+  workspace,
 }) => {
-  await page.goto("/");
+  await page.goto(`/workspaces/${workspace.id}`);
 
   const nav = page.locator("nav").first();
   await expect(nav).toBeVisible();
 
   // The old nav entry was `{ to: "/events", label: "タイムライン" }`
-  // (replaced in task 5.1 by `{ to: "/calendar", label: "カレンダー" }`).
+  // (replaced in task 5.1 by calendar; workspace-url-routing scopes the href).
   await expect(nav.getByRole("link", { name: "タイムライン" })).toHaveCount(0);
   await expect(nav.locator('a[href="/events"]')).toHaveCount(0);
   await expect(nav.getByText("タイムライン")).toHaveCount(0);
 
   await expect(nav.getByRole("link", { name: "カレンダー" })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "カレンダー" })).toHaveAttribute("href", "/calendar");
+  await expect(nav.getByRole("link", { name: "カレンダー" })).toHaveAttribute(
+    "href",
+    `/workspaces/${workspace.id}/calendar`,
+  );
 });
 
-test("dashboard has no non-task-event display section (Requirement 8.1)", async ({ page }) => {
-  await page.goto("/");
+test("dashboard has no non-task-event display section (Requirement 8.1)", async ({
+  page,
+  workspace,
+}) => {
+  await page.goto(`/workspaces/${workspace.id}`);
 
   // Only heading-level assertions matter here: "非タスクイベント" and
   // "直近のイベント" are the section's own vocabulary, not incidental

@@ -6,7 +6,12 @@
 // cursor-follow/reflow animation (user feedback round 2), which drives
 // real mouse events rather than native HTML5 drag events, so
 // `locator.dragTo()` no longer exercises the real interaction.
-import { expect, registerWorkspaceMember, test } from "./fixtures";
+import {
+  expect,
+  registerWorkspaceMember,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 import { dragCardTo } from "./drag";
 
 test("moving an unassigned task's card between kanban columns prompts for an assignee, then moves without prompting again (Requirements 12.1, 12.6, 12.7)", async ({
@@ -22,7 +27,7 @@ test("moving an unassigned task's card between kanban columns prompts for an ass
 
   await registerWorkspaceMember(page, request, workspace.id, userName);
 
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   await page.getByPlaceholder("タスク名").fill(taskTitle);
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: taskTitle }).first()).toBeVisible();
@@ -32,7 +37,7 @@ test("moving an unassigned task's card between kanban columns prompts for an ass
   // then returning to /kanban demonstrates Requirement 7.4 (stage master
   // changes are reflected on the kanban board) since the very next steps
   // use these stages as columns/drop targets on the board.
-  await page.goto("/kanban/stages");
+  await page.goto(workspacePagePath(workspace.id, "kanban/stages"));
   await page.getByPlaceholder("段階名(例: 仕様未確定)").fill(stageAName);
   await page.getByRole("button", { name: "登録" }).click();
   await expect(page.locator(".stage-list", { hasText: stageAName })).toBeVisible();
@@ -40,7 +45,7 @@ test("moving an unassigned task's card between kanban columns prompts for an ass
   await page.getByRole("button", { name: "登録" }).click();
   await expect(page.locator(".stage-list", { hasText: stageBName })).toBeVisible();
 
-  await page.goto("/kanban");
+  await page.goto(workspacePagePath(workspace.id, "kanban"));
   await expect(page.locator(".column[data-stage-id]", { hasText: stageAName })).toBeVisible();
   await expect(page.locator(".column[data-stage-id]", { hasText: stageBName })).toBeVisible();
 

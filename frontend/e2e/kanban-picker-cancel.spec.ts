@@ -13,28 +13,33 @@
 // resync-strategy fix targeted this exact dialog), the CANCEL button itself
 // had no dedicated E2E coverage — every existing picker test
 // (kanban.spec.ts, kanban-backlog.spec.ts) only exercises "確定" (confirm).
-import { expect, test } from "./fixtures";
+import {
+  expect,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 import { dragCardTo } from "./drag";
 
 test("canceling the assignee-picker leaves the dropped task back in the backlog, not stranded in the target column (regression)", async ({
   page,
+  workspace,
 }) => {
   const suffix = Date.now();
   const stageName = `e2e-pickercancel-stage-${suffix}`;
   const taskTitle = `e2e-pickercancel-task-${suffix}`;
 
-  await page.goto("/kanban/stages");
+  await page.goto(workspacePagePath(workspace.id, "kanban/stages"));
   await page.getByPlaceholder("段階名(例: 仕様未確定)").fill(stageName);
   await page.getByRole("button", { name: "登録" }).click();
   await expect(page.locator(".stage-list", { hasText: stageName })).toBeVisible();
 
   // Unassigned task (no assignee selected at creation) lands in the backlog.
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   await page.getByPlaceholder("タスク名").fill(taskTitle);
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: taskTitle }).first()).toBeVisible();
 
-  await page.goto("/kanban");
+  await page.goto(workspacePagePath(workspace.id, "kanban"));
   await page.waitForLoadState("networkidle");
   const stageColumn = page.locator(".column[data-stage-id]", { hasText: stageName });
   const stageCardList = stageColumn.locator(".card-list");

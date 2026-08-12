@@ -12,10 +12,15 @@
 import { ref, watch } from "vue";
 import { useApiClient, type Workspace } from "../../composables/useApiClient";
 import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
+import {
+  replaceWorkspaceIdInPath,
+  workspacePath,
+} from "../../utils/workspacePath";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: []; created: [workspace: Workspace] }>();
 
+const route = useRoute();
 const api = useApiClient();
 const { refresh, select } = useCurrentWorkspace();
 
@@ -51,6 +56,14 @@ async function submit() {
     const created = await api.createWorkspace({ name: trimmed });
     await refresh();
     select(created.id);
+
+    const replaced = replaceWorkspaceIdInPath(route.path, created.id);
+    if (replaced) {
+      await navigateTo({ path: replaced, query: route.query });
+    } else {
+      await navigateTo(workspacePath(created.id, ""));
+    }
+
     emit("created", created);
     emit("close");
   } catch (e) {

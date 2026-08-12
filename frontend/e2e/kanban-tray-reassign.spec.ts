@@ -14,7 +14,12 @@
 //
 // Same manual-mouse-events rationale as ./drag.ts's `dragCardTo` — Sortable
 // (`forceFallback` mode) doesn't use native HTML5 drag events.
-import { expect, registerWorkspaceMember, test } from "./fixtures";
+import {
+  expect,
+  registerWorkspaceMember,
+  test,
+  workspacePagePath,
+} from "./fixtures";
 import { dragCardTo } from "./drag";
 
 test("dragging an already-assigned task into a different assignee's focus tray reassigns it (Requirement 9)", async ({ page, request, workspace }) => {
@@ -28,7 +33,7 @@ test("dragging an already-assigned task into a different assignee's focus tray r
   await registerWorkspaceMember(page, request, workspace.id, userAName);
   await registerWorkspaceMember(page, request, workspace.id, userBName);
 
-  await page.goto("/kanban/stages");
+  await page.goto(workspacePagePath(workspace.id, "kanban/stages"));
   await page.getByPlaceholder("段階名(例: 仕様未確定)").fill(stageName);
   await page.getByRole("button", { name: "登録" }).click();
   await expect(page.locator(".stage-list", { hasText: stageName })).toBeVisible();
@@ -38,7 +43,7 @@ test("dragging an already-assigned task into a different assignee's focus tray r
   // all (TeamWorkloadSummary only shows assignees with >=1 incomplete
   // assigned task, per computeWorkloadCounts in index.helpers.ts) — this
   // second task otherwise plays no role in the scenario.
-  await page.goto("/tasks");
+  await page.goto(workspacePagePath(workspace.id, "tasks"));
   const assigneeSelect = page.locator("form select").nth(1);
   await page.getByPlaceholder("タスク名").fill(taskTitle);
   await assigneeSelect.selectOption({ label: userBName });
@@ -50,7 +55,7 @@ test("dragging an already-assigned task into a different assignee's focus tray r
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: userATaskTitle }).first()).toBeVisible();
 
-  await page.goto("/kanban");
+  await page.goto(workspacePagePath(workspace.id, "kanban"));
   await page.waitForLoadState("networkidle");
   const stageColumn = page.locator(".column[data-stage-id]", { hasText: stageName });
   const stageCardList = stageColumn.locator(".card-list");

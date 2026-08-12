@@ -1,99 +1,118 @@
-// Mount tests for home dashboard empty state (workspace-resource-scope task 7.2).
-// Requirements 2.1, 2.2.
+// Mount tests for landing `/` (workspace-url-routing task 3.1).
+// Requirements 2.1, 2.2, 8.1.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
-import type { Case, CaseProgress } from "../composables/useApiClient";
-import HomePage from "./index.vue";
+import type { Workspace } from "../composables/useApiClient";
+import LandingPage from "./index.vue";
 
-const listCases = vi.fn();
-const getCaseProgress = vi.fn();
-const currentId = ref<string | null>("ws-1");
+const refresh = vi.fn();
+const navigateTo = vi.fn();
+const currentId = ref<string | null>(null);
+const workspaces = ref<Workspace[]>([]);
 
 vi.mock("../composables/useCurrentWorkspace", () => ({
-  useCurrentWorkspace: () => ({ currentId }),
+  useCurrentWorkspace: () => ({
+    workspaces,
+    currentId,
+    refresh,
+  }),
 }));
 
-vi.mock("../composables/useApiClient", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../composables/useApiClient")>();
-  return {
-    ...actual,
-    useApiClient: () => ({
-      listCases,
-      getCaseProgress,
-    }),
-  };
+const WorkspacePickerPanelStub = defineComponent({
+  name: "WorkspacePickerPanel",
+  template: `<div data-testid="workspace-picker-panel">picker</div>`,
 });
 
-const NuxtLinkStub = defineComponent({
-  name: "NuxtLink",
-  props: { to: { type: [String, Object], required: true } },
-  template: `<a :href="typeof to === 'string' ? to : '#'"><slot /></a>`,
-});
-
-function makeCase(overrides: Partial<Case> = {}): Case {
+function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
-    id: "c1",
-    name: "案件A",
-    startDate: "2026-01-01T00:00:00.000Z",
-    endDate: "2026-01-31T00:00:00.000Z",
-    isCompleted: false,
+    id: "ws-1",
+    name: "Alpha",
+    color: "#2563eb",
+    createdByUserId: "u1",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...overrides,
   };
 }
 
-function makeProgress(overrides: Partial<CaseProgress> = {}): CaseProgress {
-  return {
-    requiredTotal: 2,
-    requiredCompleted: 0,
-    requiredIncomplete: 2,
-    isOverdueWithIncomplete: true,
-    ...overrides,
-  };
-}
-
 function mountPage() {
-  return mount(HomePage, {
+  return mount(LandingPage, {
     global: {
-      stubs: { NuxtLink: NuxtLinkStub },
+      stubs: { WorkspacePickerPanel: WorkspacePickerPanelStub },
     },
   });
 }
 
-describe("HomePage (workspace-resource-scope task 7.2)", () => {
+describe("LandingPage (workspace-url-routing task 3.1)", () => {
   beforeEach(() => {
-    listCases.mockReset();
-    getCaseProgress.mockReset();
-    currentId.value = "ws-1";
-    listCases.mockResolvedValue([makeCase()]);
-    getCaseProgress.mockResolvedValue(makeProgress());
+    refresh.mockReset();
+    navigateTo.mockReset();
+    currentId.value = null;
+    workspaces.value = [];
+    refresh.mockImplementation(async () => {
+      /* currentId / workspaces set by each test before mount or inside mock */
+    });
+    vi.stubGlobal("navigateTo", navigateTo);
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
-  it("現在ワークスペースがあるとき期限超過案件を読み込む", async () => {
+  it("前回利用 WS が有効なときダッシュボードへ navigate する（Req 2.1）", async () => {
+    refresh.mockImplementation(async () => {
+      workspaces.value = [makeWorkspace()];
+      currentId.value = "ws-1";
+    });
+
     const wrapper = mountPage();
     await flushPromises();
 
-    expect(listCases).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain("ダッシュボード");
-    expect(wrapper.text()).toContain("案件A");
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(navigateTo).toHaveBeenCalledWith("/workspaces/ws-1");
+    expect(wrapper.find('[data-testid="workspace-picker-panel"]').exists()).toBe(false);
   });
 
-  it("ワークスペース未選択時は空状態を表示し一覧取得しない（Req 2.1, 2.2）", async () => {
+  it("前回利用が無い／無効なとき Picker を表示する（Req 2.2）", async () => {
+    refresh.mockImplementation(async () => {
+      workspaces.value = [makeWorkspace({ id: "ws-other", name: "Other" })];
+      currentId.value = null;
+    });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(navigateTo).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="workspace-picker-panel"]').exists()).toBe(true);
+  });
+
+  it("所属ゼロでも Picker（作成導線）を表示する（Req 8.1）", async () => {
+    refresh.mockImplementation(async () => {
+      workspaces.value = [];
+      currentId.value = null;
+    });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(navigateTo).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="workspace-picker-panel"]').exists()).toBe(true);
+  });
+
+  it("refresh 後に currentId が有効になるとダッシュボードへ navigate する", async () => {
+    refresh.mockResolvedValue(undefined);
     currentId.value = null;
-    const wrapper = mountPage();
+
+    mountPage();
+    await flushPromises();
+    expect(navigateTo).not.toHaveBeenCalled();
+
+    currentId.value = "ws-1";
     await flushPromises();
 
-    expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(true);
-    expect(wrapper.text()).toContain("ワークスペースがありません");
-    expect(wrapper.text()).toContain("ワークスペースを作成");
-    expect(wrapper.text()).not.toContain("ダッシュボード");
-    expect(listCases).not.toHaveBeenCalled();
-    expect(wrapper.find('a[href="/workspaces"]').exists()).toBe(true);
+    expect(navigateTo).toHaveBeenCalledWith("/workspaces/ws-1");
   });
 });
