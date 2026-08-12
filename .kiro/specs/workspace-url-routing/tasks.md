@@ -9,7 +9,7 @@
 - 移行順: ヘルパー・文脈 → 親＋ガード → ページ移動 → 旧フラット削除 → ナビ／切替／作成 → 消失退避 → テスト。旧 URL 互換リダイレクトは置かない
 - 前提: `workspace-membership` / `workspace-resource-scope` は main 済み
 
-- [ ] 1. Foundation: パスヘルパーと現在ワークスペース文脈
+- [x] 1. Foundation: パスヘルパーと現在ワークスペース文脈
 - [x] 1.1 業務画面種とワークスペースIDからパスを組み立て・差し替える
   - URL 対応表の全画面種（ダッシュボード、`kanban/stages` を含む）を扱えるようにする
   - `buildNavLinks(null)` は `/` と `/workspaces` のみを返す
