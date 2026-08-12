@@ -470,6 +470,121 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [idA, idB]);
   });
 
+  it("returns a deleted task for detail reads and rejects every task write with 409 (task-detail 1.4)", async () => {
+    const created = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "read-only deleted task", priority: "medium" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(created.statusCode).toBe(201);
+    const taskId = created.json().id as string;
+
+    const deleted = await app.inject(
+      withWorkspace(
+        { method: "DELETE", url: `/api/tasks/${taskId}` },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(deleted.statusCode).toBe(204);
+
+    const detail = await app.inject(
+      withWorkspace({ method: "GET", url: `/api/tasks/${taskId}` }, memberCsrf.cookie, undefined, workspaceA),
+    );
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json()).toMatchObject({ id: taskId, title: "read-only deleted task" });
+    expect(detail.json().deletedAt).toEqual(expect.any(String));
+
+    const list = await app.inject(
+      withWorkspace({ method: "GET", url: "/api/tasks" }, memberCsrf.cookie, undefined, workspaceA),
+    );
+    expect(list.statusCode).toBe(200);
+    expect(list.json().map((task: { id: string }) => task.id)).not.toContain(taskId);
+
+    const writes = await Promise.all([
+      app.inject(
+        withWorkspace(
+          { method: "PATCH", url: `/api/tasks/${taskId}`, payload: { title: "must not change" } },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      ),
+      app.inject(
+        withWorkspace(
+          { method: "PATCH", url: `/api/tasks/${taskId}/status`, payload: { status: "on_hold" } },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      ),
+      app.inject(
+        withWorkspace(
+          {
+            method: "PATCH",
+            url: `/api/tasks/${taskId}/development-stage`,
+            payload: { developmentStageId: null },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      ),
+      app.inject(
+        withWorkspace(
+          { method: "DELETE", url: `/api/tasks/${taskId}` },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      ),
+      app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: `/api/tasks/${taskId}/children`,
+            payload: { title: "must not create child", priority: "low" },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      ),
+      app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: `/api/tasks/${taskId}/split`,
+            payload: {
+              parts: [
+                { title: "must not split 1", priority: "low" },
+                { title: "must not split 2", priority: "low" },
+              ],
+            },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      ),
+    ]);
+
+    expect(writes.map((response) => response.statusCode)).toEqual([409, 409, 409, 409, 409, 409]);
+    for (const response of writes) {
+      expect(response.json().error).toMatch(/task is deleted/i);
+    }
+
+    await hardDelete("tasks", [taskId]);
+  });
+
   it("GET /api/tasks?unassignedCase=true returns only tasks with no case assigned", async () => {
     const caseRecord = await db.case.create({
       data: { name: `route-case-${randomUUID()}`, endDate: new Date(), workspaceId: workspaceA },

@@ -22,7 +22,15 @@ import type { DevelopmentStageKind } from "../development-stages/development-sta
 import { workspaceService } from "../workspaces/workspace.service.js";
 import { resolveClosureState } from "./task.closure.js";
 import { taskRepository } from "./task.repository.js";
-import type { CreateTaskInput, Task, TaskError, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
+import type {
+  CreateTaskInput,
+  GetTaskOptions,
+  Task,
+  TaskError,
+  TaskListFilter,
+  TaskStatus,
+  UpdateTaskInput,
+} from "./task.types.js";
 
 function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
@@ -87,7 +95,7 @@ async function assertRelatedResourcesInWorkspace(
     }
   }
   if (refs.parentTaskId != null) {
-    const parent = await taskRepository.findById(refs.parentTaskId, workspaceId, client);
+    const parent = await taskRepository.findById(refs.parentTaskId, workspaceId, {}, client);
     if (!parent) {
       return err({
         type: "validation_error",
@@ -107,6 +115,21 @@ async function assertRelatedResourcesInWorkspace(
     }
   }
   return ok(undefined);
+}
+
+async function getWritableTask(
+  taskId: string,
+  workspaceId: VerifiedWorkspaceId,
+  client: DbClient = db,
+): Promise<Result<Task, TaskError>> {
+  const task = await taskRepository.findById(taskId, workspaceId, { includeDeleted: true }, client);
+  if (!task) {
+    return err({ type: "not_found", taskId });
+  }
+  if (task.deletedAt !== null) {
+    return err({ type: "deleted_task", taskId });
+  }
+  return ok(task);
 }
 
 export const tasksService = {
@@ -134,7 +157,7 @@ export const tasksService = {
     }
 
     if (input.parentTaskId != null) {
-      const parent = await taskRepository.findById(input.parentTaskId, input.workspaceId, client);
+      const parent = await taskRepository.findById(input.parentTaskId, input.workspaceId, {}, client);
       if (!parent) {
         return err({
           type: "validation_error",
@@ -158,8 +181,12 @@ export const tasksService = {
     }
   },
 
-  async getById(taskId: string, workspaceId: VerifiedWorkspaceId): Promise<Result<Task, TaskError>> {
-    const task = await taskRepository.findById(taskId, workspaceId);
+  async getById(
+    taskId: string,
+    workspaceId: VerifiedWorkspaceId,
+    options: GetTaskOptions = {},
+  ): Promise<Result<Task, TaskError>> {
+    const task = await taskRepository.findById(taskId, workspaceId, options);
     if (!task) {
       return err({ type: "not_found", taskId });
     }
@@ -174,10 +201,9 @@ export const tasksService = {
     workspaceId: VerifiedWorkspaceId,
     status: TaskStatus,
   ): Promise<Result<Task, TaskError>> {
-    const current = await taskRepository.findById(taskId, workspaceId);
-    if (!current) {
-      return err({ type: "not_found", taskId });
-    }
+    const writable = await getWritableTask(taskId, workspaceId);
+    if (!writable.ok) return writable;
+    const current = writable.value;
 
     if (current.developmentStageId != null) {
       const stage = await developmentStagesService.getById(current.developmentStageId, workspaceId);
@@ -209,10 +235,9 @@ export const tasksService = {
     developmentStageId: string | null,
     assigneeUserId?: string,
   ): Promise<Result<Task, TaskError>> {
-    const current = await taskRepository.findById(taskId, workspaceId);
-    if (!current) {
-      return err({ type: "not_found", taskId });
-    }
+    const writable = await getWritableTask(taskId, workspaceId);
+    if (!writable.ok) return writable;
+    const current = writable.value;
 
     const relatedCheck = await assertRelatedResourcesInWorkspace(workspaceId, { developmentStageId });
     if (!relatedCheck.ok) {
@@ -282,10 +307,9 @@ export const tasksService = {
     workspaceId: VerifiedWorkspaceId,
     input: UpdateTaskInput,
   ): Promise<Result<Task, TaskError>> {
-    const current = await taskRepository.findById(taskId, workspaceId);
-    if (!current) {
-      return err({ type: "not_found", taskId });
-    }
+    const writable = await getWritableTask(taskId, workspaceId);
+    if (!writable.ok) return writable;
+    const current = writable.value;
 
     const data: UpdateTaskInput = {};
     if (input.title !== undefined) {
@@ -341,10 +365,9 @@ export const tasksService = {
     workspaceId: VerifiedWorkspaceId,
     input: CreateTaskInput,
   ): Promise<Result<Task, TaskError>> {
-    const parent = await taskRepository.findById(parentTaskId, workspaceId);
-    if (!parent) {
-      return err({ type: "not_found", taskId: parentTaskId });
-    }
+    const writable = await getWritableTask(parentTaskId, workspaceId);
+    if (!writable.ok) return writable;
+    const parent = writable.value;
 
     const closedParentCheck = await assertParentCanTakeOpenChildren(parent, workspaceId);
     if (!closedParentCheck.ok) {
@@ -385,6 +408,10 @@ export const tasksService = {
     workspaceId: VerifiedWorkspaceId,
     parts: CreateTaskInput[],
   ): Promise<Result<Task[], TaskError>> {
+    const writable = await getWritableTask(taskId, workspaceId);
+    if (!writable.ok) return writable;
+    const original = writable.value;
+
     if (parts.length < 2) {
       return err({ type: "validation_error", message: "splitTask requires at least 2 parts" });
     }
@@ -392,11 +419,6 @@ export const tasksService = {
       if (part.title.trim().length === 0) {
         return err({ type: "validation_error", message: "title is required for every part" });
       }
-    }
-
-    const original = await taskRepository.findById(taskId, workspaceId);
-    if (!original) {
-      return err({ type: "not_found", taskId });
     }
 
     const closedParentCheck = await assertParentCanTakeOpenChildren(original, workspaceId);
@@ -448,6 +470,9 @@ export const tasksService = {
     requestId: string = randomUUID(),
     client: DbClient = db,
   ): Promise<Result<void, TaskError>> {
+    const writable = await getWritableTask(taskId, workspaceId, client);
+    if (!writable.ok) return writable;
+
     try {
       await taskRepository.delete(taskId, workspaceId, client);
     } catch (error) {

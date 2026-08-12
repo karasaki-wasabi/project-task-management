@@ -8,7 +8,14 @@ import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { openTaskFilter } from "./task.closure.js";
-import type { CreateTaskInput, Task, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
+import type {
+  CreateTaskInput,
+  GetTaskOptions,
+  Task,
+  TaskListFilter,
+  TaskStatus,
+  UpdateTaskInput,
+} from "./task.types.js";
 
 export const taskRepository = {
   create(input: CreateTaskInput, client: DbClient = db): Promise<Task> {
@@ -32,14 +39,20 @@ export const taskRepository = {
     });
   },
 
-  findById(id: string, workspaceId: VerifiedWorkspaceId, client: DbClient = db): Promise<Task | null> {
-    return client.task.findFirst({ where: withWorkspaceScope({ id }, workspaceId) });
+  findById(
+    id: string,
+    workspaceId: VerifiedWorkspaceId,
+    options: GetTaskOptions = {},
+    client: DbClient = db,
+  ): Promise<Task | null> {
+    const where = options.includeDeleted ? { id, deletedAt: undefined } : { id };
+    return client.task.findFirst({ where: withWorkspaceScope(where, workspaceId) });
   },
 
   // task-status-model 3.2: status only — completedAt is owned by updateDevelopmentStage.
   updateStatus(id: string, workspaceId: VerifiedWorkspaceId, status: TaskStatus): Promise<Task> {
     return db.task.update({
-      where: withWorkspaceScope({ id }, workspaceId),
+      where: withWorkspaceScope({ id, deletedAt: null }, workspaceId),
       data: { status },
     });
   },
@@ -54,15 +67,15 @@ export const taskRepository = {
       completedAt?: Date | null;
     },
   ): Promise<Task> {
-    return db.task.update({ where: withWorkspaceScope({ id }, workspaceId), data });
+    return db.task.update({ where: withWorkspaceScope({ id, deletedAt: null }, workspaceId), data });
   },
 
   update(id: string, workspaceId: VerifiedWorkspaceId, data: UpdateTaskInput): Promise<Task> {
-    return db.task.update({ where: withWorkspaceScope({ id }, workspaceId), data });
+    return db.task.update({ where: withWorkspaceScope({ id, deletedAt: null }, workspaceId), data });
   },
 
   delete(id: string, workspaceId: VerifiedWorkspaceId, client: DbClient = db): Promise<Task> {
-    return client.task.delete({ where: withWorkspaceScope({ id }, workspaceId) });
+    return client.task.delete({ where: withWorkspaceScope({ id, deletedAt: null }, workspaceId) });
   },
 
   list(filter: TaskListFilter): Promise<Task[]> {

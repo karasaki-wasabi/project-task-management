@@ -68,6 +68,7 @@ function taskErrorStatusCode(error: TaskError): number {
   switch (error.type) {
     case "not_found":
       return 404;
+    case "deleted_task":
     case "incomplete_children":
     case "status_not_applicable":
     case "closed_task_cannot_take_children":
@@ -81,6 +82,8 @@ function taskErrorMessage(error: TaskError): string {
   switch (error.type) {
     case "not_found":
       return `Task not found: ${error.taskId}`;
+    case "deleted_task":
+      return `Task is deleted: ${error.taskId}`;
     case "incomplete_children":
       return `Task has incomplete children: ${error.taskId}`;
     case "status_not_applicable":
@@ -107,7 +110,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/tasks/:id", async (request, reply) => {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
     const workspaceId = requireCurrentWorkspaceId(request);
-    const result = await tasksService.getById(params.id, workspaceId);
+    const result = await tasksService.getById(params.id, workspaceId, { includeDeleted: true });
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
