@@ -15,6 +15,14 @@ import { workspaceService } from "./workspace.service.js";
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  // workspaceService.create provisions terminal development_stages (1.2/1.3);
+  // clear them before removing the workspace row (FK).
+  if (table === "workspaces") {
+    await db.$executeRawUnsafe(
+      `DELETE FROM development_stages WHERE workspace_id IN (${ids.map(() => "?").join(",")})`,
+      ...ids,
+    );
+  }
   await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
@@ -65,6 +73,15 @@ describe("workspaceService.create (task 3.1)", () => {
     expect(created.createdByUserId).toBe(user.id);
     expect(WORKSPACE_COLORS.includes(created.color)).toBe(true);
     expect(await workspaceRepository.isMember(created.id, user.id)).toBe(true);
+
+    const stages = await db.developmentStage.findMany({
+      where: { workspaceId: created.id, deletedAt: null },
+      orderBy: { order: "asc" },
+    });
+    expect(stages.map((s) => ({ name: s.name, kind: s.kind, order: s.order }))).toEqual([
+      { name: "完了", kind: "completed", order: 0 },
+      { name: "中止", kind: "cancelled", order: 1 },
+    ]);
 
     const members = await db.workspaceMember.findMany({
       where: { workspaceId: created.id, deletedAt: null },
