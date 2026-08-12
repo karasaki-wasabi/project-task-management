@@ -1,9 +1,9 @@
-import type { Prisma } from "@prisma/client";
+import type { SoftDeleteTx } from "../../shared/soft-delete.repository.js";
 import { activityLogRepository } from "./activity-log.repository.js";
 import type { ActivityLogEntry, RecordActivityLogInput } from "./activity-log.types.js";
 
 export const activityLogService = {
-  async record(input: RecordActivityLogInput, tx: Prisma.TransactionClient): Promise<void> {
+  async record(input: RecordActivityLogInput, tx: SoftDeleteTx): Promise<void> {
     const actor =
       input.actor.type === "user"
         ? { actorUserId: input.actor.userId, actorSourceLabel: null }

@@ -23,6 +23,7 @@ import { requireUser } from "./modules/auth/auth.guard.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { userRoutes } from "./modules/users/user.routes.js";
 import { taskRoutes } from "./modules/tasks/task.routes.js";
+import { commentRoutes } from "./modules/comments/comment.routes.js";
 import { caseRoutes } from "./modules/cases/case.routes.js";
 import { holidayRoutes } from "./modules/holidays/holiday.routes.js";
 import { throughputRoutes } from "./modules/throughput/throughput.routes.js";
@@ -119,6 +120,7 @@ export function buildApp(env: Env = loadEnv(), logger: AppLogger = createLogger(
   app.register(authRoutes);
   app.register(userRoutes);
   app.register(taskRoutes);
+  app.register(commentRoutes);
   app.register(caseRoutes);
   app.register(holidayRoutes);
   app.register(throughputRoutes);

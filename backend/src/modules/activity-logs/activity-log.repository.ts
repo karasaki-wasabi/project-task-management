@@ -1,5 +1,5 @@
-import type { Prisma } from "@prisma/client";
 import { db } from "../../shared/db.js";
+import type { SoftDeleteTx } from "../../shared/soft-delete.repository.js";
 import type { ActivityLogEntry, FieldName, OperationType } from "./activity-log.types.js";
 
 interface AppendActivityLogInput {
@@ -13,7 +13,7 @@ interface AppendActivityLogInput {
 }
 
 export const activityLogRepository = {
-  async append(input: AppendActivityLogInput, tx: Prisma.TransactionClient): Promise<void> {
+  async append(input: AppendActivityLogInput, tx: SoftDeleteTx): Promise<void> {
     await tx.activityLog.create({ data: input });
   },
 

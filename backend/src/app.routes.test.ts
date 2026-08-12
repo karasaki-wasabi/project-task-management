@@ -200,6 +200,20 @@ describe("app.ts route registration (task 10.3)", () => {
     await app.close();
   });
 
+  it("POST /api/tasks/:id/comments is registered and workspace scoped", async () => {
+    const { app } = buildTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/tasks/${randomUUID()}/comments`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toHaveProperty("error");
+    await app.close();
+  });
+
   it("POST /api/client-errors is registered and reachable", async () => {
     const { app } = buildTestApp();
 
