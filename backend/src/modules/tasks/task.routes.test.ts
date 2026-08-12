@@ -667,6 +667,133 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     await hardDelete("tasks", [originalId]);
   });
 
+  // task-status-model 3.3: closed task split / closed parent → 409 (5.5, 5.6).
+  it("POST /api/tasks/:id/split returns 409 when the task is on a completed stage (5.5)", async () => {
+    const original = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "closed split", priority: "medium" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const originalId = original.json().id as string;
+    const completedStage = await db.developmentStage.create({
+      data: {
+        name: `completed-split-${randomUUID()}`,
+        order: 960,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    const moved = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${originalId}/development-stage`,
+          payload: { developmentStageId: completedStage.id },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(moved.statusCode).toBe(200);
+
+    const response = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: `/api/tasks/${originalId}/split`,
+          payload: {
+            parts: [
+              { title: "part 1", priority: "low" },
+              { title: "part 2", priority: "low" },
+            ],
+          },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toMatch(/closed task cannot take children/i);
+
+    const leakedParts =
+      response.statusCode === 201
+        ? (response.json() as { id: string }[]).map((p) => p.id)
+        : [];
+    await hardDelete("tasks", [...leakedParts, originalId]);
+    await hardDelete("development_stages", [completedStage.id]);
+  });
+
+  it("POST /api/tasks returns 409 when parentTaskId is a completed-stage task (5.6)", async () => {
+    const parent = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "closed parent", priority: "medium" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const parentId = parent.json().id as string;
+    const completedStage = await db.developmentStage.create({
+      data: {
+        name: `completed-parent-${randomUUID()}`,
+        order: 961,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    const moved = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${parentId}/development-stage`,
+          payload: { developmentStageId: completedStage.id },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(moved.statusCode).toBe(200);
+
+    const response = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: {
+            title: "child under closed",
+            priority: "low",
+            parentTaskId: parentId,
+          },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toMatch(/closed task cannot take children/i);
+
+    const leakedChild = response.statusCode === 201 ? [response.json().id as string] : [];
+    await hardDelete("tasks", [...leakedChild, parentId]);
+    await hardDelete("development_stages", [completedStage.id]);
+  });
+
   // task-status-model 3.2: terminal-stage status edits → status_not_applicable (409).
   it("PATCH /api/tasks/:id/status returns 409 when the task is on a terminal stage (4.5)", async () => {
     const created = await app.inject(

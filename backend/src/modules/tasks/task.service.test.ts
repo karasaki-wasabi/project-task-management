@@ -1031,6 +1031,182 @@ describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
   });
 });
 
+describe("tasksService closed parent child invariant (task-status-model 3.3, Requirements 5.5, 5.6)", () => {
+  async function createStage(
+    kind: "normal" | "completed" | "cancelled",
+    order: number,
+  ) {
+    return db.developmentStage.create({
+      data: {
+        name: `${kind}-${randomUUID()}`,
+        order,
+        kind,
+        workspaceId: workspaceA,
+      },
+    });
+  }
+
+  it("rejects splitTask when the task is on a completed stage (5.5)", async () => {
+    const original = await tasksService.create({
+      title: "closed split parent",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!original.ok) throw new Error("setup failed");
+    const completed = await createStage("completed", 930);
+    const closed = await tasksService.updateDevelopmentStage(
+      original.value.id,
+      workspaceA,
+      completed.id,
+    );
+    if (!closed.ok) throw new Error("setup failed");
+
+    const result = await tasksService.splitTask(original.value.id, workspaceA, [
+      { title: "part 1", priority: "low", workspaceId: workspaceA },
+      { title: "part 2", priority: "low", workspaceId: workspaceA },
+    ]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({
+      type: "closed_task_cannot_take_children",
+      taskId: original.value.id,
+    });
+
+    await hardDeleteTasks([original.value.id]);
+    await hardDeleteStages([completed.id]);
+  });
+
+  it("rejects splitTask when the task is on a cancelled stage (5.5)", async () => {
+    const original = await tasksService.create({
+      title: "cancelled split parent",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!original.ok) throw new Error("setup failed");
+    const cancelled = await createStage("cancelled", 931);
+    const closed = await tasksService.updateDevelopmentStage(
+      original.value.id,
+      workspaceA,
+      cancelled.id,
+    );
+    if (!closed.ok) throw new Error("setup failed");
+
+    const result = await tasksService.splitTask(original.value.id, workspaceA, [
+      { title: "part 1", priority: "low", workspaceId: workspaceA },
+      { title: "part 2", priority: "low", workspaceId: workspaceA },
+    ]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({
+      type: "closed_task_cannot_take_children",
+      taskId: original.value.id,
+    });
+
+    await hardDeleteTasks([original.value.id]);
+    await hardDeleteStages([cancelled.id]);
+  });
+
+  it("rejects create when parentTaskId is a completed-stage task (5.6)", async () => {
+    const parent = await tasksService.create({
+      title: "completed parent",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!parent.ok) throw new Error("setup failed");
+    const completed = await createStage("completed", 932);
+    const closed = await tasksService.updateDevelopmentStage(
+      parent.value.id,
+      workspaceA,
+      completed.id,
+    );
+    if (!closed.ok) throw new Error("setup failed");
+
+    const result = await tasksService.create({
+      title: "open child under closed",
+      priority: "low",
+      parentTaskId: parent.value.id,
+      workspaceId: workspaceA,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({
+      type: "closed_task_cannot_take_children",
+      taskId: parent.value.id,
+    });
+
+    await hardDeleteTasks([parent.value.id]);
+    await hardDeleteStages([completed.id]);
+  });
+
+  it("rejects addChild when the parent is on a completed stage (5.6)", async () => {
+    const parent = await tasksService.create({
+      title: "completed addChild parent",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!parent.ok) throw new Error("setup failed");
+    const completed = await createStage("completed", 933);
+    const closed = await tasksService.updateDevelopmentStage(
+      parent.value.id,
+      workspaceA,
+      completed.id,
+    );
+    if (!closed.ok) throw new Error("setup failed");
+
+    const result = await tasksService.addChild(parent.value.id, workspaceA, {
+      title: "child of closed",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({
+      type: "closed_task_cannot_take_children",
+      taskId: parent.value.id,
+    });
+
+    await hardDeleteTasks([parent.value.id]);
+    await hardDeleteStages([completed.id]);
+  });
+
+  it("rejects create when parentTaskId is a cancelled-stage task (5.6)", async () => {
+    const parent = await tasksService.create({
+      title: "cancelled parent",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!parent.ok) throw new Error("setup failed");
+    const cancelled = await createStage("cancelled", 934);
+    const closed = await tasksService.updateDevelopmentStage(
+      parent.value.id,
+      workspaceA,
+      cancelled.id,
+    );
+    if (!closed.ok) throw new Error("setup failed");
+
+    const result = await tasksService.create({
+      title: "open child under cancelled",
+      priority: "low",
+      parentTaskId: parent.value.id,
+      workspaceId: workspaceA,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({
+      type: "closed_task_cannot_take_children",
+      taskId: parent.value.id,
+    });
+
+    await hardDeleteTasks([parent.value.id]);
+    await hardDeleteStages([cancelled.id]);
+  });
+});
+
 describe("tasksService assignee membership (workspace-resource-scope task 3.2, Requirement 4.2)", () => {
   it("rejects create when assigneeUserId is not a workspace member", async () => {
     const outsider = await db.user.create({ data: createUserData(`outsider-create-${randomUUID()}`) });

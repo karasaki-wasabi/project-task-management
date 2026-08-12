@@ -58,4 +58,6 @@ export type TaskError =
   | { type: "incomplete_children"; taskId: string }
   // task-status-model 3.2: status edits are rejected on terminal stages (4.5).
   | { type: "status_not_applicable"; taskId: string }
+  // task-status-model 3.3: closed tasks cannot gain open children (5.5, 5.6).
+  | { type: "closed_task_cannot_take_children"; taskId: string }
   | { type: "validation_error"; message: string };

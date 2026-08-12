@@ -70,6 +70,7 @@ function taskErrorStatusCode(error: TaskError): number {
       return 404;
     case "incomplete_children":
     case "status_not_applicable":
+    case "closed_task_cannot_take_children":
       return 409;
     case "validation_error":
       return 400;
@@ -84,6 +85,8 @@ function taskErrorMessage(error: TaskError): string {
       return `Task has incomplete children: ${error.taskId}`;
     case "status_not_applicable":
       return `Status not applicable: ${error.taskId}`;
+    case "closed_task_cannot_take_children":
+      return `Closed task cannot take children: ${error.taskId}`;
     case "validation_error":
       return error.message;
   }

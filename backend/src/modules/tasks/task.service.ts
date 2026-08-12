@@ -20,6 +20,7 @@ import { caseRepository } from "../cases/case.repository.js";
 import { developmentStagesService } from "../development-stages/development-stage.service.js";
 import type { DevelopmentStageKind } from "../development-stages/development-stage.types.js";
 import { workspaceService } from "../workspaces/workspace.service.js";
+import { resolveClosureState } from "./task.closure.js";
 import { taskRepository } from "./task.repository.js";
 import type { CreateTaskInput, Task, TaskError, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
 
@@ -29,6 +30,22 @@ function isRecordNotFoundError(error: unknown): boolean {
 
 function isForeignKeyViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
+}
+
+// task-status-model 3.3: closed parents cannot receive open children (5.5, 5.6).
+async function assertParentCanTakeOpenChildren(
+  parent: Task,
+  workspaceId: VerifiedWorkspaceId,
+): Promise<Result<void, TaskError>> {
+  let kind: DevelopmentStageKind | null = null;
+  if (parent.developmentStageId != null) {
+    const stage = await developmentStagesService.getById(parent.developmentStageId, workspaceId);
+    kind = stage?.kind ?? null;
+  }
+  if (resolveClosureState(kind) !== "open") {
+    return err({ type: "closed_task_cannot_take_children", taskId: parent.id });
+  }
+  return ok(undefined);
 }
 
 async function assertAssigneeIsWorkspaceMember(
@@ -114,6 +131,20 @@ export const tasksService = {
     );
     if (!relatedCheck.ok) {
       return relatedCheck;
+    }
+
+    if (input.parentTaskId != null) {
+      const parent = await taskRepository.findById(input.parentTaskId, input.workspaceId, client);
+      if (!parent) {
+        return err({
+          type: "validation_error",
+          message: "parentTaskId does not exist in the current workspace",
+        });
+      }
+      const closedParentCheck = await assertParentCanTakeOpenChildren(parent, input.workspaceId);
+      if (!closedParentCheck.ok) {
+        return closedParentCheck;
+      }
     }
 
     try {
@@ -315,6 +346,11 @@ export const tasksService = {
       return err({ type: "not_found", taskId: parentTaskId });
     }
 
+    const closedParentCheck = await assertParentCanTakeOpenChildren(parent, workspaceId);
+    if (!closedParentCheck.ok) {
+      return closedParentCheck;
+    }
+
     const title = input.title.trim();
     if (title.length === 0) {
       return err({ type: "validation_error", message: "title is required" });
@@ -361,6 +397,11 @@ export const tasksService = {
     const original = await taskRepository.findById(taskId, workspaceId);
     if (!original) {
       return err({ type: "not_found", taskId });
+    }
+
+    const closedParentCheck = await assertParentCanTakeOpenChildren(original, workspaceId);
+    if (!closedParentCheck.ok) {
+      return closedParentCheck;
     }
 
     for (const part of parts) {
