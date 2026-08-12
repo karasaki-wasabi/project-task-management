@@ -5,6 +5,10 @@
   `DevelopmentStageManager` (frontend/components/kanban/DevelopmentStageManager.vue);
   this page is just the route entry point.
 
+  task-status-model 5.1 (Requirements 1.5, 1.8): terminal kind display and
+  disabled delete with reason are owned by DevelopmentStageManager — the
+  screen surface named by design.md / tasks.md as stages.vue.
+
   A link back from `/kanban` (Requirement 7.2) and removal of the old
   inline UI on `/kanban` (Requirement 7.4's board-refresh-on-change is
   already covered by that page's existing `loadStages()` on mount) are the

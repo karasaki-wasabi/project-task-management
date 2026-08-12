@@ -12,13 +12,33 @@
   `.stage-list` class name is preserved as an E2E test hook (see
   frontend/e2e/kanban.spec.ts, to be updated in a later task to navigate
   here).
+
+  task-status-model 5.1: terminal stages show kind and keep delete visible
+  but disabled with 「この段階は削除できません」(Requirements 1.5, 1.8).
 -->
 <script setup lang="ts">
+import { onMounted, ref } from "vue";
+import {
+  useApiClient,
+  type DevelopmentStage,
+  type DevelopmentStageKind,
+} from "../../composables/useApiClient";
+import StageBadge from "../shared/StageBadge.vue";
 import { swapStageOrder } from "./DevelopmentStageManager.helpers";
 
 const api = useApiClient();
 const stages = ref<DevelopmentStage[]>([]);
 const newStageName = ref("");
+
+function isTerminalStage(stage: DevelopmentStage): boolean {
+  return stage.kind === "completed" || stage.kind === "cancelled";
+}
+
+function stageKindLabel(kind: DevelopmentStageKind): string {
+  if (kind === "completed") return "完了";
+  if (kind === "cancelled") return "中止";
+  return "";
+}
 
 async function loadStages() {
   stages.value = await api.listDevelopmentStages();
@@ -84,11 +104,22 @@ onMounted(async () => {
       <li
         v-for="(stage, index) in stages"
         :key="stage.id"
+        :data-stage-id="stage.id"
         class="flex items-center gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200"
       >
-        <span class="flex-1 text-sm font-medium text-slate-900">{{ stage.name }}</span>
+        <span class="flex flex-1 items-center gap-2 text-sm font-medium text-slate-900">
+          <span>{{ stage.name }}</span>
+          <StageBadge
+            v-if="isTerminalStage(stage)"
+            data-testid="stage-kind-badge"
+            :kind="stage.kind"
+            :name="stageKindLabel(stage.kind)"
+            prefix-mode="list"
+          />
+        </span>
         <button
           type="button"
+          data-testid="stage-move-up"
           :disabled="index === 0"
           class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           @click="moveStage(index, -1)"
@@ -97,6 +128,7 @@ onMounted(async () => {
         </button>
         <button
           type="button"
+          data-testid="stage-move-down"
           :disabled="index === stages.length - 1"
           class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           @click="moveStage(index, 1)"
@@ -105,6 +137,7 @@ onMounted(async () => {
         </button>
         <button
           type="button"
+          data-testid="stage-rename"
           class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
           @click="renameStage(stage)"
         >
@@ -112,11 +145,20 @@ onMounted(async () => {
         </button>
         <button
           type="button"
-          class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          data-testid="stage-delete"
+          :disabled="isTerminalStage(stage)"
+          class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           @click="deleteStage(stage.id)"
         >
           削除
         </button>
+        <span
+          v-if="isTerminalStage(stage)"
+          data-testid="stage-delete-reason"
+          class="text-xs text-slate-500"
+        >
+          この段階は削除できません
+        </span>
       </li>
     </ol>
   </section>
