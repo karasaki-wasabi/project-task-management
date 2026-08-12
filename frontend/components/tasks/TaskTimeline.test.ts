@@ -64,11 +64,12 @@ function page(items: TaskTimelinePage["items"], nextCursor: string | null = null
   return { items, nextCursor };
 }
 
-function mountTimeline() {
+function mountTimeline(readOnly = false) {
   return mount(TaskTimeline, {
     props: {
       taskId: "task-1",
       currentUserId: "user-current",
+      readOnly,
     },
   });
 }
@@ -183,6 +184,16 @@ describe("TaskTimeline", () => {
     expect(wrapper.find('button[aria-label="自分のコメントを削除"]').exists()).toBe(true);
     expect(wrapper.find('button[aria-label="他人のコメントを編集"]').exists()).toBe(false);
     expect(wrapper.find('button[aria-label="他人のコメントを削除"]').exists()).toBe(false);
+  });
+
+  it("参照専用では自分のコメントにも編集・削除操作を提示しない", async () => {
+    getTaskTimeline.mockResolvedValue(page([makeComment()]));
+    const wrapper = mountTimeline(true);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("自分のコメント");
+    expect(wrapper.find('button[aria-label="自分のコメントを編集"]').exists()).toBe(false);
+    expect(wrapper.find('button[aria-label="自分のコメントを削除"]').exists()).toBe(false);
   });
 
   it("自分のコメントを CommentComposer で編集し、成功後に再取得する", async () => {

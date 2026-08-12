@@ -9,10 +9,16 @@ import {
   type TaskTimelineFilter,
 } from "../../composables/useApiClient";
 
-const props = defineProps<{
-  taskId: string;
-  currentUserId: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    taskId: string;
+    currentUserId: string;
+    readOnly?: boolean;
+  }>(),
+  {
+    readOnly: false,
+  },
+);
 
 const api = useApiClient();
 const filter = ref<TaskTimelineFilter>("all");
@@ -233,7 +239,11 @@ onMounted(() => {
             </div>
 
             <div
-              v-if="entry.authorUserId === currentUserId && editingCommentId !== entry.id"
+              v-if="
+                !readOnly &&
+                entry.authorUserId === currentUserId &&
+                editingCommentId !== entry.id
+              "
               class="flex items-center gap-2"
             >
               <button
