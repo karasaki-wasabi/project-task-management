@@ -101,7 +101,7 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
       statusCode: 404,
     });
 
-    const stillThere = await developmentStagesService.findById(foreign.id, workspaceB);
+    const stillThere = await developmentStagesService.getById(foreign.id, workspaceB);
     expect(stillThere?.name).toBe(foreign.name);
   });
 
@@ -143,14 +143,58 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
     expect(ids).not.toContain(foreign.id);
   });
 
-  it("findById returns a stage in the workspace and null for another workspace (scoped reuse API)", async () => {
-    const stage = await createTracked(`find-${randomUUID()}`, workspaceA);
+  it("list includes kind for each stage (task-status-model 2.1, Requirements 1.1, 1.8)", async () => {
+    const stage = await createTracked(`kind-list-${randomUUID()}`, workspaceA);
+    await db.developmentStage.create({
+      data: {
+        name: `completed-${randomUUID()}`,
+        order: stage.order + 10,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    }).then((row) => createdStageIds.push(row.id));
+    await db.developmentStage.create({
+      data: {
+        name: `cancelled-${randomUUID()}`,
+        order: stage.order + 11,
+        kind: "cancelled",
+        workspaceId: workspaceA,
+      },
+    }).then((row) => createdStageIds.push(row.id));
 
-    expect(await developmentStagesService.findById(stage.id, workspaceA)).toMatchObject({
+    const list = await developmentStagesService.list(workspaceA);
+    const byId = new Map(list.map((s) => [s.id, s]));
+
+    expect(byId.get(stage.id)?.kind).toBe("normal");
+    expect(list.every((s) => s.kind === "normal" || s.kind === "completed" || s.kind === "cancelled")).toBe(
+      true,
+    );
+    expect(list.some((s) => s.kind === "completed")).toBe(true);
+    expect(list.some((s) => s.kind === "cancelled")).toBe(true);
+  });
+
+  it("getById returns a stage with kind in the workspace and null for another workspace (task-status-model 2.1)", async () => {
+    const stage = await createTracked(`find-${randomUUID()}`, workspaceA);
+    const completed = await db.developmentStage.create({
+      data: {
+        name: `find-completed-${randomUUID()}`,
+        order: stage.order + 20,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    createdStageIds.push(completed.id);
+
+    expect(await developmentStagesService.getById(stage.id, workspaceA)).toMatchObject({
       id: stage.id,
       workspaceId: workspaceA,
+      kind: "normal",
     });
-    expect(await developmentStagesService.findById(stage.id, workspaceB)).toBeNull();
+    expect(await developmentStagesService.getById(completed.id, workspaceA)).toMatchObject({
+      id: completed.id,
+      kind: "completed",
+    });
+    expect(await developmentStagesService.getById(stage.id, workspaceB)).toBeNull();
   });
 
   it("deleting a stage resets developmentStageId to null on tasks that referenced it, and excludes it from list (Requirement 12.5, 9.4)", async () => {

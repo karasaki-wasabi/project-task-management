@@ -9,7 +9,13 @@ import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/works
 import type { DevelopmentStage } from "./development-stage.types.js";
 
 function toDomain(row: PrismaDevelopmentStage): DevelopmentStage {
-  return { id: row.id, name: row.name, order: row.order, workspaceId: row.workspaceId };
+  return {
+    id: row.id,
+    name: row.name,
+    order: row.order,
+    kind: row.kind,
+    workspaceId: row.workspaceId,
+  };
 }
 
 export const developmentStageRepository = {
@@ -20,8 +26,11 @@ export const developmentStageRepository = {
     return toDomain(row);
   },
 
-  findById(id: string, workspaceId: VerifiedWorkspaceId): Promise<PrismaDevelopmentStage | null> {
-    return db.developmentStage.findFirst({ where: withWorkspaceScope({ id }, workspaceId) });
+  async findById(id: string, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage | null> {
+    const row = await db.developmentStage.findFirst({
+      where: withWorkspaceScope({ id }, workspaceId),
+    });
+    return row ? toDomain(row) : null;
   },
 
   async rename(id: string, workspaceId: VerifiedWorkspaceId, name: string): Promise<DevelopmentStage> {

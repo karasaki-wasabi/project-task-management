@@ -310,6 +310,30 @@ describe("developmentStageRoutes (task 14.1 + workspace-resource-scope 6.1)", ()
     expect(list.some((s) => s.id === foreign.json().id)).toBe(false);
   });
 
+  it("GET /api/development-stages includes kind on each stage (task-status-model 2.1, Requirement 1.8)", async () => {
+    const created = await app.inject(
+      withWorkspace(
+        { method: "POST", url: "/api/development-stages", payload: { name: `kind-api-${randomUUID()}` } },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(created.statusCode).toBe(201);
+    const createdBody = created.json() as { id: string; kind: string };
+    stageIds.push(createdBody.id);
+    expect(createdBody.kind).toBe("normal");
+
+    const listResponse = await app.inject(
+      withWorkspace({ method: "GET", url: "/api/development-stages" }, memberCsrf.cookie, undefined, workspaceA),
+    );
+    expect(listResponse.statusCode).toBe(200);
+    const list = listResponse.json() as { id: string; kind: string }[];
+    expect(list.length).toBeGreaterThan(0);
+    expect(list.every((s) => ["normal", "completed", "cancelled"].includes(s.kind))).toBe(true);
+    expect(list.find((s) => s.id === createdBody.id)?.kind).toBe("normal");
+  });
+
   it("DELETE /api/development-stages/:id returns 404 for a non-existent stage", async () => {
     const response = await app.inject(
       withWorkspace(

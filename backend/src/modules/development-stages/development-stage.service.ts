@@ -1,7 +1,8 @@
 // DevelopmentStagesService (task 14.1, design.md "Backend/development-stages",
 // Requirements 12.1, 12.2, 12.5).
-// workspace-resource-scope task 6.1: create/list/rename/reorder/delete/findById
+// workspace-resource-scope task 6.1: create/list/rename/reorder/delete/getById
 // are scoped by VerifiedWorkspaceId; cross-workspace access yields 404.
+// task-status-model 2.1: domain responses include kind; getById resolves a stage by id.
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
@@ -32,10 +33,8 @@ export const developmentStagesService = {
     return developmentStageRepository.create(name, nextOrder, workspaceId);
   },
 
-  async findById(id: string, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage | null> {
-    const row = await developmentStageRepository.findById(id, workspaceId);
-    if (!row) return null;
-    return { id: row.id, name: row.name, order: row.order, workspaceId: row.workspaceId };
+  getById(id: string, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage | null> {
+    return developmentStageRepository.findById(id, workspaceId);
   },
 
   async rename(id: string, workspaceId: VerifiedWorkspaceId, name: string): Promise<DevelopmentStage> {
