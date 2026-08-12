@@ -746,7 +746,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
 
       const comments = await app.inject(
         withWorkspace(
-          { method: "GET", url: `/api/tasks/${task.id}/timeline?filter=comments` },
+          { method: "GET", url: `/api/tasks/${task.id}/timeline?filter=comments&limit=1` },
           memberCsrf.cookie,
           undefined,
           workspaceA,
@@ -755,29 +755,79 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       expect(comments.statusCode).toBe(200);
       expect(comments.json().items).toEqual([
         expect.objectContaining({ id: commentIds[1], type: "comment", body: "newer comment" }),
-        expect.objectContaining({ id: commentIds[0], type: "comment", body: "older comment" }),
       ]);
+      expect(comments.json().nextCursor).toEqual(expect.any(String));
+
+      const commentsNextPage = await app.inject(
+        withWorkspace(
+          {
+            method: "GET",
+            url:
+              `/api/tasks/${task.id}/timeline?filter=comments&limit=1&cursor=` +
+              encodeURIComponent(comments.json().nextCursor as string),
+          },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(commentsNextPage.statusCode).toBe(200);
+      expect(commentsNextPage.json()).toEqual({
+        items: [
+          expect.objectContaining({ id: commentIds[0], type: "comment", body: "older comment" }),
+        ],
+        nextCursor: null,
+      });
 
       const changes = await app.inject(
         withWorkspace(
-          { method: "GET", url: `/api/tasks/${task.id}/timeline?filter=changes` },
+          { method: "GET", url: `/api/tasks/${task.id}/timeline?filter=changes&limit=1` },
           memberCsrf.cookie,
           undefined,
           workspaceA,
         ),
       );
       expect(changes.statusCode).toBe(200);
-      expect(changes.json().items).toEqual(
-        [...changeIds]
-          .sort((a, b) => b.localeCompare(a))
-          .map((id) => expect.objectContaining({ id, type: "change", operationType: "field_changed" })),
-      );
+      const sortedChangeIds = [...changeIds].sort((a, b) => b.localeCompare(a));
+      expect(changes.json().items).toEqual([
+        expect.objectContaining({
+          id: sortedChangeIds[0],
+          type: "change",
+          operationType: "field_changed",
+        }),
+      ]);
+      expect(changes.json().nextCursor).toEqual(expect.any(String));
       expect(changes.json().items).not.toContainEqual(
         expect.objectContaining({ operationType: "task_created" }),
       );
       expect(changes.json().items).not.toContainEqual(
         expect.objectContaining({ operationType: "comment_edited" }),
       );
+
+      const changesNextPage = await app.inject(
+        withWorkspace(
+          {
+            method: "GET",
+            url:
+              `/api/tasks/${task.id}/timeline?filter=changes&limit=1&cursor=` +
+              encodeURIComponent(changes.json().nextCursor as string),
+          },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(changesNextPage.statusCode).toBe(200);
+      expect(changesNextPage.json()).toEqual({
+        items: [
+          expect.objectContaining({
+            id: sortedChangeIds[1],
+            type: "change",
+            operationType: "field_changed",
+          }),
+        ],
+        nextCursor: null,
+      });
     } finally {
       await db.$executeRaw`DELETE FROM activity_logs WHERE task_id = ${task.id}`;
       await db.$executeRaw`DELETE FROM comments WHERE task_id = ${task.id}`;
