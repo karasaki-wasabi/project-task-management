@@ -7,9 +7,9 @@
 ## Current State
 
 - `TaskDetailModal` がカンバン／カレンダーから開き、主要フィールドの閲覧・編集・削除ができる
-- `/tasks/:id` のような詳細ページはない
+- `/workspaces/:workspaceId/tasks/:taskId` のような詳細ページはない
 - コメント、ユーザー向け操作ログのモデルはない（ops の pino ログとは別物）
-- 認証・ワークスペース導入後は、操作者＝ログインユーザー、データはワークスペーススコープが前提になる
+- 操作者はログインユーザー、データはワークスペーススコープが前提（user-auth / workspace-resource-scope 済み）
 
 ## Desired Outcome
 

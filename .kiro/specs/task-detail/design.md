@@ -6,7 +6,7 @@
 
 **Users**: ワークスペースのメンバーが、カンバン/カレンダーからの簡易確認では足りない場面（経緯の確認、コメントでの議論、変更履歴の追跡）で利用する。
 
-**Impact**: `tasks` モジュールの更新API（`PATCH /api/tasks/:id`）が `parentTaskId` と `scheduledEndDate`（終了予定日）を受け付けるよう拡張される。`TasksService` の書き込み系メソッド（`create`/`update`/`updateStatus`/`updateDevelopmentStage`/`addChild`/`splitTask`/`delete`）すべてに操作ログ記録が追加される。`comments`・`activity-logs` という2つの新規ドメインモジュールが追加される。フィールド語彙は先行仕様 `task-field-rename` 完了後の `detail` / `scheduledEndDate` を前提とする。
+**Impact**: `tasks` モジュールの更新API（`PATCH /api/tasks/:id`）が `parentTaskId` と `scheduledEndDate`（終了予定日）を受け付けるよう拡張される。作成API（`POST /api/tasks`）も任意の `scheduledEndDate` を受け付け、複製（Requirement 2.9）を1回の POST で完結できるようにする（現状は recurrence 内部経路のみが当該フィールドを設定可能）。`TasksService` の書き込み系メソッド（`create`/`update`/`updateStatus`/`updateDevelopmentStage`/`addChild`/`splitTask`/`delete`）すべてに操作ログ記録が追加される。`comments`・`activity-logs` という2つの新規ドメインモジュールが追加される。フィールド語彙は先行仕様 `task-field-rename` 完了後の `detail` / `scheduledEndDate` を前提とする。
 
 ### Goals
 - タスク詳細ページで CRUD・コメント・タイムラインを1画面に統合する
@@ -16,7 +16,7 @@
 ### Non-Goals
 - タスクのフィールド定義そのものの変更・改名（`task-field-rename` / 凍結済み `task-delivery-management` の管掌）
 - 開発段階・ステータスの語彙定義（`task-status-model` の管掌）
-- `memo`→`detail`、`scheduledDate`→`scheduledEndDate` のマイグレーションおよびアプリ全体の文言揃え（`task-field-rename`）
+- `memo`→`detail`、`scheduledDate`→`scheduledEndDate` のマイグレーションおよびアプリ全体の文言揃え（`task-field-rename` で完了済み。本仕様では再実行しない）
 - コメント・操作ログのリアルタイム配信（WebSocket等）
 
 ## Boundary Commitments
@@ -27,12 +27,14 @@
 - 操作ログドメイン（`ActivityLog` モデル、記録サービス、表示用フィルタリング）
 - タイムライン集約（コメント＋操作ログのマージ、絞り込みタブ）
 - タスク更新API（`PATCH /api/tasks/:id`）への `parentTaskId`・`scheduledEndDate` 編集対応の追加（既存 `tasks` モジュールの拡張として、本仕様が実装する。フィールド名は `task-field-rename` 後の語彙）
-- タスクの複製（既存の作成APIをクライアント側で合成する形で提供し、新規バックエンドAPIは持たない）
+- タスク作成API（`POST /api/tasks`）への任意 `scheduledEndDate` 受付の追加（複製で終了予定日を引き継ぐため。専用の複製エンドポイントは持たない）
+- タスク一覧API（`GET /api/tasks`）への `titleContains` / `excludeSubtreeOf` / `excludeClosed` の追加（親タスク候補のサーバー側絞り込み）
+- タスクの複製（拡張後の作成APIをクライアント側で合成する形で提供し、新規バックエンドAPIは持たない）
 - 既存 `TaskDetailModal` の縮小（コメント・タイムラインを持たせず、詳細ページへの導線を追加）
 
 ### Out of Boundary
 - タスクの基本フィールド（タイトル・優先度・案件関連付け等）の定義自体（凍結済み `task-delivery-management`）
-- `memo`→`detail`、`scheduledDate`→`scheduledEndDate` の改名と全画面文言揃え（`task-field-rename`）
+- `memo`→`detail`、`scheduledDate`→`scheduledEndDate` の改名と全画面文言揃え（`task-field-rename` で完了済み）
 - 開発段階の種別・ステータス語彙・完了判定（`task-status-model`）。本仕様はこれらの確定済みAPI（`DevelopmentStage.kind` 等）を読み取るのみ
 - 案件（Case）モデル・必須タスク判定ロジック自体（`case-management-ux`）
 - ワークスペース所属判定・アクセス制御の実装（`workspace-resource-scope`）。本仕様は既存ガードを再利用するのみ
@@ -57,9 +59,20 @@
 
 `backend/src/modules/<domain>/` の feature-first構成、`routes → service → repository` の一方向依存を維持する。既存 `TasksService` の公開メソッドは9個（`create`, `getById`, `updateStatus`, `updateDevelopmentStage`, `update`, `addChild`, `splitTask`, `delete`, `list`）。このうち `addChild` と `splitTask` は `taskRepository` を直接呼び出しており（`create()` を経由しない）、操作ログのフックはこの2つにも個別に必要になる。
 
-カンバンD&D・タスク一覧・`TaskDetailModal` はいずれもステータス変更に `PATCH /api/tasks/:id/status`、開発段階変更に `PATCH /api/tasks/:id/development-stage` という単一のエンドポイント（＝単一の `TasksService` メソッド）を共用している。したがって、この2メソッドへのフックだけで Requirement 5.4（起点画面によらず記録する）を満たせる。繰り返しテンプレートの自動生成（`recurrence.service.ts`）も `TasksService.create`/`delete` を経由しているため、追加のフックは不要。
+画面ごとの呼び出し経路は次のとおり（いずれも `TasksService` の対応メソッドに収束する）。
 
-`PATCH /api/tasks/:id` は現状（`task-field-rename` 完了後）`title`/`priority`/`detail`/`caseId`/`isRequiredForCase`/`assigneeUserId` 等を受け付け、`parentTaskId`（親タスク）と `scheduledEndDate`（終了予定日）は編集対象になっていない。Requirement 2.1 を満たすには、この更新APIの入力型を拡張し、親タスク変更時の循環検出（2.5）・クローズ済み親の拒否（2.6）を追加する必要がある。
+- タスク一覧のステータス変更
+  - `PATCH /api/tasks/:id/status` → `updateStatus`
+- カンバンD&Dおよび `TaskDetailModal` の開発段階変更
+  - `PATCH /api/tasks/:id/development-stage` → `updateDevelopmentStage`
+- `TaskDetailModal` の一般項目編集（タイトル・優先度・詳細・担当者・案件等）
+  - `PATCH /api/tasks/:id` → `update`（モーダルにステータス編集UIはない）
+
+したがって Requirement 5.4（起点画面によらず記録する）は、`updateStatus` / `updateDevelopmentStage` / `update` へのフックで満たせる。繰り返しテンプレートの自動生成（`recurrence.service.ts`）も `TasksService.create`/`delete` を経由しているため、追加のフックは不要。
+
+`PATCH /api/tasks/:id` は現状（`task-field-rename` 完了後）`title`/`priority`/`detail`/`caseId`/`isRequiredForCase`/`assigneeUserId` 等を受け付け、`parentTaskId`（親タスク）と `scheduledEndDate`（終了予定日）は編集対象になっていない。Requirement 2.1 を満たすには、この更新APIの入力型を拡張し、親タスク変更時の循環検出（2.5）・クローズ済み親の拒否（2.6）を追加する必要がある。`caseId` 解除時の `isRequiredForCase` 自動オフ（2.8）は既存の `TasksService.update` に実装済みであり、本仕様の追加作業は操作ログへの `field_changed(isRequiredForCase)` 記録である。
+
+`POST /api/tasks` の公開 Zod も現状は `scheduledEndDate` を受け付けない（service の `CreateTaskInput` にはあるが、呼び出しは recurrence 内部が主）。Requirement 2.9 の複製で終了予定日を引き継ぐため、本仕様で公開 create スキーマへ任意 `scheduledEndDate` を追加する。
 
 ### Architecture Pattern & Boundary Map
 
@@ -108,7 +121,7 @@ graph TB
 |-------|------------------|-----------------|-------|
 | Frontend | Nuxt 4 / Vue 3 | 詳細ページ、インライン編集、タイムラインUI | 新規npm依存なし。検索付きセレクト（親タスク選択）は既存コンポーネント資産に前例がないため自作する（軽量・単機能のため外部ライブラリ導入は見送り = Build判断） |
 | Backend | Fastify 5 + Zod | コメント・操作ログのAPI、既存タスクAPIの拡張 | 新規npm依存なし |
-| Data | Prisma + MySQL | `Comment`・`ActivityLog` テーブルの追加 | マイグレーション要 |
+| Data | Prisma + MySQL | `Comment`・`ActivityLog` テーブルの追加 | スキーマ変更は [[prisma-migrations]] に従い、追従マイグレーションを作らず単一 init（`*_init_domain_schema`）へ畳み込む。開発 DB は `migrate reset` で再適用する |
 
 ## File Structure Plan
 
@@ -127,8 +140,8 @@ backend/src/modules/
 │   ├── activity-log.repository.ts  # 追記専用（update/deleteメソッドを持たない）
 │   └── activity-log.service.ts     # record()（記録）、listDisplayable()（表示用フィルタ）
 └── tasks/
-    ├── task.service.ts             # 変更: 各書き込みメソッドにActivityLogService.record()呼び出しを追加。update()にparentTaskId/scheduledEndDateと循環・クローズ済み検証を追加
-    └── task.routes.ts              # 変更: GET /api/tasks/:id/timeline を追加（comment+activity-logのマージ）
+    ├── task.service.ts             # 変更: 各書き込みメソッドにActivityLogService.record()呼び出しを追加。update()/create の scheduledEndDate・parentTaskId と循環・クローズ済み検証を追加。list に titleContains 等
+    └── task.routes.ts              # 変更: POST/PATCH の Zod 拡張、GET list の titleContains/excludeSubtreeOf/excludeClosed、GET /api/tasks/:id/timeline（comment+activity-logのマージ）
 
 frontend/
 ├── pages/workspaces/[workspaceId]/tasks/
@@ -149,9 +162,9 @@ frontend/
 ### Modified Files
 - `backend/src/app.ts` — `app.register(commentRoutes)` を追加（`WORKSPACE_SCOPED_PATH_PREFIXES` は既存の `/api/tasks` prefixがそのままカバーするため、この配列自体の変更は不要）
 - `backend/src/modules/tasks/task.service.ts` — 全書き込みメソッドへの操作ログ記録呼び出し追加（`prisma.$transaction` 化含む）、`update()` の入力拡張（`parentTaskId`, `scheduledEndDate`）と検証追加、`getById` への `includeDeleted` オプション追加、削除済みへの書き込み拒否
-- `backend/src/modules/tasks/task.repository.ts` — `list()` に `excludeSubtreeOf`/`excludeClosed` フィルタを追加（`task.closure.ts` のクローズ述語を再利用）、`findById` の `includeDeleted` 対応
-- `backend/src/modules/tasks/task.routes.ts` — `PATCH /api/tasks/:id` のZodスキーマ拡張、`GET /api/tasks`（一覧）への2パラメータ追加、`GET /api/tasks/:id/timeline`（`filter` 付き）追加、詳細 GET の削除済み返却
-- `backend/src/prisma/schema.prisma` — `Comment`・`ActivityLog` モデル追加
+- `backend/src/modules/tasks/task.repository.ts` — `list()` に `titleContains`/`excludeSubtreeOf`/`excludeClosed` フィルタを追加（`task.closure.ts` のクローズ述語を再利用）、`findById` の `includeDeleted` 対応
+- `backend/src/modules/tasks/task.routes.ts` — `POST /api/tasks` に任意 `scheduledEndDate`、`PATCH /api/tasks/:id` に `parentTaskId`/`scheduledEndDate`、`GET /api/tasks` に `titleContains`/`excludeSubtreeOf`/`excludeClosed`、`GET /api/tasks/:id/timeline`（`filter` 付き）、詳細 GET の削除済み返却
+- `backend/src/prisma/schema.prisma` — `Comment`・`ActivityLog` モデル追加。マイグレーション SQL は単一 init へ畳み込み（[[prisma-migrations]]。追従マイグレーションディレクトリは作らない）
 - `frontend/components/kanban/TaskDetailModal.vue` — 詳細ページへの導線追加
 - `frontend/composables/useApiClient.ts` — 新規API呼び出し関数の追加
 
@@ -199,11 +212,11 @@ sequenceDiagram
 | 1.6, 1.7 | 期限超過バッジ | TaskFieldCard | クライアント側計算（`scheduledEndDate` + `kind`） |
 | 2.1, 2.2, 2.3, 2.5, 2.6 | フィールド編集、親タスク検証 | InlineEditableField, ParentTaskCombobox, TasksService.update | PATCH /api/tasks/:id |
 | 2.4 | 完了日時の編集不可 | InlineEditableField（`completedAt` に✎を描画しない） | — |
-| 2.8 | 案件解除時の必須タスク自動オフ | TasksService.update | PATCH /api/tasks/:id |
-| 2.9 | 複製時のフィールド引き継ぎ | TaskDetailPage（クライアント合成） | POST /api/tasks（既存） |
-| 2.10 | 複製時にステータス/開発段階を初期状態にし、完了日時・コメント・操作ログ・子タスクを引き継がない | TaskDetailPage（複製ペイロードから `status`/`developmentStageId`/`completedAt` を除外し、既存作成APIの既定値に委ねる） | POST /api/tasks（既存） |
+| 2.8 | 案件解除時の必須タスク自動オフ（オフ自体は既存。本仕様は操作ログ記録を追加） | TasksService.update | PATCH /api/tasks/:id |
+| 2.9 | 複製時のフィールド引き継ぎ（終了予定日含む） | TaskDetailPage（クライアント合成） | POST /api/tasks（本仕様で任意 `scheduledEndDate` を追加） |
+| 2.10 | 複製時にステータス/開発段階を初期状態にし、完了日時・コメント・操作ログ・子タスクを引き継がない | TaskDetailPage（複製ペイロードから `status`/`developmentStageId`/`completedAt` を除外し、作成APIの既定値に委ねる） | POST /api/tasks |
 | 2.11 | 複製後の新規タスクへの遷移 | TaskDetailPage | フロントルーティング |
-| 3.1, 3.2, 3.3 | タスク削除 | TasksService.delete | DELETE /api/tasks/:id（既存） |
+| 3.1, 3.2, 3.3 | タスク削除（既存どおりソフトデリート。未完了子の有無では拒否しない） | TasksService.delete | DELETE /api/tasks/:id（既存） |
 | 4.1, 4.2, 4.3, 4.4, 4.5 | コメントCRUD | CommentService, CommentComposer | POST/PATCH/DELETE /api/tasks/:id/comments |
 | 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9 | 操作ログ記録 | ActivityLogService, TasksService（全書き込みメソッド）, CommentService | ActivityLogService.record() |
 | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8 | タイムライン表示・絞り込み | TaskTimeline, task routes（集約） | GET /api/tasks/:id/timeline |
@@ -220,7 +233,7 @@ sequenceDiagram
 | TasksService（拡張） | Backend/Service | 親タスク・終了予定日編集、全書き込みでの記録呼び出し、詳細取得の削除済み bypass | 1.4, 1.6, 1.7, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.8 | ActivityLogService (P0), DevelopmentStagesService (P1) | Service, API |
 | task routes（拡張） | Backend/Route | タイムライン集約エンドポイント | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8 | CommentService (P0), ActivityLogService (P0) | API |
 | InlineEditableField | Frontend/UI | ホバー/タップ選択→✎→ピッカーの共通コンポーネント | 2.1 | — | State |
-| ParentTaskCombobox | Frontend/UI | 親タスク検索、循環・クローズ済み除外 | 2.5, 2.6 | GET /api/tasks（`excludeSubtreeOf`/`excludeClosed` パラメータ追加、後述） | State |
+| ParentTaskCombobox | Frontend/UI | 親タスク検索、循環・クローズ済み除外 | 2.5, 2.6 | GET /api/tasks（`titleContains`/`excludeSubtreeOf`/`excludeClosed`、後述） | State |
 | TaskTimeline | Frontend/UI | 統合タイムライン表示、絞り込み | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8 | GET /api/tasks/:id/timeline | State |
 | TaskDetailPage | Frontend/Page | ページ全体の構成、404/削除済み/権限エラーの分岐、複製フロー | 1.1, 1.2, 1.4, 2.9, 2.10, 2.11 | InlineEditableField (P0), TaskFieldCard (P0), TaskTimeline (P0) | — |
 | TaskFieldCard | Frontend/UI | フィールドのグルーピング表示（状態/担当・日程・案件/親子タスク/詳細） | 1.1, 1.5, 1.6, 1.7 | InlineEditableField (P0) | — |
@@ -340,6 +353,23 @@ interface CommentService {
 |--------|----------|---------|----------|--------|
 | GET | /api/tasks/:id | - | Task（`deletedAt` 含む。削除済みも 200） | 404（未存在）, 403 |
 
+#### TasksService.create / POST /api/tasks（拡張、複製用）
+
+| Field | Detail |
+|-------|--------|
+| Intent | 公開作成APIで終了予定日を受け付け、複製（Requirement 2.9）を create→PATCH の2往復にせず1回の POST で完結させる |
+| Requirements | 2.9, 2.10 |
+
+**Responsibilities & Constraints**
+- `createTaskBodySchema` に任意の `scheduledEndDate`（日付文字列、nullable 不要。未指定時は従来どおり null）を追加する。service 層の `CreateTaskInput.scheduledEndDate` は既にあるため、ルートの Zod とクライアント合成が追いつく形にする
+- 複製ペイロードは元タスクのタイトル・優先度・詳細・担当者・案件・必須フラグ・親タスク・終了予定日を載せ、`status` / `developmentStageId` / `completedAt` は載せない（2.10。作成APIの既定値に委ねる）
+- 複製専用エンドポイントは作らない。操作ログは通常の `task_created` 1件として記録する（終了予定日のための追加 `field_changed` は発生しない）
+
+##### API Contract
+| Method | Endpoint | Request（追加分） | Response | Errors |
+|--------|----------|---------|----------|--------|
+| POST | /api/tasks | `scheduledEndDate?: string`（YYYY-MM-DD 等、既存日付フィールドと同じ形式）を追加 | Task | 既存どおり |
+
 #### TasksService.update（拡張）
 
 | Field | Detail |
@@ -349,7 +379,7 @@ interface CommentService {
 
 **Responsibilities & Constraints**
 - `parentTaskId` 変更時: 祖先チェーンを辿り自タスク・自身の子孫が指定されていれば拒否（2.5）。指定先が `task-status-model` の定めるクローズ済みなら拒否（2.6）
-- `caseId` が未設定に変更された場合、`isRequiredForCase` を自動的に `false` にする（2.8）。この自動オフは Requirement 5.6（開発段階変更に伴うステータス自動リセット）とは異なり、記録の除外対象ではない。通常の `field_changed(isRequiredForCase)` として `record()` を呼ぶ（5.6を根拠に「自動変更は記録しない」と一般化しないこと）
+- `caseId` が未設定に変更された場合の `isRequiredForCase` 自動オフ（2.8）は既存実装を維持する。本仕様ではその自動オフを Requirement 5.6（開発段階変更に伴うステータス自動リセット）の除外対象と混同せず、通常の `field_changed(isRequiredForCase)` として `record()` を呼ぶ（5.6を根拠に「自動変更は記録しない」と一般化しないこと）
 - `scheduledEndDate` の前後関係バリデーション（完了日時との比較等）は行わない（前倒し・延期のどちらも許可）
 - `detail` の変更は操作ログでは `field_changed` + `field: "detail"` として記録する（API/DB キーと一致）
 
@@ -362,18 +392,19 @@ interface CommentService {
 
 | Field | Detail |
 |-------|--------|
-| Intent | `ParentTaskCombobox` が使う候補一覧を、循環参照・クローズ済みを除外した状態でサーバー側から返す |
+| Intent | `ParentTaskCombobox` が使う候補一覧を、タイトル検索・循環参照除外・クローズ済み除外をサーバー側で行った状態で返す |
 | Requirements | 2.5, 2.6 |
 
 **Responsibilities & Constraints**
+- `titleContains=<string>` パラメータ: タイトルの部分一致（大文字小文字は DB／照合順に従う）。空文字や未指定はタイトル条件なし。汎用の短い `q` は使わない（何を探すクエリかが後から読み取れなくなるため）
 - `excludeSubtreeOf=<taskId>` パラメータ: 指定タスク自身とその子孫（祖先チェーンではなく子孫方向）を候補から除外する。既存の `taskRepository` は親子関係を持つため、再帰CTEまたはアプリ側での子孫ID集合の事前計算で実現する
 - `excludeClosed=true` パラメータ: `task-status-model` の定めるクローズ済みタスクを候補から除外する（既存のクローズ述語 `task.closure.ts` を再利用し、新規に判定ロジックを複製しない）
-- クライアント（`ParentTaskCombobox`）は全件取得ではなく、この2パラメータ付きの検索クエリでサーバー側フィルタ済みの候補だけを受け取る
+- クライアント（`ParentTaskCombobox`）は全件取得ではなく、上記パラメータ付きでサーバー側フィルタ済みの候補だけを受け取る
 
 ##### API Contract
 | Method | Endpoint | Request（追加分） | Response | Errors |
 |--------|----------|---------|----------|--------|
-| GET | /api/tasks | `excludeSubtreeOf?: string`, `excludeClosed?: boolean`（既存の `q` 等と併用可） | Task[] | 400 |
+| GET | /api/tasks | `titleContains?: string`, `excludeSubtreeOf?: string`, `excludeClosed?: boolean`（既存の `caseId` 等と併用可） | Task[] | 400 |
 
 #### task routes: GET /api/tasks/:id/timeline（新規）
 
@@ -481,6 +512,8 @@ erDiagram
 - `deletedAt`/`updatedAt` を持たない（Requirement 5.9 を物理スキーマで担保し、ソフトデリート拡張の対象外にする）
 - Index: `(taskId, occurredAt)` — タイムライン取得・カーソルページネーションに合わせる
 
+**スキーマ適用手順**: `schema.prisma` 更新後、[[prisma-migrations]] に従い差分を単一 init の `migration.sql` へ畳み込む。追従マイグレーションディレクトリの追加は禁止。生成列（`tasks.template_case_date_active_key` 等）は自動生成 SQL に含まれないため、畳み込み時に手編集で保持する。
+
 **ワークスペーススコープ**: `Comment`/`ActivityLog` に `workspaceId` は持たせない。所属検証は既存の `workspace-scope.guard.ts` がルートプレフィックス（`/api/tasks`配下）で行い、行レベルの整合性は「`taskId` が現在ワークスペースに属するタスクであること」を`TasksService.getById`相当のチェックで担保する（正規化を優先し、非正規化しない）。タイムライン／コメント書き込み前の存在確認では、詳細ページと同様に削除済みを含めてよいかをエンドポイントごとに決める（読み取り: `includeDeleted: true`、書き込み: 削除済みなら 409）。
 
 ## Error Handling
@@ -502,10 +535,11 @@ erDiagram
   - `ActivityLogService.listDisplayable` が `field_changed` 以外を除外すること（6.2, 6.3）
   - `TasksService.update` の循環参照検出・クローズ済み親拒否（2.5, 2.6）
   - `CommentService` の投稿者本人チェック（4.5）
-  - `taskRepository.list` の `excludeSubtreeOf`/`excludeClosed` フィルタが正しい候補集合を返すこと（2.5, 2.6）
+  - `taskRepository.list` の `titleContains`/`excludeSubtreeOf`/`excludeClosed` フィルタが正しい候補集合を返すこと（2.5, 2.6）
+  - `POST /api/tasks` が `scheduledEndDate` を受け付け、複製相当のペイロードで終了予定日が引き継がれること（2.9）
   - `TasksService.getById(..., { includeDeleted: true })` が削除済みを返し、既定呼び出しおよび一覧が削除済みを除外すること（1.4）
 - **Integration Tests**
-  - `PATCH /api/tasks/:id/status` 経由・`PATCH /api/tasks/:id/development-stage` 経由・`TaskDetailModal`相当の呼び出し経由のいずれでもActivityLogが1件記録されること（5.4 の実路確認）
+  - 一覧の `/status`、カンバン／モーダルの `/development-stage`、モーダル相当の一般 `PATCH /api/tasks/:id` のいずれでも ActivityLog が記録されること（5.4 の実路確認）
   - `updateDevelopmentStage` によるステータス自動リセット時、`field_changed(status)` のログが二重記録されないこと（5.6）
   - `caseId` を未設定にした更新で、`isRequiredForCase` の自動オフが通常の `field_changed(isRequiredForCase)` として記録されること（5.6の除外対象と混同しないことの回帰確認、2.8）
   - `addChild`/`splitTask` で生成された子タスクについて `task_created` ログが記録されること

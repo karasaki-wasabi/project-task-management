@@ -77,20 +77,20 @@ claude design のラウンドを重ねる過程で、`requirements.md` に反映
 - 表示・軽微編集は既存の `tasks` モジュールとAPI（`PATCH /api/tasks/:id` 等）をほぼそのまま再利用できる。新規なのはページ・インライン編集UI・検索付きセレクトという「見せ方」の部分
 - コメント・操作ログはドメインとして完全新規（既存に類似モジュールなし）。特に操作ログは「タスク詳細ページ・詳細モーダル・カンバンボードのどこから変更されても記録する」（Requirement 5.4）という横断要件があり、`TasksService` への一元的なフック設計が肝になる
 - 複製機能はバックエンド新規APIなしでも実現可能（既存の作成APIをクライアント側で合成呼び出し）。ただし業務ロジックの一貫性を重視するなら専用エンドポイントの方が安全
-- フィールド名は `task-field-rename` により `detail`（詳細）・`scheduledEndDate`（終了予定日）へ揃える前提。ギャップ分析時点の実装はまだ `memo` / `scheduledDate` であり、task-detail 実装前に改名を完了させる
+- フィールド名は `task-field-rename` により `detail`（詳細）・`scheduledEndDate`（終了予定日）へ揃える前提。追記（2026-08-12）: `task-field-rename` は main にマージ済みで、コード上の語彙も完了している。ギャップ分析時点の「まだ `memo` / `scheduledDate`」は陳腐化した
 - 全体の実装規模は L（1〜2週間）。うち操作ログのフック設計とタイムライン集約が最もリスクが高い
 
 ## Requirement-to-Asset Map
 
 | Requirement | 既存資産 | ギャップ |
 |---|---|---|
-| 1. 表示とアクセス | `GET /api/tasks/:id`、`requireWorkspaceMember` ガード、`StatusBadge`/`PriorityBadge`/`StageBadge` | **Missing**: `tasks/[taskId].vue` ページ自体（動的セグメントの前例なし）。**Missing**: 終了予定日超過の判定・表示（`kind` はAPIにあるため計算のみ） |
-| 2. 編集 | `PATCH /api/tasks/:id`（title/priority/detail/caseId/isRequiredForCase/assigneeUserId ※改名後）、`PATCH /api/tasks/:id/status`、`PATCH /api/tasks/:id/development-stage` | **Missing**: 親タスク編集UI（`TaskDetailModal` にも未実装、検索付きセレクトが存在しない）。**Missing**: インライン編集ピッカーのUIパターン自体（既存は全項目一括フォーム編集のみ）。**Missing**: 複製API（クライアント合成 or 新規エンドポイントの選択が要る）。**Prerequisite**: `task-field-rename`（現状コードはまだ `memo`） |
-| 3. 削除 | `DELETE /api/tasks/:id`（ソフトデリート、Prisma拡張で自動） | Gapなし。子を持つ削除の制約は既存APIの挙動に従うだけ |
-| 4. コメント | なし | **Missing**: `comments`（または`task-comments`）モジュール全体（Prismaモデル・repository・service・routes）。投稿者本人判定は`currentUser`との比較で既存パターンを踏襲可能 |
-| 5. 操作ログ | `shared/business-event-logger.ts`（Pinoログのみ、DB永続化なし） | **Missing**: 操作ログドメイン全体（Prismaモデル・記録サービス）。**Constraint**: `TasksService`・`comments`サービス・（起動元と思われる）`recurrence`モジュールの複数箇所にフックが要る。カンバンのステータス/開発段階変更が`TaskDetailModal`と同じ`PATCH`エンドポイントを叩いているなら`TasksService`への一元フックで足りるが、要確認（Research Needed） |
-| 6. タイムライン | なし | **Missing**: コメント＋操作ログを統合し発生日時順に整形する集約エンドポイントとVueコンポーネント一式 |
-| 7. モーダル役割分担 | `components/kanban/TaskDetailModal.vue`（379行、view/edit切替、削除確認インライン） | 縮小のみ（コメント・タイムラインは元々未実装のため除去対象がない）。詳細ページへの導線ボタン追加が主なMissing |
+| 1. 表示とアクセス | `GET /api/tasks/:id`、`requireWorkspaceMember` ガード、`StatusBadge`/`PriorityBadge`/`StageBadge` | Missing: `workspaces/[workspaceId]/tasks/[taskId].vue` ページ自体（動的セグメントの前例なし）。Missing: 終了予定日超過の判定・表示（`kind` はAPIにあるため計算のみ） |
+| 2. 編集 | `PATCH /api/tasks/:id`（title/priority/detail/caseId/isRequiredForCase/assigneeUserId）、`PATCH /api/tasks/:id/status`、`PATCH /api/tasks/:id/development-stage`。`caseId` 解除時の必須オフは既存 | Missing: 親タスク編集UI（`TaskDetailModal` にも未実装、検索付きセレクトが存在しない）。Missing: インライン編集ピッカーのUIパターン自体（既存は全項目一括フォーム編集のみ）。Missing: 複製（クライアント合成。design で確定）。`task-field-rename` は完了済み |
+| 3. 削除 | `DELETE /api/tasks/:id`（ソフトデリート、Prisma拡張で自動。未完了子の有無では拒否しない） | Gapなし。未完了子制約は完了段階への移動時のみ。削除は既存どおり通る |
+| 4. コメント | なし | Missing: `comments`（または`task-comments`）モジュール全体（Prismaモデル・repository・service・routes）。投稿者本人判定は`currentUser`との比較で既存パターンを踏襲可能 |
+| 5. 操作ログ | `shared/business-event-logger.ts`（Pinoログのみ、DB永続化なし） | Missing: 操作ログドメイン全体（Prismaモデル・記録サービス）。Constraint: `TasksService` の書き込みメソッドと `comments` にフック。経路は design で確定（下記 Research Needed 解消済み） |
+| 6. タイムライン | なし | Missing: コメント＋操作ログを統合し発生日時順に整形する集約エンドポイントとVueコンポーネント一式 |
+| 7. モーダル役割分担 | `components/kanban/TaskDetailModal.vue`（view/edit切替、削除確認インライン） | 縮小のみ（コメント・タイムラインは元々未実装のため除去対象がない）。詳細ページへの導線ボタン追加が主なMissing |
 
 ## Implementation Approach Options
 
@@ -129,14 +129,14 @@ claude design のラウンドを重ねる過程で、`requirements.md` に反映
 
 **総合**: Effort L（1〜2週間）、Risk Medium（操作ログのフック網羅性が最大の不確実性）
 
-## Research Needed（design.md discovery へ持ち越し）
+## Research Needed（design.md で解消済み）
 
-1. **カンバンボードのステータス/開発段階変更が `TasksService` の同じメソッドを呼んでいるか**: 呼んでいれば操作ログのフックは1箇所で済む。別経路があるなら追加のフック地点が必要（Requirement 5.4 の充足に直結）
-2. **繰り返しテンプレートによる自動生成タスクの作成経路**: `sourceTemplateId`/`sourceAnchor` を設定するのはどのモジュール（`recurrence` 想定）か。Requirement 5.6（システム起点の記録）のフック地点を特定する
-3. **`POST /api/tasks/:id/children` と `POST /api/tasks/:id/split` が生成するタスクの操作ログ扱い**: 子タスクの新規作成として記録対象になるか（Requirement 5.1 の「タスクの作成」に該当するはず）を設計時に確定する
-4. **複製APIの実装方式（Option A: クライアント合成 vs Option B: 専用エンドポイント）**: 案件・必須タスクなど関連フィールドのバリデーションを複製時にも通す必要があるため、既存の作成APIで代替できるか設計時に検証する
-5. **タイムラインのページネーション方式**: モックには「さらに読み込む」があるが、要件書にはページサイズや並び順の同点処理（同時刻の複数イベント）の規定がない
+1. ~~カンバンボードのステータス/開発段階変更が `TasksService` の同じメソッドを呼んでいるか~~ → 解消: 一覧は `/status`、カンバン／モーダルの段階変更は `/development-stage`、モーダル一般項目は `PATCH /api/tasks/:id`。いずれも対応する `TasksService` メソッドに収束する（Requirement 5.4）
+2. ~~繰り返しテンプレートによる自動生成タスクの作成経路~~ → 解消: `recurrence.service.ts` が `TasksService.create`/`delete` を経由。システム起点の記録はここにフックすれば足りる
+3. ~~`POST /api/tasks/:id/children` と `POST /api/tasks/:id/split` の操作ログ~~ → 解消: `addChild`/`splitTask` は `create()` を経由しないため個別に `task_created` を記録する（design.md）
+4. ~~複製APIの実装方式~~ → 解消: クライアント合成（専用バックエンドAPIなし）。design.md Boundary Commitments
+5. ~~タイムラインのページネーション方式~~ → 解消: サーバー側 `filter` + カーソルページング（1ページ20件、`occurredAt` 降順→ID降順）。design.md
 
 ## Next Steps
-- `/kiro-spec-design task-detail` で上記 Research Needed を discovery として解消し、Option A/C いずれかを設計に落とし込む
-- 特に操作ログのフック地点（Research Needed 1・2）は設計の前提を左右するため、design.md 着手前にコードを直接確認しておくと手戻りが減る
+- design は承認済み。実装前の残作業は `/kiro-spec-tasks task-detail` で `tasks.md` を生成すること
+- `task-field-rename` 完了後の現行コードとの再突合せ（2026-08-12）では、設計前提の大きなずれはなく、上記の陳腐化箇所を文書側で訂正した

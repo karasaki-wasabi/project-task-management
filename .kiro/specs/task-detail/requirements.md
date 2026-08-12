@@ -30,7 +30,9 @@
   - 案件（case）との関連付け表示・編集は既存のカンバン／詳細モーダルの挙動を踏襲し、関連付け自体の仕様（案件モデル・必須タスク判定）は case-management-ux の管掌で変更しない
   - 本仕様はタスクのステータス値・開発段階の種別・完了判定を task-status-model の管掌とし、それらを再定義しない。操作ログはステータスおよび開発段階の変更を記録するため、記録される値の語彙は task-status-model が確定させたものに従う（同仕様を本仕様より先行させる）
   - 本仕様が追加する親タスクのつなぎ替えは、task-status-model が定める不変条件「クローズ済みのタスクは未クローズの子を持たない」に従う。同制約の定義と強制は task-status-model の管掌であり、本仕様はそれに違反する操作を拒否するのみで、制約自体を再定義しない
-  - フィールドの API／DB 名と表示名の揃え（`memo`→`detail`＝「詳細」、`scheduledDate`→`scheduledEndDate`＝「終了予定日」、将来の開始予定日は `scheduledStartDate`）は task-field-rename の管掌とする。本仕様は改名完了後の語彙を前提とし、マイグレーションや全画面の文言揃え自体は行わない。完了済み仕様文書（task-delivery-management 等）は更新しない運用に従う
+  - フィールドの API／DB 名と表示名の揃え（`memo`→`detail`＝「詳細」、`scheduledDate`→`scheduledEndDate`＝「終了予定日」、将来の開始予定日は `scheduledStartDate`）は task-field-rename の管掌であり完了済みとする。本仕様は改名後の語彙を前提とし、マイグレーションや全画面の文言揃え自体は行わない。完了済み仕様文書（task-delivery-management 等）は更新しない運用に従う
+  - 案件解除時の必須タスク自動オフ（Requirement 2.8）は既存のタスク更新 API の挙動を前提とする。本仕様が新たに定義するのは、その自動オフを操作ログへ記録することである
+  - 未完了の子タスクを持つ削除（Requirement 3.3）について、既存のタスク削除 API は未完了子の有無では拒否しない（ソフトデリートする）。未完了子制約は完了種別の開発段階への移動時に適用される。本仕様は削除 API に新たな拒否条件を追加しない
 
 ## Requirements
 
@@ -90,7 +92,7 @@
 #### Acceptance Criteria
 1. When ワークスペースのメンバーがタスク詳細ページでタスク削除を実行した場合、the Task Detail Page shall 当該タスクを論理削除する
 2. When タスクが論理削除された場合、the Task Detail Page shall 当該タスクのコメントおよび操作ログの記録を保持する
-3. If 未完了の子タスクを持つタスクの削除が試みられた場合、the Task Detail Page shall 既存のタスク削除 API が定める制約に従う
+3. If 未完了の子タスクを持つタスクの削除が試みられた場合、the Task Detail Page shall 既存のタスク削除 API が定める制約に従う（既存 API は未完了子の有無では拒否せず論理削除する。本仕様はここに新たな拒否条件を追加しない）
 
 ### Requirement 4: コメント
 **Objective:** As a ワークスペースのメンバー, I want タスクにコメントを残し、自分の投稿を編集・削除できる, so that タスクに関する議論や経緯を後から追跡できる
