@@ -26,7 +26,7 @@ export interface RegisterTemplateInput {
   priority: RecurringTaskTemplate["priority"];
   caseAnchor: CaseRelativeAnchor;
   caseOffsetDays: number;
-  defaultMemo?: string;
+  defaultDetail?: string;
   nonBusinessDayPolicy: NonBusinessDayPolicy;
   /** From request.currentWorkspaceId only (VerifiedWorkspaceId). */
   workspaceId: VerifiedWorkspaceId;
