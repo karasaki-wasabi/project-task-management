@@ -56,6 +56,52 @@ async function assertParentCanTakeOpenChildren(
   return ok(undefined);
 }
 
+async function assertParentChangeIsValid(
+  taskId: string,
+  workspaceId: VerifiedWorkspaceId,
+  parentTaskId: string | null,
+): Promise<Result<void, TaskError>> {
+  if (parentTaskId === null) {
+    return ok(undefined);
+  }
+
+  const parent = await taskRepository.findById(parentTaskId, workspaceId);
+  if (!parent) {
+    return err({
+      type: "validation_error",
+      message: "parentTaskId does not exist in the current workspace",
+    });
+  }
+
+  const visited = new Set<string>();
+  let ancestor: Task | null = parent;
+  while (ancestor !== null) {
+    if (ancestor.id === taskId || visited.has(ancestor.id)) {
+      return err({
+        type: "validation_error",
+        message: "parentTaskId would create a cycle",
+      });
+    }
+    visited.add(ancestor.id);
+
+    ancestor =
+      ancestor.parentTaskId === null
+        ? null
+        : await taskRepository.findById(
+            ancestor.parentTaskId,
+            workspaceId,
+            { includeDeleted: true },
+          );
+  }
+
+  const closedParentCheck = await assertParentCanTakeOpenChildren(parent, workspaceId);
+  if (!closedParentCheck.ok) {
+    return closedParentCheck;
+  }
+
+  return ok(undefined);
+}
+
 async function assertAssigneeIsWorkspaceMember(
   workspaceId: VerifiedWorkspaceId,
   assigneeUserId: string | null | undefined,
@@ -299,7 +345,7 @@ export const tasksService = {
   },
 
   // General field edit (title/priority/detail/caseId/isRequiredForCase/
-  // assigneeUserId), distinct from the kanban-move-specific
+  // assigneeUserId/parentTaskId/scheduledEndDate), distinct from the kanban-move-specific
   // updateDevelopmentStage above: an explicit edit always overwrites
   // assigneeUserId, it doesn't defer to "only if currently unassigned".
   async update(
@@ -321,6 +367,7 @@ export const tasksService = {
     }
     if (input.priority !== undefined) data.priority = input.priority;
     if (input.detail !== undefined) data.detail = input.detail;
+    if (input.scheduledEndDate !== undefined) data.scheduledEndDate = input.scheduledEndDate;
     if (input.assigneeUserId !== undefined) {
       const assigneeCheck = await assertAssigneeIsWorkspaceMember(workspaceId, input.assigneeUserId);
       if (!assigneeCheck.ok) {
@@ -346,6 +393,14 @@ export const tasksService = {
       data.isRequiredForCase = input.isRequiredForCase;
     }
 
+    if (input.parentTaskId !== undefined) {
+      const parentCheck = await assertParentChangeIsValid(taskId, workspaceId, input.parentTaskId);
+      if (!parentCheck.ok) {
+        return parentCheck;
+      }
+      data.parentTaskId = input.parentTaskId;
+    }
+
     try {
       const task = await taskRepository.update(taskId, workspaceId, data);
       return ok(task);
@@ -354,7 +409,10 @@ export const tasksService = {
         return err({ type: "not_found", taskId });
       }
       if (isForeignKeyViolation(error)) {
-        return err({ type: "validation_error", message: "caseId or assigneeUserId does not exist" });
+        return err({
+          type: "validation_error",
+          message: "caseId, assigneeUserId, or parentTaskId does not exist",
+        });
       }
       throw error;
     }

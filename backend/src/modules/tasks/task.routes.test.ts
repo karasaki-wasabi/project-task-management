@@ -154,6 +154,32 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [body.id]);
   });
 
+  it("POST /api/tasks stores an optional scheduledEndDate (task-detail 2.9)", async () => {
+    const response = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: {
+            title: "duplicated task with end date",
+            priority: "medium",
+            scheduledEndDate: "2036-08-15",
+          },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    const body = response.json();
+    if (response.statusCode === 201) {
+      await hardDelete("tasks", [body.id]);
+    }
+    expect(response.statusCode).toBe(201);
+    expect(body.scheduledEndDate).toBe("2036-08-15T00:00:00.000Z");
+  });
+
   it("POST /api/tasks returns 400 for an empty title", async () => {
     const response = await app.inject(
       withWorkspace(
@@ -749,6 +775,215 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     expect(response.json().workspaceId).toBe(workspaceA);
 
     await hardDelete("tasks", [response.json().id, parentId]);
+  });
+
+  it("PATCH /api/tasks/:id updates parentTaskId and scheduledEndDate (task-detail 2.1, 2.2)", async () => {
+    const parent = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "new parent", priority: "medium" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const task = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "move under parent", priority: "low" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const parentId = parent.json().id as string;
+    const taskId = task.json().id as string;
+
+    const response = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${taskId}`,
+          payload: { parentTaskId: parentId, scheduledEndDate: "2036-09-20" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    const body = response.json();
+    const cleared = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${taskId}`,
+          payload: { parentTaskId: null, scheduledEndDate: null },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    await hardDelete("tasks", [taskId, parentId]);
+    expect(response.statusCode).toBe(200);
+    expect(body).toMatchObject({
+      parentTaskId: parentId,
+      scheduledEndDate: "2036-09-20T00:00:00.000Z",
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toMatchObject({
+      parentTaskId: null,
+      scheduledEndDate: null,
+    });
+  });
+
+  it("PATCH /api/tasks/:id rejects self and descendant parents as cycles (task-detail 2.5)", async () => {
+    const parent = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "cycle parent", priority: "medium" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const parentId = parent.json().id as string;
+    const child = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "cycle child", priority: "low", parentTaskId: parentId },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const childId = child.json().id as string;
+    const grandchild = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "cycle grandchild", priority: "low", parentTaskId: childId },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const grandchildId = grandchild.json().id as string;
+
+    const selfResponse = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${parentId}`,
+          payload: { parentTaskId: parentId },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const descendantResponse = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${parentId}`,
+          payload: { parentTaskId: grandchildId },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    await hardDelete("tasks", [grandchildId, childId, parentId]);
+    expect(selfResponse.statusCode).toBe(400);
+    expect(selfResponse.json().error).toMatch(/cycle/i);
+    expect(descendantResponse.statusCode).toBe(400);
+    expect(descendantResponse.json().error).toMatch(/cycle/i);
+  });
+
+  it("PATCH /api/tasks/:id rejects a closed parent with 409 (task-detail 2.6)", async () => {
+    const parent = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "closed update parent", priority: "medium" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const task = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "child candidate", priority: "low" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const parentId = parent.json().id as string;
+    const taskId = task.json().id as string;
+    const completedStage = await db.developmentStage.create({
+      data: {
+        name: `completed-update-parent-${randomUUID()}`,
+        order: 962,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    const moved = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${parentId}/development-stage`,
+          payload: { developmentStageId: completedStage.id },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(moved.statusCode).toBe(200);
+
+    const response = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${taskId}`,
+          payload: { parentTaskId: parentId },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    await hardDelete("tasks", [taskId, parentId]);
+    await hardDelete("development_stages", [completedStage.id]);
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toMatch(/closed task cannot take children/i);
   });
 
   it("POST /api/tasks/:id/children returns 404 for a non-existent parent", async () => {

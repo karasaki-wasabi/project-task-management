@@ -21,10 +21,8 @@ export interface CreateTaskInput {
   isRequiredForCase?: boolean;
   assigneeUserId?: string;
   parentTaskId?: string;
-  // RecurrenceService-only fields (design.md "Backend/recurrence"
-  // Implementation Notes: instance generation goes through this internal
-  // function rather than duplicating the Prisma insert). Never set by the
-  // public POST /api/tasks route's own request schema.
+  // RecurrenceService-only source metadata. scheduledEndDate is also accepted
+  // by the public create route so task duplication can finish in one request.
   sourceTemplateId?: string;
   // Snapshot of the template caseAnchor at generation time (Req 5.3).
   sourceAnchor?: PrismaTask["sourceAnchor"];
@@ -51,6 +49,8 @@ export interface UpdateTaskInput {
   caseId?: string | null;
   isRequiredForCase?: boolean;
   assigneeUserId?: string | null;
+  parentTaskId?: string | null;
+  scheduledEndDate?: Date | null;
 }
 
 export interface GetTaskOptions {
