@@ -1,19 +1,27 @@
-// RED: throughputService does not exist yet (task 7.1, Requirements 6.1-6.4,
-// 9.5). Integration test against real MySQL via shared/db.ts.
+// ThroughputService period aggregation (legacy Requirements 6.1-6.4 / 9.5)
+// plus task-status-model 7.1 non-regression for completion stamp ↔ digest
+// counts (Requirements 7.1-7.4). Integration against real MySQL via shared/db.ts.
 //
 // Period boundaries: weeks start Monday UTC, months are calendar months UTC
 // (design.md ThroughputService Implementation Notes). Periods returned by
 // getSummary are past, fully-elapsed periods relative to `now` — the
 // in-progress period containing `now` itself is never included (Requirement
 // 6.2 "過去複数期間分" / 6.3 "過去の消化ペースをもとにした今後の目安").
+//
+// task-status-model design: throughput still counts only by completedAt —
+// cancelled tasks stay out via the stamp rule (no stage-kind filter).
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { createUserData } from "../../test/user.fixture.js";
+import { tasksService } from "../tasks/task.service.js";
 import { throughputService } from "./throughput.service.js";
 
 const createdTaskIds: string[] = [];
+const createdStageIds: string[] = [];
 let workspaceId: string;
+let verifiedWorkspaceId: VerifiedWorkspaceId;
 let ownerUserId: string;
 
 // throughput 集計はワークスペース非依存のグローバル COUNT のため、共有 DB 上の
@@ -37,12 +45,20 @@ async function completedTask(completedAt: Date): Promise<string> {
 }
 
 async function cleanup(): Promise<void> {
-  if (createdTaskIds.length === 0) return;
-  await db.$executeRawUnsafe(
-    `DELETE FROM tasks WHERE id IN (${createdTaskIds.map(() => "?").join(",")})`,
-    ...createdTaskIds,
-  );
-  createdTaskIds.length = 0;
+  if (createdTaskIds.length > 0) {
+    await db.$executeRawUnsafe(
+      `DELETE FROM tasks WHERE id IN (${createdTaskIds.map(() => "?").join(",")})`,
+      ...createdTaskIds,
+    );
+    createdTaskIds.length = 0;
+  }
+  if (createdStageIds.length > 0) {
+    await db.$executeRawUnsafe(
+      `DELETE FROM development_stages WHERE id IN (${createdStageIds.map(() => "?").join(",")})`,
+      ...createdStageIds,
+    );
+    createdStageIds.length = 0;
+  }
 }
 
 async function purgeThroughputDateBand(): Promise<void> {
@@ -54,6 +70,29 @@ async function purgeThroughputDateBand(): Promise<void> {
   createdTaskIds.length = 0;
 }
 
+async function createStage(kind: "normal" | "completed" | "cancelled", order: number) {
+  const stage = await db.developmentStage.create({
+    data: {
+      name: `${kind}-${randomUUID()}`,
+      order,
+      kind,
+      workspaceId,
+    },
+  });
+  createdStageIds.push(stage.id);
+  return stage;
+}
+
+/** Stamp via stage move, then place completedAt inside the isolated historical band. */
+async function completeIntoBand(taskId: string, completedStageId: string, completedAt: Date): Promise<void> {
+  const moved = await tasksService.updateDevelopmentStage(taskId, verifiedWorkspaceId, completedStageId);
+  if (!moved.ok) throw new Error(`move to completed failed: ${JSON.stringify(moved.error)}`);
+  // Stamp→throughput chain must fail here if completed-stage move stops stamping.
+  expect(moved.value.completedAt).toBeInstanceOf(Date);
+  createdTaskIds.push(taskId);
+  await db.task.update({ where: { id: taskId }, data: { completedAt } });
+}
+
 beforeAll(async () => {
   const owner = await db.user.create({ data: createUserData(`throughput-owner-${randomUUID()}`) });
   ownerUserId = owner.id;
@@ -61,6 +100,7 @@ beforeAll(async () => {
     data: { name: `throughput-ws-${randomUUID()}`, createdByUserId: ownerUserId },
   });
   workspaceId = workspace.id;
+  verifiedWorkspaceId = workspaceId as VerifiedWorkspaceId;
 });
 
 beforeEach(async () => {
@@ -71,6 +111,7 @@ afterAll(async () => {
   await purgeThroughputDateBand();
   if (workspaceId) {
     await db.$executeRawUnsafe(`DELETE FROM tasks WHERE workspace_id = ?`, workspaceId);
+    await db.$executeRawUnsafe(`DELETE FROM development_stages WHERE workspace_id = ?`, workspaceId);
     await db.workspace.delete({ where: { id: workspaceId } }).catch(() => undefined);
   }
   if (ownerUserId) {
@@ -188,6 +229,94 @@ describe("throughputService (task 7.1)", () => {
 
     expect(summary.periods[0].periodStart.toISOString()).toBe("2024-02-01T00:00:00.000Z");
     expect(summary.periods[0].completedCount).toBe(2);
+
+    await cleanup();
+  });
+});
+
+// task-status-model 7.1: completion stamp ↔ digest non-regression (7.1–7.4).
+describe("throughputService completion stamp non-regression (task-status-model 7.1)", () => {
+  it("counts after move into completed and drops after move out (7.1, 7.4)", async () => {
+    const created = await tasksService.create({
+      title: `throughput-stage-roundtrip-${randomUUID()}`,
+      priority: "low",
+      workspaceId: verifiedWorkspaceId,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    const completed = await createStage("completed", 810);
+    const normal = await createStage("normal", 100);
+    const bandStamp = new Date("2024-01-03T09:00:00.000Z");
+
+    const before = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    expect(before.periods[0].completedCount).toBe(0);
+
+    await completeIntoBand(created.value.id, completed.id, bandStamp);
+    const afterEnter = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    expect(afterEnter.periods[0].completedCount).toBe(1);
+
+    const left = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      verifiedWorkspaceId,
+      normal.id,
+    );
+    expect(left.ok).toBe(true);
+    if (!left.ok) return;
+    expect(left.value.completedAt).toBeNull();
+
+    const afterLeave = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    expect(afterLeave.periods[0].completedCount).toBe(0);
+
+    await cleanup();
+  });
+
+  it("does not count a cancelled-stage task because completedAt stays null — no stage-kind filter (7.2)", async () => {
+    const created = await tasksService.create({
+      title: `throughput-cancelled-${randomUUID()}`,
+      priority: "low",
+      workspaceId: verifiedWorkspaceId,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    createdTaskIds.push(created.value.id);
+    const cancelled = await createStage("cancelled", 820);
+
+    const cancelledMove = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      verifiedWorkspaceId,
+      cancelled.id,
+    );
+    expect(cancelledMove.ok).toBe(true);
+    if (!cancelledMove.ok) return;
+    expect(cancelledMove.value.completedAt).toBeNull();
+
+    const afterCancel = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    expect(afterCancel.periods[0].completedCount).toBe(0);
+
+    // Prove digest still keys only on completedAt: a cancelled-stage row with a
+    // forced stamp would still count. Adding a stage-kind exclusion would break this.
+    await db.task.update({
+      where: { id: created.value.id },
+      data: { completedAt: new Date("2024-01-03T09:00:00.000Z") },
+    });
+    const afterForcedStamp = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    expect(afterForcedStamp.periods[0].completedCount).toBe(1);
+
+    await cleanup();
+  });
+
+  it("does not count by status alone when completedAt is null (7.3)", async () => {
+    const task = await db.task.create({
+      data: {
+        title: `throughput-status-only-${randomUUID()}`,
+        priority: "low",
+        status: "ready_for_handoff",
+        completedAt: null,
+        workspaceId,
+      },
+    });
+    createdTaskIds.push(task.id);
+
+    const summary = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    expect(summary.periods[0].completedCount).toBe(0);
 
     await cleanup();
   });
