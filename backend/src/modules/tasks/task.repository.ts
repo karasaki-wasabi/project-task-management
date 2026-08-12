@@ -80,8 +80,13 @@ export const taskRepository = {
   },
 
   // task-status-model 3.2: status only — completedAt is owned by updateDevelopmentStage.
-  updateStatus(id: string, workspaceId: VerifiedWorkspaceId, status: TaskStatus): Promise<Task> {
-    return db.task.update({
+  updateStatus(
+    id: string,
+    workspaceId: VerifiedWorkspaceId,
+    status: TaskStatus,
+    client: DbClient = db,
+  ): Promise<Task> {
+    return client.task.update({
       where: withWorkspaceScope({ id, deletedAt: null }, workspaceId),
       data: { status },
     });
@@ -96,12 +101,18 @@ export const taskRepository = {
       status?: TaskStatus;
       completedAt?: Date | null;
     },
+    client: DbClient = db,
   ): Promise<Task> {
-    return db.task.update({ where: withWorkspaceScope({ id, deletedAt: null }, workspaceId), data });
+    return client.task.update({ where: withWorkspaceScope({ id, deletedAt: null }, workspaceId), data });
   },
 
-  update(id: string, workspaceId: VerifiedWorkspaceId, data: UpdateTaskInput): Promise<Task> {
-    return db.task.update({ where: withWorkspaceScope({ id, deletedAt: null }, workspaceId), data });
+  update(
+    id: string,
+    workspaceId: VerifiedWorkspaceId,
+    data: UpdateTaskInput,
+    client: DbClient = db,
+  ): Promise<Task> {
+    return client.task.update({ where: withWorkspaceScope({ id, deletedAt: null }, workspaceId), data });
   },
 
   delete(id: string, workspaceId: VerifiedWorkspaceId, client: DbClient = db): Promise<Task> {
@@ -139,30 +150,24 @@ export const taskRepository = {
     return db.task.count({ where: { parentTaskId, ...openTaskFilter } });
   },
 
-  // Interactive-transaction callback form; equivalent to the `$transaction([...])`
-  // array form for this client (verified: no `query.create` hook exists on the
-  // soft-delete extension), used here for readability when building the
-  // per-part insert loop.
-  createMany(inputs: CreateTaskInput[]): Promise<Task[]> {
-    return db.$transaction(async (tx) => {
-      const created: Task[] = [];
-      for (const input of inputs) {
-        created.push(
-          await tx.task.create({
-            data: {
-              title: input.title,
-              priority: input.priority,
-              detail: input.detail,
-              caseId: input.caseId,
-              isRequiredForCase: input.caseId ? (input.isRequiredForCase ?? false) : false,
-              assigneeUserId: input.assigneeUserId,
-              parentTaskId: input.parentTaskId,
-              workspaceId: input.workspaceId,
-            },
-          }),
-        );
-      }
-      return created;
-    });
+  async createMany(inputs: CreateTaskInput[], client: DbClient = db): Promise<Task[]> {
+    const created: Task[] = [];
+    for (const input of inputs) {
+      created.push(
+        await client.task.create({
+          data: {
+            title: input.title,
+            priority: input.priority,
+            detail: input.detail,
+            caseId: input.caseId,
+            isRequiredForCase: input.caseId ? (input.isRequiredForCase ?? false) : false,
+            assigneeUserId: input.assigneeUserId,
+            parentTaskId: input.parentTaskId,
+            workspaceId: input.workspaceId,
+          },
+        }),
+      );
+    }
+    return created;
   },
 };

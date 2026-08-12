@@ -105,7 +105,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/tasks", async (request, reply) => {
     const body = parseOrBadRequest(createTaskBodySchema, request.body);
     const workspaceId = requireCurrentWorkspaceId(request);
-    const result = await tasksService.create({ ...body, workspaceId });
+    const result = await tasksService.create(
+      { ...body, workspaceId },
+      { type: "user", userId: request.currentUser!.id },
+    );
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
@@ -128,7 +131,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
     const body = parseOrBadRequest(updateTaskBodySchema, request.body);
     const workspaceId = requireCurrentWorkspaceId(request);
-    const result = await tasksService.update(params.id, workspaceId, body);
+    const result = await tasksService.update(
+      params.id,
+      workspaceId,
+      body,
+      { type: "user", userId: request.currentUser!.id },
+    );
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
@@ -140,7 +148,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
     const body = parseOrBadRequest(updateStatusBodySchema, request.body);
     const workspaceId = requireCurrentWorkspaceId(request);
-    const result = await tasksService.updateStatus(params.id, workspaceId, body.status);
+    const result = await tasksService.updateStatus(
+      params.id,
+      workspaceId,
+      body.status,
+      { type: "user", userId: request.currentUser!.id },
+    );
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
@@ -156,6 +169,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       params.id,
       workspaceId,
       body.developmentStageId,
+      { type: "user", userId: request.currentUser!.id },
       body.assigneeUserId,
     );
     if (!result.ok) {
@@ -169,7 +183,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
     const body = parseOrBadRequest(createTaskBodySchema, request.body);
     const workspaceId = requireCurrentWorkspaceId(request);
-    const result = await tasksService.addChild(params.id, workspaceId, { ...body, workspaceId });
+    const result = await tasksService.addChild(
+      params.id,
+      workspaceId,
+      { ...body, workspaceId },
+      { type: "user", userId: request.currentUser!.id },
+    );
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;
@@ -185,6 +204,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       params.id,
       workspaceId,
       body.parts.map((part) => ({ ...part, workspaceId })),
+      { type: "user", userId: request.currentUser!.id },
     );
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
@@ -196,7 +216,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.delete("/api/tasks/:id", async (request, reply) => {
     const params = parseOrBadRequest(taskIdParamsSchema, request.params);
     const workspaceId = requireCurrentWorkspaceId(request);
-    const result = await tasksService.delete(params.id, workspaceId, request.id);
+    const result = await tasksService.delete(
+      params.id,
+      workspaceId,
+      { type: "user", userId: request.currentUser!.id },
+      request.id,
+    );
     if (!result.ok) {
       reply.status(taskErrorStatusCode(result.error)).send({ error: taskErrorMessage(result.error) });
       return;

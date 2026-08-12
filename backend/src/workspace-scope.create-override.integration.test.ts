@@ -60,6 +60,12 @@ async function csrfToken(app: App, cookie: string): Promise<{ token: string; coo
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  if (table === "tasks") {
+    await db.$executeRawUnsafe(
+      `DELETE FROM activity_logs WHERE task_id IN (${ids.map(() => "?").join(",")})`,
+      ...ids,
+    );
+  }
   // workspaceService.create provisions terminal development_stages (1.2/1.3);
   // clear them before removing the workspace row (FK).
   if (table === "workspaces") {
@@ -118,6 +124,13 @@ describe("create ignores body workspaceId (task 9.2)", () => {
   });
 
   afterAll(async () => {
+    await db.$executeRawUnsafe(
+      `DELETE FROM activity_logs WHERE task_id IN (
+        SELECT id FROM tasks WHERE workspace_id IN (?, ?)
+      )`,
+      workspaceA,
+      workspaceB,
+    );
     await db.$executeRawUnsafe(`DELETE FROM tasks WHERE workspace_id IN (?, ?)`, workspaceA, workspaceB);
     await db.$executeRawUnsafe(`DELETE FROM cases WHERE workspace_id IN (?, ?)`, workspaceA, workspaceB);
     const members = await db.workspaceMember.findMany({

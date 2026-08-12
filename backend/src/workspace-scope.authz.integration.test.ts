@@ -70,6 +70,12 @@ async function csrfToken(app: App, cookie: string): Promise<{ token: string; coo
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  if (table === "tasks") {
+    await db.$executeRawUnsafe(
+      `DELETE FROM activity_logs WHERE task_id IN (${ids.map(() => "?").join(",")})`,
+      ...ids,
+    );
+  }
   await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
@@ -220,6 +226,13 @@ describe("workspace scope authorization cross-cut (task 9.1)", () => {
     await hardDelete("non_business_days", [foreignHolidayId]);
     await hardDelete("development_stages", [foreignStageId]);
     // Soft-deleted leftovers that still hold workspace FK.
+    await db.$executeRawUnsafe(
+      `DELETE FROM activity_logs WHERE task_id IN (
+        SELECT id FROM tasks WHERE workspace_id IN (?, ?)
+      )`,
+      workspaceA,
+      workspaceB,
+    );
     await db.$executeRawUnsafe(
       `DELETE FROM tasks WHERE workspace_id IN (?, ?)`,
       workspaceA,

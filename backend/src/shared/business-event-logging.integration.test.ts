@@ -133,6 +133,12 @@ describe("business event logging (task 10.2)", () => {
       expect(logged?.entityId).toBe(tasks[0].id);
       expect(logged?.requestId).toBe("req-generate");
     } finally {
+      if (caseId) {
+        await db.$executeRawUnsafe(
+          "DELETE FROM activity_logs WHERE task_id IN (SELECT id FROM tasks WHERE case_id = ?)",
+          caseId,
+        );
+      }
       if (caseId) await db.$executeRawUnsafe("DELETE FROM tasks WHERE case_id = ?", caseId);
       if (caseId) await db.$executeRawUnsafe("DELETE FROM cases WHERE id = ?", caseId);
       if (templateId) await db.$executeRawUnsafe("DELETE FROM recurring_task_templates WHERE id = ?", templateId);
@@ -142,20 +148,29 @@ describe("business event logging (task 10.2)", () => {
   it("logs task.deleted with the deleted task's id", async () => {
     let taskId: string | undefined;
     try {
-      const created = await tasksService.create({
-        title: "loggable",
-        priority: "low",
-        workspaceId,
-      });
+      const created = await tasksService.create(
+        {
+          title: "loggable",
+          priority: "low",
+          workspaceId,
+        },
+        { type: "user", userId },
+      );
       if (!created.ok) throw new Error("setup failed");
       taskId = created.value.id;
 
-      await tasksService.delete(created.value.id, workspaceId, "req-task-delete");
+      await tasksService.delete(
+        created.value.id,
+        workspaceId,
+        { type: "user", userId },
+        "req-task-delete",
+      );
 
       const logged = findEvent("task.deleted");
       expect(logged?.entityId).toBe(created.value.id);
       expect(logged?.requestId).toBe("req-task-delete");
     } finally {
+      if (taskId) await db.$executeRawUnsafe("DELETE FROM activity_logs WHERE task_id = ?", taskId);
       if (taskId) await db.$executeRawUnsafe("DELETE FROM tasks WHERE id = ?", taskId);
     }
   });

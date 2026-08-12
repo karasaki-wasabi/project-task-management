@@ -29,6 +29,13 @@ async function cleanup(ids: {
   caseIds?: string[];
   nonBusinessDayIds?: string[];
 }): Promise<void> {
+  if ((ids.taskIds ?? []).length > 0) {
+    const taskIds = ids.taskIds ?? [];
+    await db.$executeRawUnsafe(
+      `DELETE FROM activity_logs WHERE task_id IN (${taskIds.map(() => "?").join(",")})`,
+      ...taskIds,
+    );
+  }
   await hardDelete("tasks", ids.taskIds ?? []);
   await hardDelete("recurring_task_templates", ids.templateIds ?? []);
   await hardDelete("cases", ids.caseIds ?? []);
@@ -321,6 +328,44 @@ describe("computeRawScheduledDates (task 2.2, Requirements 2.3, 6.1–6.3)", () 
 });
 
 describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 5.7, 6.1)", () => {
+  it("records generated tasks with the recurring-template system actor", async () => {
+    const templateIds: string[] = [];
+    const caseIds: string[] = [];
+    let taskIds: string[] = [];
+    try {
+      const template = await recurrenceService.registerTemplate(
+        baseInput({
+          title: "system-actor-generation",
+          caseAnchor: "case_start",
+          caseOffsetDays: 0,
+        }),
+      );
+      templateIds.push(template.id);
+      const caseEntity = await createCase({
+        name: `system-actor-${randomUUID()}`,
+        startDate: new Date("2041-01-10T00:00:00.000Z"),
+      });
+      caseIds.push(caseEntity.id);
+
+      const created = await recurrenceService.generateForAnchor(caseEntity, "case_start");
+      taskIds = created.map((task) => task.id);
+      expect(created).toHaveLength(1);
+
+      const log = await db.activityLog.findFirstOrThrow({
+        where: {
+          taskId: created[0].id,
+          operationType: "task_created",
+        },
+      });
+      expect(log).toMatchObject({
+        actorUserId: null,
+        actorSourceLabel: "recurring_template",
+      });
+    } finally {
+      await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+
   it.each([
     {
       anchor: "case_start" as const,

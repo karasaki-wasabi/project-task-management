@@ -57,6 +57,12 @@ async function csrfToken(app: App, cookie: string): Promise<{ token: string; coo
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  if (table === "tasks") {
+    await db.$executeRawUnsafe(
+      `DELETE FROM activity_logs WHERE task_id IN (${ids.map(() => "?").join(",")})`,
+      ...ids,
+    );
+  }
   // workspaceService.create provisions terminal development_stages (1.2/1.3);
   // clear them before removing the workspace row (FK).
   if (table === "workspaces") {
@@ -226,6 +232,15 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     );
     expect(okResponse.statusCode).toBe(200);
     expect(okResponse.json().status).toBe("on_hold");
+    await expect(
+      db.activityLog.findFirst({
+        where: { taskId: id, operationType: "field_changed", fieldName: "status" },
+      }),
+    ).resolves.toMatchObject({
+      actorUserId: memberId,
+      beforeValue: "not_started",
+      afterValue: "on_hold",
+    });
 
     const missingResponse = await app.inject(
       withWorkspace(
@@ -338,6 +353,12 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(okResponse.json()).toMatchObject({ title: "edited", priority: "high", detail: "new" });
     expect(okResponse.json()).not.toHaveProperty("memo");
     expect(okResponse.json()).not.toHaveProperty("scheduledDate");
+    const fieldLogs = await db.activityLog.findMany({
+      where: { taskId: id, operationType: "field_changed" },
+      orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
+    });
+    expect(fieldLogs.map((log) => log.fieldName)).toEqual(["title", "priority", "detail"]);
+    expect(fieldLogs.every((log) => log.actorUserId === memberId)).toBe(true);
 
     const badResponse = await app.inject(
       withWorkspace(
@@ -1396,6 +1417,19 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().developmentStageId).toBe(stage.id);
+    await expect(
+      db.activityLog.findFirst({
+        where: {
+          taskId,
+          operationType: "field_changed",
+          fieldName: "developmentStage",
+        },
+      }),
+    ).resolves.toMatchObject({
+      actorUserId: memberId,
+      beforeValue: null,
+      afterValue: stage.id,
+    });
 
     await hardDelete("tasks", [taskId]);
     await hardDelete("development_stages", [stage.id]);

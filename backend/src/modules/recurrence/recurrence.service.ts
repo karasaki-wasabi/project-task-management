@@ -175,6 +175,7 @@ async function tryCreateInstance(
         scheduledEndDate,
         workspaceId: caseWorkspaceId,
       },
+      { type: "system", sourceLabel: "recurring_template" },
       client,
     );
   } catch (error) {
@@ -206,6 +207,7 @@ async function deleteGeneratedForAnchors(
     const result = await tasksService.delete(
       task.id,
       task.workspaceId as VerifiedWorkspaceId,
+      { type: "system", sourceLabel: "recurring_template" },
       requestId,
       client,
     );

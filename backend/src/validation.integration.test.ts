@@ -125,6 +125,10 @@ function withAuthenticatedInject(app: ReturnType<typeof buildApp>): AppWithTestA
   app.addHook("onClose", async () => {
     const authenticated = await auth;
     if (!authenticated) return;
+    await db.$executeRawUnsafe(
+      `DELETE FROM activity_logs WHERE task_id IN (SELECT id FROM tasks WHERE workspace_id = ?)`,
+      authenticated.workspaceId,
+    );
     await db.$executeRawUnsafe(`DELETE FROM tasks WHERE workspace_id = ?`, authenticated.workspaceId);
     await db.$executeRawUnsafe(
       `DELETE FROM recurring_task_templates WHERE workspace_id = ?`,
@@ -164,15 +168,31 @@ function buildTestApp() {
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  if (table === "tasks") {
+    await db.$executeRawUnsafe(
+      `DELETE FROM activity_logs WHERE task_id IN (${ids.map(() => "?").join(",")})`,
+      ...ids,
+    );
+  }
   await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
 async function hardDeleteTasksForCase(caseId: string): Promise<void> {
+  await db.$executeRawUnsafe(
+    `DELETE FROM activity_logs WHERE task_id IN (SELECT id FROM tasks WHERE case_id = ?)`,
+    caseId,
+  );
   await db.$executeRawUnsafe(`DELETE FROM tasks WHERE case_id = ?`, caseId);
 }
 
 async function hardDeleteTemplates(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  await db.$executeRawUnsafe(
+    `DELETE FROM activity_logs WHERE task_id IN (
+      SELECT id FROM tasks WHERE source_template_id IN (${ids.map(() => "?").join(",")})
+    )`,
+    ...ids,
+  );
   await db.$executeRawUnsafe(
     `DELETE FROM tasks WHERE source_template_id IN (${ids.map(() => "?").join(",")})`,
     ...ids,
