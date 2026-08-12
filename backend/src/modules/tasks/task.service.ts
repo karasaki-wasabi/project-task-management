@@ -17,6 +17,8 @@ import { err, ok, type Result } from "../../shared/result.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { caseRepository } from "../cases/case.repository.js";
+import { developmentStagesService } from "../development-stages/development-stage.service.js";
+import type { DevelopmentStageKind } from "../development-stages/development-stage.types.js";
 import { workspaceService } from "../workspaces/workspace.service.js";
 import { taskRepository } from "./task.repository.js";
 import type { CreateTaskInput, Task, TaskError, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
@@ -162,11 +164,12 @@ export const tasksService = {
     }
   },
 
-  // design.md TasksService Postconditions: developmentStageId is always
-  // updated; assigneeUserId (from the request) is only applied when the
-  // task's current assigneeUserId is null, so a kanban card move never
-  // overwrites an already-assigned task's assignee (Requirements 12.6-12.8).
-  // Enforced here rather than trusted from the client.
+  // design.md System Flows "開発段階の変更": resolve kind → child check only
+  // for completed → stamp/clear completedAt → reset status only when the stage
+  // actually changes. assigneeUserId is only applied when currently null
+  // (Requirements 12.6-12.8 / kanban move).
+  // task-status-model 3.1: aggregates completedAt, status reset, and parent
+  // completion constraints here (Requirements 2.1-2.3, 2.5, 4.4, 5.1-5.4).
   async updateDevelopmentStage(
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
@@ -183,7 +186,38 @@ export const tasksService = {
       return relatedCheck;
     }
 
-    const data: { developmentStageId: string | null; assigneeUserId?: string } = { developmentStageId };
+    let stageKind: DevelopmentStageKind | null = null;
+    if (developmentStageId != null) {
+      const stage = await developmentStagesService.getById(developmentStageId, workspaceId);
+      if (!stage) {
+        return err({
+          type: "validation_error",
+          message: "developmentStageId does not exist in the current workspace",
+        });
+      }
+      stageKind = stage.kind;
+    }
+
+    if (stageKind === "completed") {
+      const incompleteChildren = await taskRepository.countIncompleteChildren(taskId);
+      if (incompleteChildren > 0) {
+        return err({ type: "incomplete_children", taskId });
+      }
+    }
+
+    const completedAt = stageKind === "completed" ? new Date() : null;
+    const stageChanged = current.developmentStageId !== developmentStageId;
+
+    const data: {
+      developmentStageId: string | null;
+      completedAt: Date | null;
+      status?: TaskStatus;
+      assigneeUserId?: string;
+    } = { developmentStageId, completedAt };
+    if (stageChanged) {
+      data.status = "not_started";
+    }
+
     if (assigneeUserId && current.assigneeUserId === null) {
       const assigneeCheck = await assertAssigneeIsWorkspaceMember(workspaceId, assigneeUserId);
       if (!assigneeCheck.ok) {

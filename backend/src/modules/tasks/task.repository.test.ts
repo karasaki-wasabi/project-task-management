@@ -124,3 +124,58 @@ describe("taskRepository (workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [created.id]);
   });
 });
+
+describe("taskRepository.countIncompleteChildren (task-status-model 3.1)", () => {
+  it("counts a ready_for_handoff child as open when its stage is not closed (5.4)", async () => {
+    const parent = await taskRepository.create({
+      title: "count parent status",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    const child = await taskRepository.create({
+      title: "handoff but open stage",
+      priority: "low",
+      parentTaskId: parent.id,
+      workspaceId: workspaceA,
+    });
+    await taskRepository.updateStatus(child.id, workspaceA, "ready_for_handoff", new Date());
+
+    const count = await taskRepository.countIncompleteChildren(parent.id);
+
+    expect(count).toBe(1);
+
+    await hardDelete("tasks", [child.id, parent.id]);
+  });
+
+  it("does not count a cancelled-stage child as incomplete (5.2)", async () => {
+    const parent = await taskRepository.create({
+      title: "count parent cancelled",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    const cancelledStage = await db.developmentStage.create({
+      data: {
+        name: `cancelled-${randomUUID()}`,
+        order: 930,
+        kind: "cancelled",
+        workspaceId: workspaceA,
+      },
+    });
+    const child = await taskRepository.create({
+      title: "cancelled child",
+      priority: "low",
+      parentTaskId: parent.id,
+      workspaceId: workspaceA,
+    });
+    await taskRepository.updateDevelopmentStage(child.id, workspaceA, {
+      developmentStageId: cancelledStage.id,
+    });
+
+    const count = await taskRepository.countIncompleteChildren(parent.id);
+
+    expect(count).toBe(0);
+
+    await hardDelete("tasks", [child.id, parent.id]);
+    await hardDelete("development_stages", [cancelledStage.id]);
+  });
+});

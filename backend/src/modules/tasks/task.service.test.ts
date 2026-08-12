@@ -61,6 +61,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Leftover stages from failed cases still reference the workspace.
+  await db.$executeRawUnsafe(
+    `DELETE FROM development_stages WHERE workspace_id IN (?, ?)`,
+    workspaceA,
+    workspaceB,
+  );
+  await db.$executeRawUnsafe(`DELETE FROM tasks WHERE workspace_id IN (?, ?)`, workspaceA, workspaceB);
   await hardDelete("workspaces", [workspaceA, workspaceB]);
   await hardDeleteUsers([ownerUserId]);
   await db.$disconnect();
@@ -595,7 +602,9 @@ describe("tasksService hierarchy (task 3.2)", () => {
     await hardDeleteTasks([child.value.id, parent.value.id]);
   });
 
-  it("allows completing a parent task once all children are done", async () => {
+  // countIncompleteChildren uses open/closed (stage kind), not status.
+  // Until task 3.2 removes this path, updateStatus still consults that count.
+  it("allows completing a parent task once all children are closed by stage", async () => {
     const parent = await tasksService.create({
       title: "parent with finished child",
       priority: "medium",
@@ -608,14 +617,27 @@ describe("tasksService hierarchy (task 3.2)", () => {
       workspaceId: workspaceA,
     });
     if (!child.ok) throw new Error("setup failed");
-    const childDone = await tasksService.updateStatus(child.value.id, workspaceA, "ready_for_handoff");
-    if (!childDone.ok) throw new Error("setup failed");
+    const completedStage = await db.developmentStage.create({
+      data: {
+        name: `completed-child-${randomUUID()}`,
+        order: 900,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    const childClosed = await tasksService.updateDevelopmentStage(
+      child.value.id,
+      workspaceA,
+      completedStage.id,
+    );
+    if (!childClosed.ok) throw new Error("setup failed");
 
     const result = await tasksService.updateStatus(parent.value.id, workspaceA, "ready_for_handoff");
 
     expect(result.ok).toBe(true);
 
     await hardDeleteTasks([child.value.id, parent.value.id]);
+    await hardDeleteStages([completedStage.id]);
   });
 
   it("still allows completion when children are deleted rather than done", async () => {
@@ -725,6 +747,285 @@ describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toMatchObject({ type: "not_found" });
+  });
+});
+
+describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
+  async function createStage(
+    kind: "normal" | "completed" | "cancelled",
+    order: number,
+  ) {
+    return db.developmentStage.create({
+      data: {
+        name: `${kind}-${randomUUID()}`,
+        order,
+        kind,
+        workspaceId: workspaceA,
+      },
+    });
+  }
+
+  it("stamps completedAt on move to completed, clears on normal, restamps on completed again (2.1, 2.2)", async () => {
+    const created = await tasksService.create({
+      title: "stamp cycle",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    const completed = await createStage("completed", 910);
+    const normal = await createStage("normal", 100);
+
+    const toCompleted = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      workspaceA,
+      completed.id,
+    );
+    expect(toCompleted.ok).toBe(true);
+    if (!toCompleted.ok) return;
+    expect(toCompleted.value.completedAt).toBeInstanceOf(Date);
+    const firstStamp = toCompleted.value.completedAt!.getTime();
+
+    await new Promise((r) => setTimeout(r, 5));
+
+    const toNormal = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      workspaceA,
+      normal.id,
+    );
+    expect(toNormal.ok).toBe(true);
+    if (!toNormal.ok) return;
+    expect(toNormal.value.completedAt).toBeNull();
+
+    await new Promise((r) => setTimeout(r, 5));
+
+    const again = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      workspaceA,
+      completed.id,
+    );
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    expect(again.value.completedAt).toBeInstanceOf(Date);
+    expect(again.value.completedAt!.getTime()).toBeGreaterThan(firstStamp);
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteStages([completed.id, normal.id]);
+  });
+
+  it("does not stamp completedAt when moved to cancelled (2.3)", async () => {
+    const created = await tasksService.create({
+      title: "cancel me",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    const cancelled = await createStage("cancelled", 920);
+
+    const result = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      workspaceA,
+      cancelled.id,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.developmentStageId).toBe(cancelled.id);
+    expect(result.value.completedAt).toBeNull();
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteStages([cancelled.id]);
+  });
+
+  it("clears completedAt when moved from completed to null stage (2.2, 2.5)", async () => {
+    const created = await tasksService.create({
+      title: "clear via null",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    const completed = await createStage("completed", 911);
+    const stamped = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      workspaceA,
+      completed.id,
+    );
+    expect(stamped.ok).toBe(true);
+    if (!stamped.ok) return;
+    expect(stamped.value.completedAt).toBeInstanceOf(Date);
+
+    const cleared = await tasksService.updateDevelopmentStage(created.value.id, workspaceA, null);
+
+    expect(cleared.ok).toBe(true);
+    if (!cleared.ok) return;
+    expect(cleared.value.developmentStageId).toBeNull();
+    expect(cleared.value.completedAt).toBeNull();
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteStages([completed.id]);
+  });
+
+  it("resets status to not_started only when the stage actually changes (4.4)", async () => {
+    const created = await tasksService.create({
+      title: "status reset",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    const stageA = await createStage("normal", 101);
+    const stageB = await createStage("normal", 102);
+
+    const placed = await tasksService.updateDevelopmentStage(created.value.id, workspaceA, stageA.id);
+    if (!placed.ok) throw new Error("setup failed");
+    const inProgress = await tasksService.updateStatus(created.value.id, workspaceA, "in_progress");
+    if (!inProgress.ok) throw new Error("setup failed");
+
+    const sameStage = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      workspaceA,
+      stageA.id,
+    );
+    expect(sameStage.ok).toBe(true);
+    if (!sameStage.ok) return;
+    expect(sameStage.value.status).toBe("in_progress");
+
+    const moved = await tasksService.updateDevelopmentStage(created.value.id, workspaceA, stageB.id);
+    expect(moved.ok).toBe(true);
+    if (!moved.ok) return;
+    expect(moved.value.status).toBe("not_started");
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteStages([stageA.id, stageB.id]);
+  });
+
+  it("rejects move to completed when an open child exists (5.1, 5.4)", async () => {
+    const parent = await tasksService.create({
+      title: "parent open child",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!parent.ok) throw new Error("setup failed");
+    const child = await tasksService.addChild(parent.value.id, workspaceA, {
+      title: "open child",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!child.ok) throw new Error("setup failed");
+    const completed = await createStage("completed", 912);
+
+    const result = await tasksService.updateDevelopmentStage(
+      parent.value.id,
+      workspaceA,
+      completed.id,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({ type: "incomplete_children", taskId: parent.value.id });
+
+    await hardDeleteTasks([child.value.id, parent.value.id]);
+    await hardDeleteStages([completed.id]);
+  });
+
+  it("allows move to completed when the only open child is cancelled (5.2)", async () => {
+    const parent = await tasksService.create({
+      title: "parent cancelled child",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!parent.ok) throw new Error("setup failed");
+    const child = await tasksService.addChild(parent.value.id, workspaceA, {
+      title: "cancelled child",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!child.ok) throw new Error("setup failed");
+    const cancelled = await createStage("cancelled", 921);
+    const completed = await createStage("completed", 913);
+    const childCancelled = await tasksService.updateDevelopmentStage(
+      child.value.id,
+      workspaceA,
+      cancelled.id,
+    );
+    if (!childCancelled.ok) throw new Error("setup failed");
+
+    const result = await tasksService.updateDevelopmentStage(
+      parent.value.id,
+      workspaceA,
+      completed.id,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.completedAt).toBeInstanceOf(Date);
+
+    await hardDeleteTasks([child.value.id, parent.value.id]);
+    await hardDeleteStages([cancelled.id, completed.id]);
+  });
+
+  it("allows move to cancelled regardless of open children (5.3)", async () => {
+    const parent = await tasksService.create({
+      title: "cancel parent with open child",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!parent.ok) throw new Error("setup failed");
+    const child = await tasksService.addChild(parent.value.id, workspaceA, {
+      title: "still open",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!child.ok) throw new Error("setup failed");
+    const cancelled = await createStage("cancelled", 922);
+
+    const result = await tasksService.updateDevelopmentStage(
+      parent.value.id,
+      workspaceA,
+      cancelled.id,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.developmentStageId).toBe(cancelled.id);
+    expect(result.value.completedAt).toBeNull();
+
+    await hardDeleteTasks([child.value.id, parent.value.id]);
+    await hardDeleteStages([cancelled.id]);
+  });
+
+  it("allows a stage-unset task to move directly to a terminal stage (2.5)", async () => {
+    const created = await tasksService.create({
+      title: "unset to terminal",
+      priority: "low",
+      workspaceId: workspaceA,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    expect(created.value.developmentStageId).toBeNull();
+    const completed = await createStage("completed", 914);
+    const cancelled = await createStage("cancelled", 923);
+
+    const toCompleted = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      workspaceA,
+      completed.id,
+    );
+    expect(toCompleted.ok).toBe(true);
+    if (!toCompleted.ok) return;
+    expect(toCompleted.value.completedAt).toBeInstanceOf(Date);
+
+    const unset = await tasksService.updateDevelopmentStage(created.value.id, workspaceA, null);
+    if (!unset.ok) throw new Error("setup failed");
+
+    const toCancelled = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      workspaceA,
+      cancelled.id,
+    );
+    expect(toCancelled.ok).toBe(true);
+    if (!toCancelled.ok) return;
+    expect(toCancelled.value.completedAt).toBeNull();
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteStages([completed.id, cancelled.id]);
   });
 });
 
