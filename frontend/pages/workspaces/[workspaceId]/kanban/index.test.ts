@@ -70,6 +70,9 @@ const AssigneeFocusTrayStub = defineComponent({
     users: { type: Array, default: () => [] },
   },
   emits: ["assign", "end", "card-activate"],
+  setup(_, { expose }) {
+    expose({ resync: () => undefined });
+  },
   template: `<div data-testid="assignee-focus-tray" />`,
 });
 
@@ -80,6 +83,11 @@ const UnassignedBacklogPanelStub = defineComponent({
     users: { type: Array, default: () => [] },
   },
   emits: ["end", "card-activate"],
+  setup(_, { expose }) {
+    // Matches UnassignedBacklogPanel's defineExpose({ resync }) so
+    // revertOptimisticMove() can call it after a rejected stage drop.
+    expose({ resync: () => undefined });
+  },
   template: `<div data-testid="unassigned-backlog" />`,
 });
 
@@ -275,5 +283,120 @@ describe("KanbanPage assignee candidates (task 8.1, Req 4.1)", () => {
     expect(listWorkspaceMembers).not.toHaveBeenCalled();
     expect(listUsers).not.toHaveBeenCalled();
     expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(false);
+  });
+});
+
+describe("KanbanPage stage-drop rejection recovery (task 6.1, Req 5.1)", () => {
+  const normalStage = () => makeStage({ id: "s-normal", name: "実装", order: 1, kind: "normal" });
+  const completedStage = () =>
+    makeStage({ id: "s-done", name: "完了", order: 2, kind: "completed" });
+  const parentTask = () =>
+    makeTask({
+      id: "parent-1",
+      title: "親タスク",
+      assigneeUserId: "member-1",
+      developmentStageId: "s-normal",
+    });
+
+  beforeEach(() => {
+    listTasks.mockReset();
+    listUsers.mockReset();
+    listWorkspaceMembers.mockReset();
+    listDevelopmentStages.mockReset();
+    listCases.mockReset();
+    updateTaskDevelopmentStage.mockReset();
+    updateTask.mockReset();
+    currentId.value = "ws-1";
+    listTasks.mockResolvedValue([parentTask()]);
+    listDevelopmentStages.mockResolvedValue([normalStage(), completedStage()]);
+    listCases.mockResolvedValue([makeCase()]);
+    listWorkspaceMembers.mockResolvedValue([
+      makeMember({ userId: "member-1", name: "ワークスペース太郎" }),
+    ]);
+    listUsers.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("reverts optimistic move and keeps ErrorAlert when incomplete_children rejects a drop onto completed", async () => {
+    const rejectionMessage = "Task has incomplete children: parent-1";
+    updateTaskDevelopmentStage.mockRejectedValue(new Error(rejectionMessage));
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const vm = wrapper.vm as unknown as {
+      onDropOnStage: (stageId: string, taskId: string) => Promise<void>;
+      columnTasksByStageId: Record<string, Task[]>;
+      boardRenderEpoch: number;
+    };
+
+    // Simulate Sortable's optimistic DOM/model move into the completed column.
+    const parent = parentTask();
+    vm.columnTasksByStageId["s-normal"] = [];
+    vm.columnTasksByStageId["s-done"] = [parent];
+    const epochBefore = vm.boardRenderEpoch;
+
+    await vm.onDropOnStage("s-done", "parent-1");
+    await flushPromises();
+
+    expect(updateTaskDevelopmentStage).toHaveBeenCalledWith("parent-1", "s-done");
+    expect(vm.columnTasksByStageId["s-normal"].map((t) => t.id)).toEqual(["parent-1"]);
+    expect(vm.columnTasksByStageId["s-done"]).toEqual([]);
+    expect(vm.boardRenderEpoch).toBeGreaterThan(epochBefore);
+
+    const alert = wrapper.find('[data-testid="error-alert"]');
+    expect(alert.exists()).toBe(true);
+    expect(alert.text()).toBe(rejectionMessage);
+
+    // Rejection reason must not auto-clear (unlike success toasts).
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(wrapper.find('[data-testid="error-alert"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="error-alert"]').text()).toBe(rejectionMessage);
+  });
+
+  it("auto-clears the success moveStatusMessage after a few seconds", async () => {
+    updateTaskDevelopmentStage.mockResolvedValue(
+      makeTask({
+        id: "parent-1",
+        title: "親タスク",
+        assigneeUserId: "member-1",
+        developmentStageId: "s-done",
+      }),
+    );
+    listTasks
+      .mockResolvedValueOnce([parentTask()])
+      .mockResolvedValueOnce([
+        makeTask({
+          id: "parent-1",
+          title: "親タスク",
+          assigneeUserId: "member-1",
+          developmentStageId: "s-done",
+        }),
+      ]);
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const vm = wrapper.vm as unknown as {
+      onDropOnStage: (stageId: string, taskId: string) => Promise<void>;
+    };
+
+    vi.useFakeTimers();
+    await vm.onDropOnStage("s-done", "parent-1");
+    await flushPromises();
+
+    const status = wrapper.find('[role="status"]');
+    expect(status.exists()).toBe(true);
+    expect(status.text()).toContain("親タスク");
+    expect(status.text()).toContain("完了");
+
+    await vi.advanceTimersByTimeAsync(2500);
+    await flushPromises();
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
   });
 });
