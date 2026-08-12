@@ -438,6 +438,128 @@ describe("caseService.getProgress (task 3.2 + workspace-resource-scope 2.1)", ()
 
     await hardDelete("cases", [created.id]);
   });
+
+  it("excludes cancelled required tasks from overdue and denominator (task-status-model 3.4; Requirements 6.2, 6.4, 6.5)", async () => {
+    const created = await caseService.create({
+      name: "overdue with cancel",
+      endDate: new Date("2000-01-01"),
+      workspaceId: workspaceA,
+      ...noApply,
+    });
+    const [completedStage, cancelledStage] = await Promise.all([
+      db.developmentStage.create({
+        data: {
+          name: `completed-${randomUUID()}`,
+          order: 900,
+          kind: "completed",
+          workspaceId: workspaceA,
+        },
+      }),
+      db.developmentStage.create({
+        data: {
+          name: `cancelled-${randomUUID()}`,
+          order: 901,
+          kind: "cancelled",
+          workspaceId: workspaceA,
+        },
+      }),
+    ]);
+    // 5 required: 3 completed, 1 open, 1 cancelled → total 4, incomplete 1 → overdue.
+    const taskIds: string[] = [];
+    const stageIds = [completedStage.id, cancelledStage.id];
+    try {
+      for (let i = 0; i < 3; i++) {
+        const task = await db.task.create({
+          data: {
+            title: `completed ${i}`,
+            priority: "low",
+            caseId: created.id,
+            isRequiredForCase: true,
+            developmentStageId: completedStage.id,
+            workspaceId: workspaceA,
+          },
+        });
+        taskIds.push(task.id);
+      }
+      const openTask = await db.task.create({
+        data: {
+          title: "still open",
+          priority: "low",
+          caseId: created.id,
+          isRequiredForCase: true,
+          workspaceId: workspaceA,
+        },
+      });
+      taskIds.push(openTask.id);
+      const cancelledTask = await db.task.create({
+        data: {
+          title: "cancelled required",
+          priority: "low",
+          caseId: created.id,
+          isRequiredForCase: true,
+          developmentStageId: cancelledStage.id,
+          workspaceId: workspaceA,
+        },
+      });
+      taskIds.push(cancelledTask.id);
+
+      const progress = await caseService.getProgress(created.id, workspaceA);
+
+      expect(progress.requiredTotal).toBe(4);
+      expect(progress.requiredCompleted).toBe(3);
+      expect(progress.requiredIncomplete).toBe(1);
+      expect(progress.isOverdueWithIncomplete).toBe(true);
+    } finally {
+      await hardDelete("tasks", taskIds);
+      await hardDelete("development_stages", stageIds);
+      await hardDelete("cases", [created.id]);
+    }
+  });
+
+  it("does not present progress and is not overdue when all required tasks are cancelled (task-status-model 3.4; Requirements 6.4, 6.5, 6.6)", async () => {
+    const created = await caseService.create({
+      name: "all cancelled",
+      endDate: new Date("2000-01-01"),
+      workspaceId: workspaceA,
+      ...noApply,
+    });
+    const cancelledStage = await db.developmentStage.create({
+      data: {
+        name: `cancelled-${randomUUID()}`,
+        order: 901,
+        kind: "cancelled",
+        workspaceId: workspaceA,
+      },
+    });
+    const taskIds: string[] = [];
+    try {
+      for (let i = 0; i < 2; i++) {
+        const task = await db.task.create({
+          data: {
+            title: `cancelled ${i}`,
+            priority: "low",
+            caseId: created.id,
+            isRequiredForCase: true,
+            developmentStageId: cancelledStage.id,
+            workspaceId: workspaceA,
+          },
+        });
+        taskIds.push(task.id);
+      }
+
+      const progress = await caseService.getProgress(created.id, workspaceA);
+
+      // Denominator 0: no progress to present; cancelled cannot trigger overdue (6.4, 6.6).
+      expect(progress.requiredTotal).toBe(0);
+      expect(progress.requiredCompleted).toBe(0);
+      expect(progress.requiredIncomplete).toBe(0);
+      expect(progress.isOverdueWithIncomplete).toBe(false);
+    } finally {
+      await hardDelete("tasks", taskIds);
+      await hardDelete("development_stages", [cancelledStage.id]);
+      await hardDelete("cases", [created.id]);
+    }
+  });
 });
 
 describe("caseService.delete / list (task 3.2 + workspace-resource-scope 2.1)", () => {

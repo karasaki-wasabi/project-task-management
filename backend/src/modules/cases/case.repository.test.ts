@@ -231,24 +231,36 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("counts required tasks and required completed tasks for a case", async () => {
+  it("counts required completed by completed stage, not status (task-status-model 3.4; Requirements 6.1, 6.3)", async () => {
     const created = await caseRepository.create({
       name: `progress-${randomUUID()}`,
       endDate: new Date("2035-04-01"),
       workspaceId: workspaceA,
     });
-    const [requiredDone, requiredOpen, optional] = await Promise.all([
-      db.task.create({
+    const completedStage = await db.developmentStage.create({
+      data: {
+        name: `completed-${randomUUID()}`,
+        order: 900,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    const taskIds: string[] = [];
+    const stageIds = [completedStage.id];
+    try {
+      const requiredDone = await db.task.create({
         data: {
-          title: "required done",
+          title: "required done on completed stage",
           priority: "low",
           caseId: created.id,
           isRequiredForCase: true,
-          status: "ready_for_handoff",
+          // Default status is not_started — must still count as completed (6.1).
+          developmentStageId: completedStage.id,
           workspaceId: workspaceA,
         },
-      }),
-      db.task.create({
+      });
+      taskIds.push(requiredDone.id);
+      const requiredOpen = await db.task.create({
         data: {
           title: "required open",
           priority: "low",
@@ -256,26 +268,120 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
           isRequiredForCase: true,
           workspaceId: workspaceA,
         },
-      }),
-      db.task.create({
+      });
+      taskIds.push(requiredOpen.id);
+      const optional = await db.task.create({
         data: {
           title: "optional",
           priority: "low",
           caseId: created.id,
           isRequiredForCase: false,
+          developmentStageId: completedStage.id,
+          workspaceId: workspaceA,
+        },
+      });
+      taskIds.push(optional.id);
+
+      expect(await caseRepository.countRequiredTasks(created.id, workspaceA)).toBe(2);
+      // Stage-based: completed-stage task counts even with not_started status (6.1).
+      expect(await caseRepository.countRequiredCompletedTasks(created.id, workspaceA)).toBe(1);
+
+      // Status alone must not count as completed (6.3).
+      const statusOnlyHandoff = await db.task.create({
+        data: {
+          title: "required handoff only",
+          priority: "low",
+          caseId: created.id,
+          isRequiredForCase: true,
+          status: "ready_for_handoff",
+          workspaceId: workspaceA,
+        },
+      });
+      taskIds.push(statusOnlyHandoff.id);
+
+      expect(await caseRepository.countRequiredTasks(created.id, workspaceA)).toBe(3);
+      expect(await caseRepository.countRequiredCompletedTasks(created.id, workspaceA)).toBe(1);
+    } finally {
+      await hardDelete("tasks", taskIds);
+      await hardDelete("development_stages", stageIds);
+      await hardDelete("cases", [created.id]);
+    }
+  });
+
+  it("excludes cancelled required tasks from the denominator (task-status-model 3.4; Requirement 6.2)", async () => {
+    const created = await caseRepository.create({
+      name: `progress-cancel-${randomUUID()}`,
+      endDate: new Date("2035-04-01"),
+      workspaceId: workspaceA,
+    });
+    const [completedStage, cancelledStage] = await Promise.all([
+      db.developmentStage.create({
+        data: {
+          name: `completed-${randomUUID()}`,
+          order: 900,
+          kind: "completed",
+          workspaceId: workspaceA,
+        },
+      }),
+      db.developmentStage.create({
+        data: {
+          name: `cancelled-${randomUUID()}`,
+          order: 901,
+          kind: "cancelled",
           workspaceId: workspaceA,
         },
       }),
     ]);
 
-    const requiredTotal = await caseRepository.countRequiredTasks(created.id, workspaceA);
-    const requiredCompleted = await caseRepository.countRequiredCompletedTasks(created.id, workspaceA);
+    // Observable: 5 required, 1 cancelled → denominator 4; 3 completed → 3/4.
+    const taskIds: string[] = [];
+    const stageIds = [completedStage.id, cancelledStage.id];
+    try {
+      for (let i = 0; i < 3; i++) {
+        const task = await db.task.create({
+          data: {
+            title: `required completed ${i}`,
+            priority: "low",
+            caseId: created.id,
+            isRequiredForCase: true,
+            developmentStageId: completedStage.id,
+            workspaceId: workspaceA,
+          },
+        });
+        taskIds.push(task.id);
+      }
+      const openTask = await db.task.create({
+        data: {
+          title: "required open",
+          priority: "low",
+          caseId: created.id,
+          isRequiredForCase: true,
+          workspaceId: workspaceA,
+        },
+      });
+      taskIds.push(openTask.id);
+      const cancelledTask = await db.task.create({
+        data: {
+          title: "required cancelled",
+          priority: "low",
+          caseId: created.id,
+          isRequiredForCase: true,
+          developmentStageId: cancelledStage.id,
+          workspaceId: workspaceA,
+        },
+      });
+      taskIds.push(cancelledTask.id);
 
-    expect(requiredTotal).toBe(2);
-    expect(requiredCompleted).toBe(1);
+      const requiredTotal = await caseRepository.countRequiredTasks(created.id, workspaceA);
+      const requiredCompleted = await caseRepository.countRequiredCompletedTasks(created.id, workspaceA);
 
-    await hardDelete("tasks", [requiredDone.id, requiredOpen.id, optional.id]);
-    await hardDelete("cases", [created.id]);
+      expect(requiredTotal).toBe(4);
+      expect(requiredCompleted).toBe(3);
+    } finally {
+      await hardDelete("tasks", taskIds);
+      await hardDelete("development_stages", stageIds);
+      await hardDelete("cases", [created.id]);
+    }
   });
 
   it("does not count required tasks that share caseId but belong to another workspace (Requirement 3.1)", async () => {
@@ -283,6 +389,14 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
       name: `progress-scope-${randomUUID()}`,
       endDate: new Date("2035-04-15"),
       workspaceId: workspaceA,
+    });
+    const completedStage = await db.developmentStage.create({
+      data: {
+        name: `completed-scope-${randomUUID()}`,
+        order: 900,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
     });
     const taskIds: string[] = [];
     try {
@@ -292,7 +406,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
           priority: "low",
           caseId: created.id,
           isRequiredForCase: true,
-          status: "ready_for_handoff",
+          developmentStageId: completedStage.id,
           workspaceId: workspaceA,
         },
       });
@@ -304,7 +418,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
           priority: "low",
           caseId: created.id,
           isRequiredForCase: true,
-          status: "ready_for_handoff",
+          developmentStageId: completedStage.id,
           workspaceId: workspaceB,
         },
       });
@@ -317,6 +431,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
       expect(requiredCompleted).toBe(1);
     } finally {
       await hardDelete("tasks", taskIds);
+      await hardDelete("development_stages", [completedStage.id]);
       await hardDelete("cases", [created.id]);
     }
   });

@@ -166,6 +166,10 @@ export const caseService = {
       throw notFound(`Case not found: ${id}`);
     }
 
+    // task-status-model 3.4: counts come from closure-based repository
+    // filters (6.1–6.3). requiredTotal === 0 means no progress to present
+    // (all required cancelled or none exist; 6.6). Overdue follows from
+    // requiredIncomplete after cancelled are excluded from the denominator (6.4, 6.5).
     const [requiredTotal, requiredCompleted] = await Promise.all([
       caseRepository.countRequiredTasks(id, workspaceId),
       caseRepository.countRequiredCompletedTasks(id, workspaceId),
@@ -176,12 +180,11 @@ export const caseService = {
       requiredTotal,
       requiredCompleted,
       requiredIncomplete,
-      // Requirement 6.1/6.2/6.3: a manually-completed case is never
-      // overdue, regardless of endDate or outstanding required tasks; a
-      // case with no endDate at all has no basis for an overdue judgement
-      // either (endDate is optional as of task 13.1) — this null check is a
-      // direct consequence of that type change, not a preemption of task
-      // 13.3's own equivalent test coverage.
+      // A manually-completed case is never overdue, regardless of endDate
+      // or outstanding required tasks; a case with no endDate at all has
+      // no basis for an overdue judgement either (endDate is optional as
+      // of task 13.1) — this null check is a direct consequence of that
+      // type change, not a preemption of task 13.3's own equivalent coverage.
       isOverdueWithIncomplete:
         !caseEntity.isCompleted &&
         caseEntity.endDate !== null &&

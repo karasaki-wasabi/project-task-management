@@ -8,6 +8,7 @@
 import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
+import { completedTaskFilter, openTaskFilter } from "../tasks/task.closure.js";
 import type { Case } from "./case.types.js";
 
 export const caseRepository = {
@@ -58,16 +59,30 @@ export const caseRepository = {
     });
   },
 
+  // task-status-model 3.4: denominator excludes cancelled-kind stages (6.2)
+  // via TaskClosure predicates (open ∪ completed ≡ not cancelled).
   countRequiredTasks(caseId: string, workspaceId: VerifiedWorkspaceId): Promise<number> {
     return db.task.count({
-      where: withWorkspaceScope({ caseId, isRequiredForCase: true }, workspaceId),
+      where: withWorkspaceScope(
+        {
+          caseId,
+          isRequiredForCase: true,
+          OR: [openTaskFilter, completedTaskFilter],
+        },
+        workspaceId,
+      ),
     });
   },
 
+  // task-status-model 3.4: completed count is completed-kind stage, not status (6.1, 6.3).
   countRequiredCompletedTasks(caseId: string, workspaceId: VerifiedWorkspaceId): Promise<number> {
     return db.task.count({
       where: withWorkspaceScope(
-        { caseId, isRequiredForCase: true, status: "ready_for_handoff" as const },
+        {
+          caseId,
+          isRequiredForCase: true,
+          ...completedTaskFilter,
+        },
         workspaceId,
       ),
     });
