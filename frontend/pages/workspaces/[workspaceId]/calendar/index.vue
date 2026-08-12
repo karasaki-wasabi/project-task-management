@@ -302,7 +302,7 @@ function cellDayNumberClass(cell: DateCell): string {
 // NonBusinessDay.date is already a plain "YYYY-MM-DD" string at the API
 // boundary (backend/src/modules/holidays/holiday.types.ts), matching
 // DateCell.date's format exactly, so no toLocalDateKey-style slicing is
-// needed here (unlike Task.scheduledDate/Case.startDate, which carry full
+// needed here (unlike Task.scheduledEndDate/Case.startDate, which carry full
 // timestamp strings elsewhere in this page's helpers).
 const holidayDateSet = computed(() => new Set(holidays.value.map((h) => h.date)));
 
@@ -336,7 +336,7 @@ const weekRows = computed(() => {
 
 const monthLabel = computed(() => `${year.value}年${month.value}月`);
 
-// Requirement 2.1, 2.2, 2.3, 2.4: tasks without scheduledDate are excluded
+// Requirement 2.1, 2.2, 2.3, 2.4: tasks without scheduledEndDate are excluded
 // entirely by buildTaskMarkersByDate; each marker carries a resolved
 // `stage` label and `isOverdue` flag (task 7.2). Recomputed whenever the
 // fetched task/stage list or the day changes.

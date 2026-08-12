@@ -85,7 +85,7 @@ afterAll(async () => {
 });
 
 describe("recurrenceService.registerTemplate (task 2.1)", () => {
-  it("registers a case-relative template with anchor, non-negative offset, NBD policy, and default memo (Requirements 2.1, 2.2, 2.4, 2.5)", async () => {
+  it("registers a case-relative template with anchor, non-negative offset, NBD policy, and default detail (Requirements 2.1, 2.2, 2.4, 2.5)", async () => {
     const templateIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate(
@@ -94,7 +94,7 @@ describe("recurrenceService.registerTemplate (task 2.1)", () => {
           priority: "high",
           caseAnchor: "case_start",
           caseOffsetDays: 0,
-          defaultMemo: "Zoom: https://example.com/meeting",
+          defaultDetail: "Zoom: https://example.com/meeting",
           nonBusinessDayPolicy: "next_business_day",
         }),
       );
@@ -102,7 +102,8 @@ describe("recurrenceService.registerTemplate (task 2.1)", () => {
 
       expect(template.caseAnchor).toBe("case_start");
       expect(template.caseOffsetDays).toBe(0);
-      expect(template.defaultMemo).toBe("Zoom: https://example.com/meeting");
+      expect(template.defaultDetail).toBe("Zoom: https://example.com/meeting");
+      expect(template).not.toHaveProperty("defaultMemo");
       expect(template.nonBusinessDayPolicy).toBe("next_business_day");
       expect(template.isActive).toBe(true);
       expect(template.workspaceId).toBe(workspaceA);
@@ -350,7 +351,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
       expectedDates: ["2036-04-30", "2036-05-31"],
     },
   ])(
-    "generates from active $anchor templates with caseId, defaultMemo, sourceAnchor (Requirements 5.1, 5.6, 5.7)",
+    "generates from active $anchor templates with caseId, defaultDetail, sourceAnchor (Requirements 5.1, 5.6, 5.7)",
     async ({ anchor, offset, startDate, endDate, expectedDates }) => {
       const templateIds: string[] = [];
       const caseIds: string[] = [];
@@ -361,7 +362,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
             title: `gen-${anchor}`,
             caseAnchor: anchor,
             caseOffsetDays: offset,
-            defaultMemo: "template default memo",
+            defaultDetail: "template default detail",
             nonBusinessDayPolicy: "as_is",
           }),
         );
@@ -376,12 +377,15 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
         taskIds = created.map((t) => t.id);
 
         expect(created).toHaveLength(expectedDates.length);
-        expect(created.map((t) => t.scheduledDate?.toISOString().slice(0, 10)).sort()).toEqual(
+        expect(created.map((t) => t.scheduledEndDate?.toISOString().slice(0, 10)).sort()).toEqual(
           [...expectedDates].sort(),
         );
         for (const task of created) {
           expect(task.caseId).toBe(caseEntity.id);
-          expect(task.memo).toBe("template default memo");
+          expect(task.detail).toBe("template default detail");
+          expect(task).not.toHaveProperty("memo");
+          expect(task).not.toHaveProperty("scheduledDate");
+          expect(Object.hasOwn(task, "scheduledEndDate")).toBe(true);
           expect(task.sourceTemplateId).toBe(template.id);
           expect(task.sourceAnchor).toBe(anchor);
         }
@@ -465,13 +469,13 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
       const nexted = await recurrenceService.generateForAnchor(caseEntity, "case_end");
       taskIds = nexted.map((t) => t.id);
       expect(nexted).toHaveLength(1);
-      expect(nexted[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2036-08-16");
+      expect(nexted[0].scheduledEndDate?.toISOString().slice(0, 10)).toBe("2036-08-16");
     } finally {
       await cleanup({ taskIds, templateIds, caseIds, nonBusinessDayIds });
     }
   });
 
-  it("policy=previous_business_day moves scheduledDate to the prior business day (Requirement 5.7)", async () => {
+  it("policy=previous_business_day moves scheduledEndDate to the prior business day (Requirement 5.7)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     const nonBusinessDayIds: string[] = [];
@@ -505,23 +509,23 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
       const created = await recurrenceService.generateForAnchor(caseEntity, "case_end");
       taskIds = created.map((t) => t.id);
       expect(created).toHaveLength(1);
-      expect(created[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2036-08-19");
+      expect(created[0].scheduledEndDate?.toISOString().slice(0, 10)).toBe("2036-08-19");
     } finally {
       await cleanup({ taskIds, templateIds, caseIds, nonBusinessDayIds });
     }
   });
 
-  it("editing one instance memo does not change template defaultMemo or sibling memos (Requirement 5.8)", async () => {
+  it("editing one instance detail does not change template defaultDetail or sibling details (Requirement 5.8)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate(
         baseInput({
-          title: "memo-independence",
+          title: "detail-independence",
           caseAnchor: "period_month_start",
           caseOffsetDays: 0,
-          defaultMemo: "shared default",
+          defaultDetail: "shared default",
           nonBusinessDayPolicy: "as_is",
         }),
       );
@@ -529,7 +533,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
 
       const caseEntity = await db.case.create({
         data: {
-          name: `memo-${randomUUID()}`,
+          name: `detail-${randomUUID()}`,
           startDate: new Date("2036-09-01T00:00:00.000Z"),
           endDate: new Date("2036-10-31T00:00:00.000Z"),
         workspaceId: workspaceA,
@@ -543,13 +547,13 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
 
       await db.task.update({
         where: { id: created[0].id },
-        data: { memo: "edited just for this instance" },
+        data: { detail: "edited just for this instance" },
       });
 
       const sibling = await db.task.findUnique({ where: { id: created[1].id } });
       const templateAfter = await db.recurringTaskTemplate.findUnique({ where: { id: template.id } });
-      expect(sibling?.memo).toBe("shared default");
-      expect(templateAfter?.defaultMemo).toBe("shared default");
+      expect(sibling?.detail).toBe("shared default");
+      expect(templateAfter?.defaultDetail).toBe("shared default");
     } finally {
       await cleanup({ taskIds, templateIds, caseIds });
     }
@@ -586,7 +590,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
       taskIds = tasks.map((t) => t.id);
       expect(tasks).toHaveLength(1);
       expect(tasks[0].sourceAnchor).toBe("case_start");
-      expect(tasks[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2037-01-11");
+      expect(tasks[0].scheduledEndDate?.toISOString().slice(0, 10)).toBe("2037-01-11");
     } finally {
       await cleanup({ taskIds, templateIds, caseIds });
     }
@@ -617,7 +621,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
       taskIds = tasks.map((t) => t.id);
       expect(tasks).toHaveLength(1);
       expect(tasks[0].sourceAnchor).toBe("case_end");
-      expect(tasks[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2037-02-18");
+      expect(tasks[0].scheduledEndDate?.toISOString().slice(0, 10)).toBe("2037-02-18");
     } finally {
       await cleanup({ taskIds, templateIds, caseIds });
     }
@@ -653,10 +657,10 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
         period_month_start: tasks.filter((t) => t.sourceAnchor === "period_month_start"),
         period_month_end: tasks.filter((t) => t.sourceAnchor === "period_month_end"),
       };
-      expect(byAnchor.period_month_start.map((t) => t.scheduledDate?.toISOString().slice(0, 10)).sort()).toEqual([
+      expect(byAnchor.period_month_start.map((t) => t.scheduledEndDate?.toISOString().slice(0, 10)).sort()).toEqual([
         "2037-04-01",
       ]);
-      expect(byAnchor.period_month_end.map((t) => t.scheduledDate?.toISOString().slice(0, 10)).sort()).toEqual([
+      expect(byAnchor.period_month_end.map((t) => t.scheduledEndDate?.toISOString().slice(0, 10)).sort()).toEqual([
         "2037-03-31",
       ]);
     } finally {
@@ -795,7 +799,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
       await recurrenceService.applyToCase(caseEntity.id, ["start_generate"]);
       const first = await listActiveTasksForCase(caseEntity.id);
       expect(first).toHaveLength(1);
-      expect(first[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2037-08-01");
+      expect(first[0].scheduledEndDate?.toISOString().slice(0, 10)).toBe("2037-08-01");
       const oldId = first[0].id;
 
       await db.case.update({
@@ -809,7 +813,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
       taskIds = [...after.map((t) => t.id), oldId];
       expect(after).toHaveLength(1);
       expect(after[0].id).not.toBe(oldId);
-      expect(after[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2037-08-10");
+      expect(after[0].scheduledEndDate?.toISOString().slice(0, 10)).toBe("2037-08-10");
       const softDeleted = await db.task.findFirst({ where: { id: oldId, deletedAt: { not: null } } });
       expect(softDeleted).not.toBeNull();
     } finally {
@@ -849,7 +853,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
       const after = await listActiveTasksForCase(caseEntity.id);
       taskIds = [...after.map((t) => t.id), oldId];
       expect(after).toHaveLength(1);
-      expect(after[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2037-09-25");
+      expect(after[0].scheduledEndDate?.toISOString().slice(0, 10)).toBe("2037-09-25");
       expect(after[0].id).not.toBe(oldId);
     } finally {
       await cleanup({ taskIds, templateIds, caseIds });
@@ -896,7 +900,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
       const after = await listActiveTasksForCase(caseEntity.id);
       taskIds = [...after.map((t) => t.id), oldId];
       expect(after).toHaveLength(1);
-      expect(after[0].scheduledDate?.toISOString().slice(0, 10)).toBe("2037-11-01");
+      expect(after[0].scheduledEndDate?.toISOString().slice(0, 10)).toBe("2037-11-01");
       expect(after[0].id).not.toBe(oldId);
     } finally {
       await cleanup({ taskIds, templateIds, caseIds });
@@ -930,7 +934,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2â€“3.4, 5.1â€
           title: "manual task",
           priority: "medium",
           caseId: caseEntity.id,
-          scheduledDate: new Date("2037-12-01T00:00:00.000Z"),
+          scheduledEndDate: new Date("2037-12-01T00:00:00.000Z"),
           workspaceId: workspaceA,
         },
       });

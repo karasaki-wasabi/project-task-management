@@ -216,7 +216,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
       const mine = tasks.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
 
       expect(mine).toHaveLength(1);
-      expect(mine[0].scheduledDate.slice(0, 10)).toBe("2041-03-08");
+      expect(mine[0].scheduledEndDate.slice(0, 10)).toBe("2041-03-08");
     } finally {
       for (const id of caseIds) await hardDeleteTasksForCase(id);
       await hardDelete("cases", caseIds);
@@ -255,7 +255,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
         .then((r) => r.json());
       const initialMine = initialTasks.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
       expect(initialMine).toHaveLength(1);
-      expect(initialMine[0].scheduledDate.slice(0, 10)).toBe("2041-09-12");
+      expect(initialMine[0].scheduledEndDate.slice(0, 10)).toBe("2041-09-12");
       const oldId = initialMine[0].id;
 
       await app.inject({ method: "PATCH", url: `/api/cases/${caseEntity.id}`, payload: { endDate: "2041-09-20" } });
@@ -266,7 +266,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
       const mine = recalculatedTasks.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
       expect(mine).toHaveLength(1);
       expect(mine[0].id).not.toBe(oldId);
-      expect(mine[0].scheduledDate.slice(0, 10)).toBe("2041-09-17");
+      expect(mine[0].scheduledEndDate.slice(0, 10)).toBe("2041-09-17");
     } finally {
       for (const id of caseIds) await hardDeleteTasksForCase(id);
       await hardDelete("cases", caseIds);
@@ -357,7 +357,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
       const mine = afterTasks.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
 
       expect(mine).toHaveLength(1);
-      expect(mine[0].scheduledDate.slice(0, 10)).toBe("2041-11-16");
+      expect(mine[0].scheduledEndDate.slice(0, 10)).toBe("2041-11-16");
     } finally {
       for (const id of caseIds) await hardDeleteTasksForCase(id);
       await hardDelete("cases", caseIds);
@@ -436,7 +436,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
       const firstMine = first.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
       expect(firstMine).toHaveLength(1);
       const oldId = firstMine[0].id;
-      expect(firstMine[0].scheduledDate.slice(0, 10)).toBe("2041-04-10");
+      expect(firstMine[0].scheduledEndDate.slice(0, 10)).toBe("2041-04-10");
 
       // Soft-delete the active instance, then regenerate onto the same day.
       await app.inject({ method: "DELETE", url: `/api/tasks/${oldId}` });
@@ -457,7 +457,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
       const mine = after.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
       expect(mine).toHaveLength(1);
       expect(mine[0].id).not.toBe(oldId);
-      expect(mine[0].scheduledDate.slice(0, 10)).toBe("2041-04-10");
+      expect(mine[0].scheduledEndDate.slice(0, 10)).toBe("2041-04-10");
     } finally {
       for (const id of caseIds) await hardDeleteTasksForCase(id);
       await hardDelete("cases", caseIds);
@@ -471,12 +471,12 @@ describe("12.5: 非営業日ポリシー4パターンの統合検証 (Requiremen
   const scenarios: Array<{
     policy: "as_is" | "skip" | "next_business_day" | "previous_business_day";
     holidayDate: string;
-    expectedScheduledDate: string | null;
+    expectedScheduledEndDate: string | null;
   }> = [
-    { policy: "as_is", holidayDate: "2041-05-01", expectedScheduledDate: "2041-05-01" },
-    { policy: "skip", holidayDate: "2041-05-02", expectedScheduledDate: null },
-    { policy: "next_business_day", holidayDate: "2041-05-03", expectedScheduledDate: "2041-05-04" },
-    { policy: "previous_business_day", holidayDate: "2041-05-04", expectedScheduledDate: "2041-05-03" },
+    { policy: "as_is", holidayDate: "2041-05-01", expectedScheduledEndDate: "2041-05-01" },
+    { policy: "skip", holidayDate: "2041-05-02", expectedScheduledEndDate: null },
+    { policy: "next_business_day", holidayDate: "2041-05-03", expectedScheduledEndDate: "2041-05-04" },
+    { policy: "previous_business_day", holidayDate: "2041-05-04", expectedScheduledEndDate: "2041-05-03" },
   ];
 
   for (const scenario of scenarios) {
@@ -523,11 +523,11 @@ describe("12.5: 非営業日ポリシー4パターンの統合検証 (Requiremen
           .then((r) => r.json());
         const mine = tasks.filter((t: { sourceTemplateId: string }) => t.sourceTemplateId === template.id);
 
-        if (scenario.expectedScheduledDate === null) {
+        if (scenario.expectedScheduledEndDate === null) {
           expect(mine).toHaveLength(0);
         } else {
           expect(mine).toHaveLength(1);
-          expect(mine[0].scheduledDate.slice(0, 10)).toBe(scenario.expectedScheduledDate);
+          expect(mine[0].scheduledEndDate.slice(0, 10)).toBe(scenario.expectedScheduledEndDate);
         }
       } finally {
         for (const id of caseIds) await hardDeleteTasksForCase(id);

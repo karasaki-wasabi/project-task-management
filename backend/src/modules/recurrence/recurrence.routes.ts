@@ -18,7 +18,7 @@ const registerTemplateBodySchema = z.object({
   priority,
   caseAnchor,
   caseOffsetDays: z.number().int().nonnegative(),
-  defaultMemo: z.string().optional(),
+  defaultDetail: z.string().optional(),
   nonBusinessDayPolicy,
 });
 const templateIdParamsSchema = z.object({ id: z.string() });

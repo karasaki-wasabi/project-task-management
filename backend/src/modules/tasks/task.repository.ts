@@ -16,7 +16,7 @@ export const taskRepository = {
       data: {
         title: input.title,
         priority: input.priority,
-        memo: input.memo,
+        detail: input.detail,
         caseId: input.caseId,
         // design.md TasksService Implementation Notes: "caseId未指定時は
         // isRequiredForCaseをfalse固定にする".
@@ -26,7 +26,7 @@ export const taskRepository = {
         // RecurrenceService-only (see task.types.ts CreateTaskInput comment).
         sourceTemplateId: input.sourceTemplateId,
         sourceAnchor: input.sourceAnchor,
-        scheduledDate: input.scheduledDate,
+        scheduledEndDate: input.scheduledEndDate,
         workspaceId: input.workspaceId,
       },
     });
@@ -101,7 +101,7 @@ export const taskRepository = {
             data: {
               title: input.title,
               priority: input.priority,
-              memo: input.memo,
+              detail: input.detail,
               caseId: input.caseId,
               isRequiredForCase: input.caseId ? (input.isRequiredForCase ?? false) : false,
               assigneeUserId: input.assigneeUserId,

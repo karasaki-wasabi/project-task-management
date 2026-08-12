@@ -281,21 +281,27 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
         {
           method: "POST",
           url: "/api/tasks",
-          payload: { title: "editable", priority: "low", memo: "old" },
+          payload: { title: "editable", priority: "low", detail: "old" },
         },
         memberCsrf.cookie,
         memberCsrf.token,
         workspaceA,
       ),
     );
-    const { id } = created.json();
+    const createdBody = created.json();
+    expect(created.statusCode).toBe(201);
+    expect(createdBody).toMatchObject({ detail: "old" });
+    expect(createdBody).not.toHaveProperty("memo");
+    expect(createdBody).not.toHaveProperty("scheduledDate");
+    expect(Object.hasOwn(createdBody, "scheduledEndDate")).toBe(true);
+    const { id } = createdBody;
 
     const okResponse = await app.inject(
       withWorkspace(
         {
           method: "PATCH",
           url: `/api/tasks/${id}`,
-          payload: { title: "edited", priority: "high", memo: "new" },
+          payload: { title: "edited", priority: "high", detail: "new" },
         },
         memberCsrf.cookie,
         memberCsrf.token,
@@ -303,7 +309,9 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       ),
     );
     expect(okResponse.statusCode).toBe(200);
-    expect(okResponse.json()).toMatchObject({ title: "edited", priority: "high", memo: "new" });
+    expect(okResponse.json()).toMatchObject({ title: "edited", priority: "high", detail: "new" });
+    expect(okResponse.json()).not.toHaveProperty("memo");
+    expect(okResponse.json()).not.toHaveProperty("scheduledDate");
 
     const badResponse = await app.inject(
       withWorkspace(
@@ -332,6 +340,51 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       ),
     );
     expect(missingResponse.statusCode).toBe(404);
+
+    await hardDelete("tasks", [id]);
+  });
+
+  it("PATCH with only memo does not change detail (Requirement 1.4)", async () => {
+    const created = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "keep-detail", priority: "low", detail: "original detail" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(created.statusCode).toBe(201);
+    const { id } = created.json();
+
+    const memoOnly = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${id}`,
+          payload: { memo: "should be ignored" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    // Zod strips unknown keys; empty body fails refine → 400, or succeeds without applying memo.
+    if (memoOnly.statusCode === 200) {
+      expect(memoOnly.json().detail).toBe("original detail");
+      expect(memoOnly.json()).not.toHaveProperty("memo");
+    }
+
+    const got = await app.inject(
+      withWorkspace({ method: "GET", url: `/api/tasks/${id}` }, memberCsrf.cookie, undefined, workspaceA),
+    );
+    expect(got.statusCode).toBe(200);
+    expect(got.json().detail).toBe("original detail");
+    expect(got.json()).not.toHaveProperty("memo");
+    expect(got.json()).not.toHaveProperty("scheduledDate");
 
     await hardDelete("tasks", [id]);
   });

@@ -10,7 +10,7 @@ describe("RecurrenceFormModal.helpers", () => {
       caseAnchor: "case_end",
       caseOffsetDays: 0,
       nonBusinessDayPolicy: "as_is",
-      defaultMemo: "",
+      defaultDetail: "",
     }).valid).toBe(false);
 
     expect(validateRecurrenceForm({
@@ -19,7 +19,7 @@ describe("RecurrenceFormModal.helpers", () => {
       caseAnchor: "case_end",
       caseOffsetDays: -1,
       nonBusinessDayPolicy: "as_is",
-      defaultMemo: "",
+      defaultDetail: "",
     }).valid).toBe(false);
 
     expect(validateRecurrenceForm({
@@ -28,7 +28,7 @@ describe("RecurrenceFormModal.helpers", () => {
       caseAnchor: "case_end",
       caseOffsetDays: 1.5,
       nonBusinessDayPolicy: "as_is",
-      defaultMemo: "",
+      defaultDetail: "",
     }).valid).toBe(false);
 
     expect(validateRecurrenceForm({
@@ -37,18 +37,18 @@ describe("RecurrenceFormModal.helpers", () => {
       caseAnchor: "case_start",
       caseOffsetDays: 0,
       nonBusinessDayPolicy: "skip",
-      defaultMemo: "",
+      defaultDetail: "",
     }).valid).toBe(true);
   });
 
-  it("omits empty defaultMemo from register input", () => {
+  it("omits empty defaultDetail from register input", () => {
     expect(buildRegisterTemplateInput({
       title: "  kick  ",
       priority: "low",
       caseAnchor: "period_month_start",
       caseOffsetDays: 2,
       nonBusinessDayPolicy: "next_business_day",
-      defaultMemo: "  ",
+      defaultDetail: "  ",
     })).toEqual({
       title: "kick",
       priority: "low",

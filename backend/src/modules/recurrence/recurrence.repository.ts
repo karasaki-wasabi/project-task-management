@@ -20,7 +20,7 @@ export const recurrenceRepository = {
         priority: input.priority,
         caseAnchor: input.caseAnchor,
         caseOffsetDays: input.caseOffsetDays,
-        defaultMemo: input.defaultMemo,
+        defaultDetail: input.defaultDetail,
         nonBusinessDayPolicy: input.nonBusinessDayPolicy,
         workspaceId: input.workspaceId,
       },

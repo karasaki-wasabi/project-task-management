@@ -15,7 +15,7 @@ Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロント
 
 ## Key Libraries
 
-- **Prisma**: スキーマは`backend/src/prisma/schema.prisma`。共通のソフトデリート/監査カラム規約はPrisma Client Extension(`shared/soft-delete.repository.ts`)で一律適用する(各Serviceが個別に気にする必要がない設計)
+- **Prisma**: スキーマは`backend/src/prisma/schema.prisma`。共通のソフトデリート/監査カラム規約はPrisma Client Extension(`shared/soft-delete.repository.ts`)で一律適用する(各Serviceが個別に気にする必要がない設計)。開発フェーズのマイグレーションは追従追加せず単一 init へ畳み込む（厳守: [[prisma-migrations]]）
 - **pino** + **pino-pretty**: 構造化ログ。開発時のみpretty-print、テスト/本番はJSON行出力
 - **@fastify/cors**: SPAからの Cookie 付きクロスオリジン API 呼び出しを許可。`credentials: true`と`CORS_ORIGIN`で指定する許可 Origin を組み合わせ、`*`は使用しない
 - **@playwright/test**: E2Eテスト。design.md/research.mdに指定がなく実装時に導入した判断(Nuxt/Vueでの標準的選択)

@@ -1,17 +1,17 @@
 // Full domain data model.
 // Physical shape follows design.md. Generated columns that Prisma cannot express
 // natively are modeled as Unsupported() here; the actual column + unique index
-// are added by hand-editing the generated migration SQL (see design.md Physical
-// and research.md for the MySQL partial-unique-index workaround).
+// are hand-edited into the single init migration SQL (see
+// .kiro/steering/prisma-migrations.md — do not add follow-up migrations).
 //
 // - `non_business_days.date_active_key`: active-date uniqueness for holidays
 // - `tasks.template_case_date_active_key`: active-row uniqueness for
-//   template-generated tasks on (source_template_id, case_id, scheduled_date).
+//   template-generated tasks on (source_template_id, case_id, scheduled_end_date).
 //   Conceptual expression (exact SQL in migration hand-edit):
 //   IF(deleted_at IS NULL AND source_template_id IS NOT NULL
-//        AND case_id IS NOT NULL AND scheduled_date IS NOT NULL,
+//        AND case_id IS NOT NULL AND scheduled_end_date IS NOT NULL,
 //      CONCAT(source_template_id, ':', case_id, ':',
-//             DATE_FORMAT(scheduled_date, '%Y-%m-%d')), NULL)
+//             DATE_FORMAT(scheduled_end_date, '%Y-%m-%d')), NULL)
 
 generator client {
   provider = "prisma-client-js"
@@ -138,7 +138,7 @@ model Task {
   title                    String
   status                   TaskStatus           @default(not_started)
   priority                 Priority
-  memo                     String?              @db.Text
+  detail                   String?              @db.Text
   caseId                   String?              @map("case_id")
   isRequiredForCase        Boolean              @default(false) @map("is_required_for_case")
   parentTaskId             String?              @map("parent_task_id")
@@ -147,15 +147,15 @@ model Task {
   // Snapshot of the template's caseAnchor at generation time (Req 5.3).
   sourceAnchor             CaseRelativeAnchor?  @map("source_anchor")
   developmentStageId       String?              @map("development_stage_id")
-  scheduledDate            DateTime?            @map("scheduled_date") @db.Date
+  scheduledEndDate         DateTime?            @map("scheduled_end_date") @db.Date
   completedAt              DateTime?            @map("completed_at")
   workspaceId              String               @map("workspace_id")
   createdAt                DateTime             @default(now()) @map("created_at")
   updatedAt                DateTime             @updatedAt @map("updated_at")
   deletedAt                DateTime?            @map("deleted_at")
   // Active-only unique key (STORED GENERATED COLUMN + UNIQUE). Prisma cannot
-  // express the generator; SQL hand-edit in task 1.2. Soft-deleted rows yield
-  // NULL so the same (sourceTemplateId, caseId, scheduledDate) can be recreated.
+  // express the generator; SQL hand-edit in migration. Soft-deleted rows yield
+  // NULL so the same (sourceTemplateId, caseId, scheduledEndDate) can be recreated.
   templateCaseDateActiveKey Unsupported("varchar(191)")? @map("template_case_date_active_key")
 
   workspace        Workspace               @relation(fields: [workspaceId], references: [id])
@@ -182,7 +182,7 @@ model RecurringTaskTemplate {
   caseAnchor           CaseRelativeAnchor   @map("case_anchor")
   // Non-negative offset distance; direction is fixed per caseAnchor in application logic.
   caseOffsetDays       Int                  @map("case_offset_days")
-  defaultMemo          String?              @db.Text @map("default_memo")
+  defaultDetail        String?              @db.Text @map("default_detail")
   nonBusinessDayPolicy NonBusinessDayPolicy @map("non_business_day_policy")
   isActive             Boolean              @default(true) @map("is_active")
   workspaceId          String               @map("workspace_id")

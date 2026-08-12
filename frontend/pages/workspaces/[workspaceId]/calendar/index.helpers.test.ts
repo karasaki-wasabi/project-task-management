@@ -70,11 +70,11 @@ const WEEK: DateCell[] = [
 describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", () => {
   const stages = [makeStage({ id: "s1", name: "設計" }), makeStage({ id: "s2", name: "実装" })];
 
-  it("groups tasks with a scheduledDate by local-calendar-day date key", () => {
+  it("groups tasks with a scheduledEndDate by local-calendar-day date key", () => {
     const tasks = [
-      makeTask({ id: "t1", title: "Task 1", scheduledDate: "2026-08-05T00:00:00.000Z" }),
-      makeTask({ id: "t2", title: "Task 2", scheduledDate: "2026-08-05T00:00:00.000Z" }),
-      makeTask({ id: "t3", title: "Task 3", scheduledDate: "2026-08-06T00:00:00.000Z" }),
+      makeTask({ id: "t1", title: "Task 1", scheduledEndDate: "2026-08-05T00:00:00.000Z" }),
+      makeTask({ id: "t2", title: "Task 2", scheduledEndDate: "2026-08-05T00:00:00.000Z" }),
+      makeTask({ id: "t3", title: "Task 3", scheduledEndDate: "2026-08-06T00:00:00.000Z" }),
     ];
 
     const result = buildTaskMarkersByDate(tasks, stages, "2026-08-01");
@@ -84,11 +84,11 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-06")?.map((m) => m.taskId)).toEqual(["t3"]);
   });
 
-  it("excludes tasks without a scheduledDate", () => {
+  it("excludes tasks without a scheduledEndDate", () => {
     const tasks = [
-      makeTask({ id: "t1", scheduledDate: undefined }),
-      makeTask({ id: "t2", scheduledDate: null }),
-      makeTask({ id: "t3", scheduledDate: "2026-08-05T00:00:00.000Z" }),
+      makeTask({ id: "t1", scheduledEndDate: undefined }),
+      makeTask({ id: "t2", scheduledEndDate: null }),
+      makeTask({ id: "t3", scheduledEndDate: "2026-08-05T00:00:00.000Z" }),
     ];
 
     const result = buildTaskMarkersByDate(tasks, stages, "2026-08-01");
@@ -103,7 +103,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
 
   it("resolves developmentStageId to the stage's name via the provided stages list", () => {
     const tasks = [
-      makeTask({ id: "t1", developmentStageId: "s2", scheduledDate: "2026-08-05T00:00:00.000Z" }),
+      makeTask({ id: "t1", developmentStageId: "s2", scheduledEndDate: "2026-08-05T00:00:00.000Z" }),
     ];
 
     const result = buildTaskMarkersByDate(tasks, stages, "2026-08-01");
@@ -113,7 +113,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
 
   it("uses a null stage when developmentStageId is unset", () => {
     const tasks = [
-      makeTask({ id: "t1", developmentStageId: null, scheduledDate: "2026-08-05T00:00:00.000Z" }),
+      makeTask({ id: "t1", developmentStageId: null, scheduledEndDate: "2026-08-05T00:00:00.000Z" }),
     ];
 
     const result = buildTaskMarkersByDate(tasks, stages, "2026-08-01");
@@ -121,13 +121,13 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-05")?.[0]?.stage).toBeNull();
   });
 
-  it("flags isOverdue when scheduledDate is before today and the task is not closed (Requirement 8.4)", () => {
+  it("flags isOverdue when scheduledEndDate is before today and the task is not closed (Requirement 8.4)", () => {
     const tasks = [
       makeTask({
         id: "t1",
         status: "in_progress",
         developmentStageId: "s1",
-        scheduledDate: "2026-08-01T00:00:00.000Z",
+        scheduledEndDate: "2026-08-01T00:00:00.000Z",
       }),
     ];
 
@@ -146,7 +146,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
         id: "t1",
         status: "not_started",
         developmentStageId: "s-done",
-        scheduledDate: "2026-08-01T00:00:00.000Z",
+        scheduledEndDate: "2026-08-01T00:00:00.000Z",
       }),
     ];
 
@@ -165,7 +165,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
         id: "t1",
         status: "in_progress",
         developmentStageId: "s-cancel",
-        scheduledDate: "2026-08-01T00:00:00.000Z",
+        scheduledEndDate: "2026-08-01T00:00:00.000Z",
       }),
     ];
 
@@ -180,7 +180,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
         id: "t1",
         status: "ready_for_handoff",
         developmentStageId: "s1",
-        scheduledDate: "2026-08-01T00:00:00.000Z",
+        scheduledEndDate: "2026-08-01T00:00:00.000Z",
       }),
     ];
 
@@ -189,10 +189,10 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-01")?.[0]?.isOverdue).toBe(true);
   });
 
-  it("does not flag isOverdue when scheduledDate is today or in the future", () => {
+  it("does not flag isOverdue when scheduledEndDate is today or in the future", () => {
     const tasks = [
-      makeTask({ id: "t1", status: "not_started", scheduledDate: "2026-08-05T00:00:00.000Z" }),
-      makeTask({ id: "t2", status: "not_started", scheduledDate: "2026-08-06T00:00:00.000Z" }),
+      makeTask({ id: "t1", status: "not_started", scheduledEndDate: "2026-08-05T00:00:00.000Z" }),
+      makeTask({ id: "t2", status: "not_started", scheduledEndDate: "2026-08-06T00:00:00.000Z" }),
     ];
 
     const result = buildTaskMarkersByDate(tasks, stages, "2026-08-05");
