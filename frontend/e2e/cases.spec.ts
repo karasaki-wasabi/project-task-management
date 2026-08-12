@@ -52,8 +52,12 @@ async function setDateViaPicker(
   await expect(popover).toBeHidden();
 }
 
-async function createUnassignedTask(page: import("@playwright/test").Page, title: string) {
-  await page.goto(workspacePagePath(workspace.id, "tasks"));
+async function createUnassignedTask(
+  page: import("@playwright/test").Page,
+  workspaceId: string,
+  title: string,
+) {
+  await page.goto(workspacePagePath(workspaceId, "tasks"));
   await page.getByPlaceholder("タスク名").fill(title);
   await page.getByRole("button", { name: "タスク登録" }).click();
   await expect(page.locator("li", { hasText: title }).first()).toBeVisible();
@@ -77,8 +81,8 @@ test("案件を登録すると進捗が反映され、名称検索とステー�
   const taskBTitle = `e2e-case-task-b-${suffix}`;
   const caseName = `e2e-case-${suffix}`;
 
-  await createUnassignedTask(page, taskATitle);
-  await createUnassignedTask(page, taskBTitle);
+  await createUnassignedTask(page, workspace.id, taskATitle);
+  await createUnassignedTask(page, workspace.id, taskBTitle);
 
   await page.goto(workspacePagePath(workspace.id, "cases"));
   await page.getByRole("button", { name: "案件を登録" }).click();
@@ -150,7 +154,7 @@ test("終了日超過かつ必須タスク未完了の案件は期限超過表�
   const overdueTaskTitle = `e2e-case-overdue-task-${suffix}`;
   const overdueCaseName = `e2e-case-overdue-${suffix}`;
 
-  await createUnassignedTask(page, overdueTaskTitle);
+  await createUnassignedTask(page, workspace.id, overdueTaskTitle);
 
   await page.goto(workspacePagePath(workspace.id, "cases"));
   await page.getByRole("button", { name: "案件を登録" }).click();

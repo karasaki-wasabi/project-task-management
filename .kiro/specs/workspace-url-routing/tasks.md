@@ -92,21 +92,19 @@
   - _Boundary: useApiClient_
   - _Depends: 1.2, 3.2_
 
-- [ ] 6. Validation: 認証戻り先と E2E
+- [x] 6. Validation: 認証戻り先と E2E
 - [x] 6.1 ログイン redirect が scoped fullPath を保持することを確認し、関連ユニットを更新する
   - 観測可能な完了状態: `/workspaces/:id/tasks?caseId=...` がログイン redirect 経由で復元されるテストが通る
   - _Requirements: 7.1, 7.2, 7.3_
   - _Depends: 3.2_
 
-- [ ] 6.2 fixtures と主要シナリオを新 path へ合わせる
+- [x] 6.2 fixtures と主要シナリオを新 path へ合わせる
   - 作成、旧 URL 404、非所属 404、Switcher、所属ゼロ、業務導線をカバーする
   - 観測可能な完了状態: 主要 E2E が新 URL で通り、旧フラット業務 URL は 404 になる
   - _Requirements: 1.1, 2.1, 2.2, 4.1, 5.1, 5.2, 8.1, 8.2_
   - _Depends: 3.3, 4.1, 4.2, 4.3, 5.1, 5.2, 6.1_
-  - _Note: fixtures / specs は新 path へ更新済み。Docker 未起動のため Playwright 実行は未検証_
 
-- [ ] 6.3 残りの業務 E2E の遷移先・期待 URL を更新する
+- [x] 6.3 残りの業務 E2E の遷移先・期待 URL を更新する
   - 観測可能な完了状態: 既存の業務 E2E スイートが新 path 前提で通過する
   - _Requirements: 1.1, 1.4_
   - _Depends: 6.2_
-  - _Note: 業務 E2E の path 更新は済み。実行検証は 6.2 と同時に行う_
