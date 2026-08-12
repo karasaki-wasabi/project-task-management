@@ -148,8 +148,8 @@ async function confirmDelete() {
             <span class="text-slate-900">{{ priorityLabel(template.priority) }}</span>
           </div>
           <div class="grid grid-cols-[9rem_1fr] items-baseline gap-3">
-            <span class="text-xs font-medium text-slate-500">既定メモ</span>
-            <span class="text-slate-700">{{ template.defaultMemo?.trim() ? template.defaultMemo : "—" }}</span>
+            <span class="text-xs font-medium text-slate-500">既定詳細</span>
+            <span class="text-slate-700">{{ template.defaultDetail?.trim() ? template.defaultDetail : "—" }}</span>
           </div>
         </div>
       </div>

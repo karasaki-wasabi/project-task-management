@@ -16,7 +16,7 @@ export type Priority = PrismaTask["priority"];
 export interface CreateTaskInput {
   title: string;
   priority: Priority;
-  memo?: string;
+  detail?: string;
   caseId?: string;
   isRequiredForCase?: boolean;
   assigneeUserId?: string;
@@ -28,7 +28,7 @@ export interface CreateTaskInput {
   sourceTemplateId?: string;
   // Snapshot of the template caseAnchor at generation time (Req 5.3).
   sourceAnchor?: PrismaTask["sourceAnchor"];
-  scheduledDate?: Date;
+  scheduledEndDate?: Date;
   /** From request.currentWorkspaceId only (VerifiedWorkspaceId). */
   workspaceId: VerifiedWorkspaceId;
 }
@@ -47,7 +47,7 @@ export interface TaskListFilter {
 export interface UpdateTaskInput {
   title?: string;
   priority?: Priority;
-  memo?: string | null;
+  detail?: string | null;
   caseId?: string | null;
   isRequiredForCase?: boolean;
   assigneeUserId?: string | null;

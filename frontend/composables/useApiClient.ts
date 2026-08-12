@@ -17,14 +17,14 @@ export interface Task {
   title: string;
   status: TaskStatus;
   priority: Priority;
-  memo?: string | null;
+  detail?: string | null;
   caseId?: string | null;
   isRequiredForCase: boolean;
   parentTaskId?: string | null;
   assigneeUserId?: string | null;
   sourceTemplateId?: string | null;
   developmentStageId?: string | null;
-  scheduledDate?: string | null;
+  scheduledEndDate?: string | null;
   completedAt?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -34,7 +34,7 @@ export interface Task {
 export interface CreateTaskInput {
   title: string;
   priority: Priority;
-  memo?: string;
+  detail?: string;
   caseId?: string;
   isRequiredForCase?: boolean;
   assigneeUserId?: string;
@@ -44,7 +44,7 @@ export interface CreateTaskInput {
 export interface UpdateTaskInput {
   title?: string;
   priority?: Priority;
-  memo?: string | null;
+  detail?: string | null;
   caseId?: string | null;
   isRequiredForCase?: boolean;
   assigneeUserId?: string | null;
@@ -118,7 +118,7 @@ export interface RecurringTaskTemplate {
   priority: Priority;
   caseAnchor: CaseRelativeAnchor;
   caseOffsetDays: number;
-  defaultMemo?: string | null;
+  defaultDetail?: string | null;
   nonBusinessDayPolicy: NonBusinessDayPolicy;
   isActive: boolean;
   createdAt: string;
@@ -131,7 +131,7 @@ export interface RegisterTemplateInput {
   priority: Priority;
   caseAnchor: CaseRelativeAnchor;
   caseOffsetDays: number;
-  defaultMemo?: string;
+  defaultDetail?: string;
   nonBusinessDayPolicy: NonBusinessDayPolicy;
 }
 

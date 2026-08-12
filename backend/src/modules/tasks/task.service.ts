@@ -273,7 +273,7 @@ export const tasksService = {
     }
   },
 
-  // General field edit (title/priority/memo/caseId/isRequiredForCase/
+  // General field edit (title/priority/detail/caseId/isRequiredForCase/
   // assigneeUserId), distinct from the kanban-move-specific
   // updateDevelopmentStage above: an explicit edit always overwrites
   // assigneeUserId, it doesn't defer to "only if currently unassigned".
@@ -296,7 +296,7 @@ export const tasksService = {
       data.title = title;
     }
     if (input.priority !== undefined) data.priority = input.priority;
-    if (input.memo !== undefined) data.memo = input.memo;
+    if (input.detail !== undefined) data.detail = input.detail;
     if (input.assigneeUserId !== undefined) {
       const assigneeCheck = await assertAssigneeIsWorkspaceMember(workspaceId, input.assigneeUserId);
       if (!assigneeCheck.ok) {

@@ -106,7 +106,7 @@ const validPayload = {
   priority: "medium" as const,
   caseAnchor: "case_end" as const,
   caseOffsetDays: 2,
-  defaultMemo: "default note",
+  defaultDetail: "default note",
   nonBusinessDayPolicy: "as_is" as const,
 };
 
@@ -157,7 +157,8 @@ describe("recurrenceRoutes (task 2.1 + workspace-resource-scope 4.1)", () => {
       expect(response.json().title).toBe("route template");
       expect(response.json().caseAnchor).toBe("case_end");
       expect(response.json().caseOffsetDays).toBe(2);
-      expect(response.json().defaultMemo).toBe("default note");
+      expect(response.json().defaultDetail).toBe("default note");
+      expect(response.json()).not.toHaveProperty("defaultMemo");
       expect(response.json().workspaceId).toBe(workspaceA);
       expect(response.json()).not.toHaveProperty("kind");
     } finally {

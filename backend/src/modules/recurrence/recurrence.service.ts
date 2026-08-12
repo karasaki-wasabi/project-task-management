@@ -152,12 +152,12 @@ function logInstanceGenerated(instance: Task, requestId: string): void {
 }
 
 // design.md tryCreateInstance pattern: TasksService.create with caseId,
-// defaultMemo, sourceTemplateId, sourceAnchor, scheduledDate. Active unique
-// collision → idempotent null. Generated tasks inherit the case workspace
-// (Requirement 1.3 / workspace-resource-scope 4.1).
+// defaultDetail → detail, sourceTemplateId, sourceAnchor, scheduledEndDate.
+// Active unique collision → idempotent null. Generated tasks inherit the case
+// workspace (Requirement 1.3 / workspace-resource-scope 4.1).
 async function tryCreateInstance(
   template: RecurringTaskTemplate,
-  scheduledDate: Date,
+  scheduledEndDate: Date,
   caseId: string,
   caseWorkspaceId: VerifiedWorkspaceId,
   client: DbClient,
@@ -168,11 +168,11 @@ async function tryCreateInstance(
       {
         title: template.title,
         priority: template.priority,
-        memo: template.defaultMemo ?? undefined,
+        detail: template.defaultDetail ?? undefined,
         caseId,
         sourceTemplateId: template.id,
         sourceAnchor: template.caseAnchor,
-        scheduledDate,
+        scheduledEndDate,
         workspaceId: caseWorkspaceId,
       },
       client,
@@ -286,13 +286,13 @@ export const recurrenceService = {
         caseEntity.endDate,
       );
       for (const raw of rawDates) {
-        const scheduledDate = await resolveScheduledDate(
+        const scheduledEndDate = await resolveScheduledDate(
           parseDateOnly(raw),
           template.nonBusinessDayPolicy,
           workspaceId,
         );
-        if (scheduledDate === null) continue;
-        const instance = await tryCreateInstance(template, scheduledDate, caseEntity.id, workspaceId, client);
+        if (scheduledEndDate === null) continue;
+        const instance = await tryCreateInstance(template, scheduledEndDate, caseEntity.id, workspaceId, client);
         if (instance) {
           created.push(instance);
           logInstanceGenerated(instance, requestId);

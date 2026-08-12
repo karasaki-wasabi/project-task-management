@@ -33,7 +33,7 @@ Sortableはこれらのオプション値をそのまま`element.classList.add(v
 
 ### 6. Prismaマイグレーション再生成時、スキーマ言語で表現しきれないDB機能がdriftとしてDROPされる
 MySQLの`STORED GENERATED COLUMN`+`UNIQUE INDEX`のように、Prismaスキーマ言語では`Unsupported("...")`としてしか表現できないDB機能を含むテーブルがある場合、そのテーブルに対して`prisma migrate dev`を再実行すると、Prismaは生成列や関連インデックスを「スキーマに存在しないdrift」と誤検知し、それらをDROPする追従マイグレーションを自動生成してしまう。`prisma validate`・型チェックのどちらでも検出できず、マイグレーション適用後に実DBを見て初めて「意図せずインデックスが消えた」形で発覚する。
-→ スキーマ言語で完全に表現できないDB機能を含むマイグレーションを再生成・再適用する際は、`prisma migrate dev`(diffを取ってから適用)ではなく`prisma migrate deploy`(ハンドエディット済みのSQLファイルをdiffなしでそのまま適用)を使うこと。該当のマイグレーションSQLファイル自体にも、この経緯と`migrate dev`を使ってはいけない旨のコメントを残し、次にスキーマを変更する人が同じ罠を踏まないようにする。
+→ 本プロジェクトの開発フェーズでは追従マイグレーション自体を禁止し、単一 init の手編集 + `prisma migrate reset` で畳み込む（[[prisma-migrations]] を厳守）。`prisma migrate dev` で差分を足さない。init の SQL には生成列・UNIQUE と、`migrate dev` 禁止の警告コメントを残すこと。
 
 ### 7. Vueの`<Transition>`は祖先の`v-if`では効かない
 `<Transition>`でラップした要素の表示/非表示を、`Transition`自身ではなくその**祖先**(`<template v-if="...">`など、`Transition`コンポーネントごと存在するかどうかを切り替える箇所)の条件分岐で制御すると、条件が`false`になった瞬間に`Transition`コンポーネント自体が丸ごと破棄され、`leave`のトランジションクラスが一切適用されないまま要素が即座に消える。ビルド・型チェック・(DOM環境のない)ユニットテストのいずれでも検出できず、実ブラウザで実際に閉じる操作をして初めて「アニメーションが効いていない」と気づく。

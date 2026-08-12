@@ -17,7 +17,7 @@ const taskStatus = z.enum(["not_started", "in_progress", "ready_for_handoff", "o
 const createTaskBodySchema = z.object({
   title: z.string(),
   priority,
-  memo: z.string().optional(),
+  detail: z.string().optional(),
   caseId: z.string().optional(),
   isRequiredForCase: z.boolean().optional(),
   assigneeUserId: z.string().optional(),
@@ -28,7 +28,7 @@ const updateTaskBodySchema = z
   .object({
     title: z.string().optional(),
     priority: priority.optional(),
-    memo: z.string().nullable().optional(),
+    detail: z.string().nullable().optional(),
     caseId: z.string().nullable().optional(),
     isRequiredForCase: z.boolean().optional(),
     assigneeUserId: z.string().nullable().optional(),
