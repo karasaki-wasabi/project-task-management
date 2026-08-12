@@ -147,23 +147,84 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([created.value.id]);
   });
 
-  it("stamps completedAt when status becomes done, and clears it if moved away from done", async () => {
+  // task-status-model 3.2: updateStatus is stage-internal work state only (2.4).
+  it("does not change completedAt when status changes (2.4)", async () => {
     const created = await tasksService.create({ title: "finish me", priority: "high", workspaceId: workspaceA });
     if (!created.ok) throw new Error("setup failed");
+    expect(created.value.completedAt).toBeNull();
 
-    const done = await tasksService.updateStatus(created.value.id, workspaceA, "ready_for_handoff");
-    expect(done.ok).toBe(true);
-    if (done.ok) {
-      expect(done.value.completedAt).toBeInstanceOf(Date);
-    }
+    const handoff = await tasksService.updateStatus(created.value.id, workspaceA, "ready_for_handoff");
+    expect(handoff.ok).toBe(true);
+    if (!handoff.ok) return;
+    expect(handoff.value.status).toBe("ready_for_handoff");
+    expect(handoff.value.completedAt).toBeNull();
 
     const reopened = await tasksService.updateStatus(created.value.id, workspaceA, "in_progress");
     expect(reopened.ok).toBe(true);
-    if (reopened.ok) {
-      expect(reopened.value.completedAt).toBeNull();
-    }
+    if (!reopened.ok) return;
+    expect(reopened.value.status).toBe("in_progress");
+    expect(reopened.value.completedAt).toBeNull();
 
     await hardDeleteTasks([created.value.id]);
+  });
+
+  it("rejects status changes when the task is on a terminal stage (4.5)", async () => {
+    const created = await tasksService.create({
+      title: "terminal status",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    const completedStage = await db.developmentStage.create({
+      data: {
+        name: `completed-status-${randomUUID()}`,
+        order: 940,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    const cancelledStage = await db.developmentStage.create({
+      data: {
+        name: `cancelled-status-${randomUUID()}`,
+        order: 941,
+        kind: "cancelled",
+        workspaceId: workspaceA,
+      },
+    });
+
+    const onCompleted = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      workspaceA,
+      completedStage.id,
+    );
+    if (!onCompleted.ok) throw new Error("setup failed");
+
+    const fromCompleted = await tasksService.updateStatus(created.value.id, workspaceA, "in_progress");
+    expect(fromCompleted.ok).toBe(false);
+    if (fromCompleted.ok) return;
+    expect(fromCompleted.error).toEqual({ type: "status_not_applicable", taskId: created.value.id });
+    expect(onCompleted.value.completedAt).toBeInstanceOf(Date);
+    const stillCompleted = await tasksService.getById(created.value.id, workspaceA);
+    expect(stillCompleted.ok).toBe(true);
+    if (stillCompleted.ok) {
+      expect(stillCompleted.value.completedAt).toEqual(onCompleted.value.completedAt);
+      expect(stillCompleted.value.status).toBe("not_started");
+    }
+
+    const onCancelled = await tasksService.updateDevelopmentStage(
+      created.value.id,
+      workspaceA,
+      cancelledStage.id,
+    );
+    if (!onCancelled.ok) throw new Error("setup failed");
+
+    const fromCancelled = await tasksService.updateStatus(created.value.id, workspaceA, "on_hold");
+    expect(fromCancelled.ok).toBe(false);
+    if (fromCancelled.ok) return;
+    expect(fromCancelled.error).toEqual({ type: "status_not_applicable", taskId: created.value.id });
+
+    await hardDeleteTasks([created.value.id]);
+    await hardDeleteStages([completedStage.id, cancelledStage.id]);
   });
 
   it("returns not_found when updating status of a non-existent task", async () => {
@@ -579,7 +640,8 @@ describe("tasksService hierarchy (task 3.2)", () => {
     expect(result.error.type).toBe("not_found");
   });
 
-  it("rejects completing a parent task while it has an incomplete child (Requirement 2.4)", async () => {
+  // task-status-model 3.2: parent/child constraints no longer run on updateStatus (4.2, 5.4).
+  it("allows ready_for_handoff on a parent with open children without stamping completedAt (2.4, 4.2)", async () => {
     const parent = await tasksService.create({
       title: "parent with open child",
       priority: "medium",
@@ -595,70 +657,10 @@ describe("tasksService hierarchy (task 3.2)", () => {
 
     const result = await tasksService.updateStatus(parent.value.id, workspaceA, "ready_for_handoff");
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error).toEqual({ type: "incomplete_children", taskId: parent.value.id });
-
-    await hardDeleteTasks([child.value.id, parent.value.id]);
-  });
-
-  // countIncompleteChildren uses open/closed (stage kind), not status.
-  // Until task 3.2 removes this path, updateStatus still consults that count.
-  it("allows completing a parent task once all children are closed by stage", async () => {
-    const parent = await tasksService.create({
-      title: "parent with finished child",
-      priority: "medium",
-      workspaceId: workspaceA,
-    });
-    if (!parent.ok) throw new Error("setup failed");
-    const child = await tasksService.addChild(parent.value.id, workspaceA, {
-      title: "finished child",
-      priority: "low",
-      workspaceId: workspaceA,
-    });
-    if (!child.ok) throw new Error("setup failed");
-    const completedStage = await db.developmentStage.create({
-      data: {
-        name: `completed-child-${randomUUID()}`,
-        order: 900,
-        kind: "completed",
-        workspaceId: workspaceA,
-      },
-    });
-    const childClosed = await tasksService.updateDevelopmentStage(
-      child.value.id,
-      workspaceA,
-      completedStage.id,
-    );
-    if (!childClosed.ok) throw new Error("setup failed");
-
-    const result = await tasksService.updateStatus(parent.value.id, workspaceA, "ready_for_handoff");
-
     expect(result.ok).toBe(true);
-
-    await hardDeleteTasks([child.value.id, parent.value.id]);
-    await hardDeleteStages([completedStage.id]);
-  });
-
-  it("still allows completion when children are deleted rather than done", async () => {
-    const parent = await tasksService.create({
-      title: "parent with deleted child",
-      priority: "medium",
-      workspaceId: workspaceA,
-    });
-    if (!parent.ok) throw new Error("setup failed");
-    const child = await tasksService.addChild(parent.value.id, workspaceA, {
-      title: "removed child",
-      priority: "low",
-      workspaceId: workspaceA,
-    });
-    if (!child.ok) throw new Error("setup failed");
-    const deleted = await tasksService.delete(child.value.id, workspaceA);
-    if (!deleted.ok) throw new Error("setup failed");
-
-    const result = await tasksService.updateStatus(parent.value.id, workspaceA, "ready_for_handoff");
-
-    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.status).toBe("ready_for_handoff");
+    expect(result.value.completedAt).toBeNull();
 
     await hardDeleteTasks([child.value.id, parent.value.id]);
   });

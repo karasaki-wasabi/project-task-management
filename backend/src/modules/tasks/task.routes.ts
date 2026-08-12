@@ -69,6 +69,7 @@ function taskErrorStatusCode(error: TaskError): number {
     case "not_found":
       return 404;
     case "incomplete_children":
+    case "status_not_applicable":
       return 409;
     case "validation_error":
       return 400;
@@ -81,6 +82,8 @@ function taskErrorMessage(error: TaskError): string {
       return `Task not found: ${error.taskId}`;
     case "incomplete_children":
       return `Task has incomplete children: ${error.taskId}`;
+    case "status_not_applicable":
+      return `Status not applicable: ${error.taskId}`;
     case "validation_error":
       return error.message;
   }

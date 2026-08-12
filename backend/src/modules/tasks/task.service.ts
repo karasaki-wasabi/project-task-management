@@ -135,6 +135,9 @@ export const tasksService = {
     return ok(task);
   },
 
+  // task-status-model 3.2: status is stage-internal work state only.
+  // Does not stamp/clear completedAt or enforce parent/child constraints (2.4, 4.2).
+  // Rejects edits while the task sits on a terminal stage (4.5).
   async updateStatus(
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
@@ -145,16 +148,15 @@ export const tasksService = {
       return err({ type: "not_found", taskId });
     }
 
-    if (status === "ready_for_handoff") {
-      const incompleteChildren = await taskRepository.countIncompleteChildren(taskId);
-      if (incompleteChildren > 0) {
-        return err({ type: "incomplete_children", taskId });
+    if (current.developmentStageId != null) {
+      const stage = await developmentStagesService.getById(current.developmentStageId, workspaceId);
+      if (stage && (stage.kind === "completed" || stage.kind === "cancelled")) {
+        return err({ type: "status_not_applicable", taskId });
       }
     }
 
-    const completedAt = status === "ready_for_handoff" ? new Date() : null;
     try {
-      const task = await taskRepository.updateStatus(taskId, workspaceId, status, completedAt);
+      const task = await taskRepository.updateStatus(taskId, workspaceId, status);
       return ok(task);
     } catch (error) {
       if (isRecordNotFoundError(error)) {

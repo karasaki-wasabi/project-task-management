@@ -138,7 +138,7 @@ describe("taskRepository.countIncompleteChildren (task-status-model 3.1)", () =>
       parentTaskId: parent.id,
       workspaceId: workspaceA,
     });
-    await taskRepository.updateStatus(child.id, workspaceA, "ready_for_handoff", new Date());
+    await taskRepository.updateStatus(child.id, workspaceA, "ready_for_handoff");
 
     const count = await taskRepository.countIncompleteChildren(parent.id);
 

@@ -36,15 +36,11 @@ export const taskRepository = {
     return client.task.findFirst({ where: withWorkspaceScope({ id }, workspaceId) });
   },
 
-  updateStatus(
-    id: string,
-    workspaceId: VerifiedWorkspaceId,
-    status: TaskStatus,
-    completedAt: Date | null,
-  ): Promise<Task> {
+  // task-status-model 3.2: status only — completedAt is owned by updateDevelopmentStage.
+  updateStatus(id: string, workspaceId: VerifiedWorkspaceId, status: TaskStatus): Promise<Task> {
     return db.task.update({
       where: withWorkspaceScope({ id }, workspaceId),
-      data: { status, completedAt },
+      data: { status },
     });
   },
 
