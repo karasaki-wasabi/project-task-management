@@ -17,7 +17,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 4.1, 4.2_
   - _Boundary: workspacePath_
 
-- [ ] 1.2 一覧取得の先頭自動選択をやめ、URL同期と消失時退避を追加する
+- [x] 1.2 一覧取得の先頭自動選択をやめ、URL同期と消失時退避を追加する
   - `refresh` は last-used が所属内のときのみ `currentId` に載せ、否则 `null`（先頭自動選択しない）
   - `syncFromRoute` / `rememberLastUsed` / `relocateAfterWorkspaceLost`（他所属 → 同一画面種、なし → `/`）を用意する
   - 観測可能な完了状態: 所属があっても last-used が無い／無効なら `currentId` が `null` のままであることをユニットテストで確認できる
