@@ -39,6 +39,7 @@ export interface CreateTaskInput {
   isRequiredForCase?: boolean;
   assigneeUserId?: string;
   parentTaskId?: string;
+  scheduledEndDate?: string;
 }
 
 export interface UpdateTaskInput {
@@ -48,6 +49,71 @@ export interface UpdateTaskInput {
   caseId?: string | null;
   isRequiredForCase?: boolean;
   assigneeUserId?: string | null;
+  parentTaskId?: string | null;
+  scheduledEndDate?: string | null;
+}
+
+export interface TaskListFilter {
+  caseId?: string;
+  assigneeUserId?: string;
+  unassignedCase?: boolean;
+  titleContains?: string;
+  excludeSubtreeOf?: string;
+  excludeClosed?: boolean;
+}
+
+export interface Comment {
+  id: string;
+  taskId: string;
+  authorUserId: string;
+  body: string;
+  editedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export type TaskTimelineFilter = "all" | "comments" | "changes";
+
+export interface TaskTimelineOptions {
+  filter?: TaskTimelineFilter;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface TaskTimelineComment extends Comment {
+  type: "comment";
+  occurredAt: string;
+}
+
+export interface TaskTimelineChange {
+  id: string;
+  taskId: string;
+  actorUserId: string | null;
+  actorSourceLabel: string | null;
+  operationType: "field_changed";
+  fieldName:
+    | "title"
+    | "status"
+    | "priority"
+    | "detail"
+    | "assignee"
+    | "case"
+    | "isRequiredForCase"
+    | "developmentStage"
+    | "parentTask"
+    | "scheduledEndDate";
+  beforeValue: string | null;
+  afterValue: string | null;
+  occurredAt: string;
+  type: "change";
+}
+
+export type TaskTimelineEntry = TaskTimelineComment | TaskTimelineChange;
+
+export interface TaskTimelinePage {
+  items: TaskTimelineEntry[];
+  nextCursor: string | null;
 }
 
 export interface Case {
@@ -319,15 +385,20 @@ export function useApiClient() {
     csrf,
 
     // Tasks (design.md "Backend/tasks" API Contract)
-    listTasks: (filter: { caseId?: string; assigneeUserId?: string; unassignedCase?: boolean } = {}) =>
-      request<Task[]>("/api/tasks", {
+    listTasks: (filter: TaskListFilter = {}) => {
+      const { excludeClosed, ...rest } = filter;
+      return request<Task[]>("/api/tasks", {
         query: {
-          ...filter,
+          ...rest,
           unassignedCase: filter.unassignedCase ? "true" : undefined,
+          ...(excludeClosed ? { excludeClosed: "true" } : {}),
         },
-      }),
+      });
+    },
     createTask: (input: CreateTaskInput) => request<Task>("/api/tasks", { method: "POST", body: input }),
     getTask: (id: string) => request<Task>(`/api/tasks/${id}`),
+    getTaskTimeline: (id: string, options: TaskTimelineOptions) =>
+      request<TaskTimelinePage>(`/api/tasks/${id}/timeline`, { query: options }),
     updateTask: (id: string, input: UpdateTaskInput) => request<Task>(`/api/tasks/${id}`, { method: "PATCH", body: input }),
     addChildTask: (parentId: string, input: CreateTaskInput) =>
       request<Task>(`/api/tasks/${parentId}/children`, { method: "POST", body: input }),
@@ -341,6 +412,15 @@ export function useApiClient() {
         body: { developmentStageId, assigneeUserId },
       }),
     deleteTask: (id: string) => request<void>(`/api/tasks/${id}`, { method: "DELETE" }),
+    createComment: (taskId: string, body: string) =>
+      request<Comment>(`/api/tasks/${taskId}/comments`, { method: "POST", body: { body } }),
+    updateComment: (taskId: string, commentId: string, body: string) =>
+      request<Comment>(`/api/tasks/${taskId}/comments/${commentId}`, {
+        method: "PATCH",
+        body: { body },
+      }),
+    deleteComment: (taskId: string, commentId: string) =>
+      request<void>(`/api/tasks/${taskId}/comments/${commentId}`, { method: "DELETE" }),
 
     // Cases (design.md "Backend/cases" API Contract + CaseService templateOperations)
     listCases: () => request<Case[]>("/api/cases"),
