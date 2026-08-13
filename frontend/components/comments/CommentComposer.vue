@@ -11,6 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   success: [comment: Comment];
+  cancel: [];
 }>();
 
 const api = useApiClient();
@@ -28,6 +29,7 @@ watch(
 );
 
 async function submit() {
+  if (submitting.value) return;
   error.value = null;
 
   if (isEmpty.value) {
@@ -56,20 +58,37 @@ async function submit() {
     submitting.value = false;
   }
 }
+
+function onCommentKeydown(event: KeyboardEvent) {
+  if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) return;
+  event.preventDefault();
+  void submit();
+}
+
+function cancel() {
+  if (submitting.value) return;
+  emit("cancel");
+}
 </script>
 
 <template>
-  <form class="space-y-2" @submit.prevent="submit">
-    <label :for="`comment-body-${mode}`" class="block text-sm font-medium text-slate-700">
+  <form
+    :data-testid="`comment-composer-${mode}`"
+    class="flex flex-col gap-2"
+    @submit.prevent="submit"
+  >
+    <label :for="`comment-body-${mode}`" class="sr-only">
       {{ mode === "create" ? "コメント" : "コメントを編集" }}
     </label>
     <textarea
       :id="`comment-body-${mode}`"
       v-model="body"
-      rows="4"
-      :placeholder="mode === 'create' ? 'コメントを入力' : 'コメントを編集'"
-      class="w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+      :rows="mode === 'create' ? 4 : 3"
+      :placeholder="mode === 'create' ? 'コメントを入力…' : 'コメントを編集'"
+      :autofocus="mode === 'edit'"
+      class="w-full resize-y rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm leading-7 text-slate-700 placeholder:text-slate-400 focus:border-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500/35 disabled:cursor-not-allowed disabled:bg-slate-100"
       :disabled="submitting"
+      @keydown="onCommentKeydown"
     />
 
     <p
@@ -80,13 +99,31 @@ async function submit() {
       {{ error }}
     </p>
 
-    <div class="flex justify-end">
+    <div v-if="mode === 'create'" class="flex items-center gap-2">
+      <span class="text-xs text-slate-400">Ctrl + Enter で投稿</span>
       <button
         type="submit"
         :disabled="submitting || isEmpty"
-        class="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        class="ml-auto rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {{ submitting ? "送信中..." : mode === "create" ? "投稿" : "保存" }}
+        {{ submitting ? "送信中..." : "投稿" }}
+      </button>
+    </div>
+    <div v-else class="flex justify-end gap-2">
+      <button
+        type="button"
+        :disabled="submitting"
+        class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        @click="cancel"
+      >
+        キャンセル
+      </button>
+      <button
+        type="submit"
+        :disabled="submitting || isEmpty"
+        class="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {{ submitting ? "送信中..." : "更新" }}
       </button>
     </div>
   </form>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import CommentComposer from "../comments/CommentComposer.vue";
 import {
   useApiClient,
@@ -12,6 +12,14 @@ import {
   type TaskTimelineFilter,
   type User,
 } from "../../composables/useApiClient";
+import {
+  avatarInitial,
+  changeMessageSegments,
+  formatTimelineTime,
+  groupTimelineByDate,
+  timelineChipClass,
+  type ChangeMessageSegment,
+} from "./TaskTimeline.helpers";
 
 const props = withDefaults(
   defineProps<{
@@ -39,6 +47,7 @@ const nextCursor = ref<string | null>(null);
 const loading = ref(false);
 const loadingMore = ref(false);
 const deletingCommentId = ref<string | null>(null);
+const confirmingDeleteId = ref<string | null>(null);
 const editingCommentId = ref<string | null>(null);
 const error = ref<string | null>(null);
 let requestSequence = 0;
@@ -81,9 +90,8 @@ function actorLabel(change: TaskTimelineChange): string {
 
 function fieldValueLabel(
   fieldName: TaskTimelineChange["fieldName"],
-  value: string | null,
+  value: string,
 ): string {
-  if (value == null) return "未設定";
   switch (fieldName) {
     case "assignee":
       return userLabel(value) ?? value;
@@ -98,46 +106,11 @@ function fieldValueLabel(
   }
 }
 
-function changeMessage(change: TaskTimelineChange): string {
-  const actor = actorLabel(change);
-  const before = fieldValueLabel(change.fieldName, change.beforeValue);
-  const after = fieldValueLabel(change.fieldName, change.afterValue);
-
-  switch (change.fieldName) {
-    case "title":
-      return `${actor} がタイトルを ${before} から ${after} に変更しました`;
-    case "status":
-      return `${actor} がステータスを ${before} から ${after} に変更しました`;
-    case "priority":
-      return `${actor} が優先度を ${before} から ${after} に変更しました`;
-    case "detail":
-      return `${actor} が詳細を更新しました`;
-    case "assignee":
-      return `${actor} が担当者を ${before} から ${after} に変更しました`;
-    case "case":
-      return `${actor} が案件を ${before} から ${after} に変更しました`;
-    case "isRequiredForCase":
-      return change.afterValue === "true"
-        ? `${actor} がこのタスクを必須タスクに設定しました`
-        : `${actor} が必須タスクの設定を解除しました`;
-    case "developmentStage":
-      return `${actor} が開発段階を ${before} から ${after} に移しました`;
-    case "parentTask":
-      return `${actor} が親タスクを ${before} から ${after} に変更しました`;
-    case "scheduledEndDate":
-      return `${actor} が終了予定日を ${before} から ${after} に変更しました`;
-  }
+function changeSegments(change: TaskTimelineChange): ChangeMessageSegment[] {
+  return changeMessageSegments(change, actorLabel(change), fieldValueLabel);
 }
 
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
+const groupedItems = computed(() => groupTimelineByDate(items.value));
 
 function caughtMessage(caught: unknown): string {
   return caught instanceof Error ? caught.message : String(caught);
@@ -186,7 +159,18 @@ function selectFilter(selected: TaskTimelineFilter) {
 
 function startEditing(commentId: string) {
   error.value = null;
+  confirmingDeleteId.value = null;
   editingCommentId.value = commentId;
+}
+
+function requestDeleteComment(commentId: string) {
+  error.value = null;
+  editingCommentId.value = null;
+  confirmingDeleteId.value = commentId;
+}
+
+function cancelDeleteComment() {
+  confirmingDeleteId.value = null;
 }
 
 function cancelEditing() {
@@ -195,6 +179,10 @@ function cancelEditing() {
 
 async function onEditSuccess(_comment: Comment) {
   editingCommentId.value = null;
+  await loadTimeline();
+}
+
+async function onCreateSuccess(_comment: Comment) {
   await loadTimeline();
 }
 
@@ -208,6 +196,7 @@ async function removeComment(commentId: string) {
     error.value = caughtMessage(caught);
   } finally {
     deletingCommentId.value = null;
+    confirmingDeleteId.value = null;
   }
 }
 
@@ -224,8 +213,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <section aria-labelledby="task-timeline-heading" class="space-y-4">
-    <div class="flex flex-wrap items-center justify-between gap-3">
+  <section
+    aria-labelledby="task-timeline-heading"
+    data-testid="task-timeline"
+    class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+  >
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
       <h2 id="task-timeline-heading" class="text-lg font-semibold text-slate-900">
         タイムライン
       </h2>
@@ -255,114 +248,193 @@ onMounted(() => {
       </div>
     </div>
 
-    <p
-      v-if="error"
-      role="alert"
-      class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+    <div
+      v-if="!readOnly"
+      class="border-b border-slate-200 px-4 py-3 sm:px-5"
     >
-      {{ error }}
-    </p>
+      <CommentComposer
+        :taskId="taskId"
+        mode="create"
+        @success="onCreateSuccess"
+      />
+    </div>
 
-    <p v-if="loading" aria-live="polite" class="py-6 text-center text-sm text-slate-500">
-      読み込み中...
-    </p>
-
-    <p
-      v-else-if="items.length === 0"
-      class="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500"
-    >
-      表示する項目がありません
-    </p>
-
-    <ol v-else class="space-y-3">
-      <li v-for="entry in items" :key="`${entry.type}-${entry.id}`">
-        <article
-          v-if="entry.type === 'comment'"
-          class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-        >
-          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-              <span class="font-medium text-slate-700">{{ authorLabel(entry.authorUserId) }}</span>
-              <time :datetime="entry.occurredAt">{{ formatDateTime(entry.occurredAt) }}</time>
-              <span v-if="entry.editedAt" class="rounded bg-slate-100 px-1.5 py-0.5">
-                編集済み
-              </span>
-            </div>
-
-            <div
-              v-if="
-                !readOnly &&
-                entry.authorUserId === currentUserId &&
-                editingCommentId !== entry.id
-              "
-              class="flex items-center gap-2"
-            >
-              <button
-                type="button"
-                aria-label="自分のコメントを編集"
-                class="text-xs font-medium text-primary-700 hover:text-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
-                @click="startEditing(entry.id)"
-              >
-                編集
-              </button>
-              <button
-                type="button"
-                aria-label="自分のコメントを削除"
-                :disabled="deletingCommentId === entry.id"
-                class="text-xs font-medium text-red-600 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                @click="removeComment(entry.id)"
-              >
-                {{ deletingCommentId === entry.id ? "削除中..." : "削除" }}
-              </button>
-            </div>
-          </div>
-
-          <div v-if="editingCommentId === entry.id" class="space-y-2">
-            <CommentComposer
-              :taskId="taskId"
-              mode="edit"
-              :commentId="entry.id"
-              :initialBody="entry.body"
-              @success="onEditSuccess"
-            />
-            <button
-              type="button"
-              class="text-sm text-slate-600 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
-              @click="cancelEditing"
-            >
-              キャンセル
-            </button>
-          </div>
-          <p v-else class="whitespace-pre-wrap break-words text-sm leading-6 text-slate-800">
-            {{ entry.body }}
-          </p>
-        </article>
-
-        <div v-else class="flex gap-3 py-2 text-sm text-slate-600">
-          <span
-            aria-hidden="true"
-            class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-slate-400"
-          />
-          <div class="min-w-0">
-            <p>{{ changeMessage(entry) }}</p>
-            <time :datetime="entry.occurredAt" class="mt-0.5 block text-xs text-slate-400">
-              {{ formatDateTime(entry.occurredAt) }}
-            </time>
-          </div>
-        </div>
-      </li>
-    </ol>
-
-    <div v-if="nextCursor && !loading" class="flex justify-center">
-      <button
-        type="button"
-        aria-label="続きを読み込む"
-        :disabled="loadingMore"
-        class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-        @click="loadTimeline({ append: true })"
+    <div class="space-y-4 px-4 py-4 sm:px-5">
+      <p
+        v-if="error"
+        role="alert"
+        class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
       >
-        {{ loadingMore ? "読み込み中..." : "さらに表示" }}
-      </button>
+        {{ error }}
+      </p>
+
+      <p v-if="loading" aria-live="polite" class="py-6 text-center text-sm text-slate-500">
+        読み込み中...
+      </p>
+
+      <p
+        v-else-if="items.length === 0"
+        class="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500"
+      >
+        {{ filter === "comments" ? "まだコメントはありません" : "表示する項目がありません" }}
+      </p>
+
+      <div v-else class="flex flex-col">
+        <section
+          v-for="(group, groupIndex) in groupedItems"
+          :key="group.date"
+        >
+          <h3
+            data-testid="timeline-date-heading"
+            class="text-xs font-medium text-slate-400"
+            :class="groupIndex === 0 ? 'py-1.5' : 'mt-2 border-t border-slate-100 pb-1.5 pt-3.5'"
+          >
+            {{ group.date }}
+          </h3>
+
+          <ol>
+            <li v-for="entry in group.items" :key="`${entry.type}-${entry.id}`">
+              <div
+                v-if="entry.type === 'comment'"
+                class="flex items-start gap-2.5 py-1.5"
+              >
+                <div
+                  aria-hidden="true"
+                  class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+                  :class="
+                    entry.authorUserId === currentUserId
+                      ? 'bg-blue-50 text-primary-700'
+                      : 'bg-slate-100 text-slate-600'
+                  "
+                >
+                  {{ avatarInitial(authorLabel(entry.authorUserId)) }}
+                </div>
+                <div
+                  v-if="editingCommentId === entry.id"
+                  class="min-w-0 flex-1"
+                >
+                  <CommentComposer
+                    :taskId="taskId"
+                    mode="edit"
+                    :commentId="entry.id"
+                    :initialBody="entry.body"
+                    @success="onEditSuccess"
+                    @cancel="cancelEditing"
+                  />
+                </div>
+                <div v-else class="min-w-0 flex-1">
+                  <article class="rounded-md border border-slate-200 p-2.5">
+                    <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+                      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span class="text-sm font-semibold text-slate-900">{{
+                          authorLabel(entry.authorUserId)
+                        }}</span>
+                        <span v-if="entry.editedAt" class="text-xs text-slate-400">
+                          （編集済み）
+                        </span>
+                      </div>
+
+                      <div
+                        v-if="!readOnly && entry.authorUserId === currentUserId"
+                        class="flex items-center gap-2.5"
+                      >
+                        <button
+                          type="button"
+                          aria-label="自分のコメントを編集"
+                          class="text-xs font-medium text-slate-600 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+                          @click="startEditing(entry.id)"
+                        >
+                          編集
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="自分のコメントを削除"
+                          :disabled="deletingCommentId === entry.id"
+                          class="text-xs font-medium text-red-700 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          @click="requestDeleteComment(entry.id)"
+                        >
+                          {{ deletingCommentId === entry.id ? "削除中..." : "削除" }}
+                        </button>
+                      </div>
+                    </div>
+                    <p class="whitespace-pre-wrap break-words text-sm leading-7 text-slate-700">
+                      {{ entry.body }}
+                    </p>
+                  </article>
+                  <div
+                    v-if="confirmingDeleteId === entry.id"
+                    data-testid="delete-comment-confirm"
+                    role="alertdialog"
+                    aria-label="本当に削除しますか?"
+                    class="mt-2 flex flex-wrap items-center justify-end gap-2"
+                  >
+                    <span class="text-xs text-red-700">本当に削除しますか?</span>
+                    <button
+                      type="button"
+                      aria-label="コメント削除を確定"
+                      :disabled="deletingCommentId === entry.id"
+                      class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      @click="removeComment(entry.id)"
+                    >
+                      {{ deletingCommentId === entry.id ? "削除中..." : "削除する" }}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="コメント削除をキャンセル"
+                      :disabled="deletingCommentId === entry.id"
+                      class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      @click="cancelDeleteComment"
+                    >
+                      キャンセル
+                    </button>
+                  </div>
+                </div>
+                <time
+                  class="shrink-0 whitespace-nowrap pt-1 text-xs text-slate-400"
+                  :datetime="entry.occurredAt"
+                >{{ formatTimelineTime(entry.occurredAt) }}</time>
+              </div>
+
+              <div v-else class="flex items-start gap-2.5 py-2">
+                <div
+                  aria-hidden="true"
+                  class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                </div>
+                <p class="min-w-0 flex-1 pt-1 text-sm leading-6 text-slate-600">
+                  <template v-for="(segment, index) in changeSegments(entry)" :key="index">
+                    <span v-if="segment.kind === 'text'">{{ segment.text }}</span>
+                    <span
+                      v-else
+                      data-testid="timeline-value-chip"
+                      :class="timelineChipClass(segment.chip.tone)"
+                    >
+                      {{ segment.chip.label }}
+                    </span>
+                  </template>
+                </p>
+                <time
+                  class="shrink-0 whitespace-nowrap pt-1 text-xs text-slate-400"
+                  :datetime="entry.occurredAt"
+                >{{ formatTimelineTime(entry.occurredAt) }}</time>
+              </div>
+            </li>
+          </ol>
+        </section>
+      </div>
+
+      <div v-if="nextCursor && !loading" class="flex justify-center">
+        <button
+          type="button"
+          aria-label="さらに読み込む"
+          :disabled="loadingMore"
+          class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          @click="loadTimeline({ append: true })"
+        >
+          {{ loadingMore ? "読み込み中..." : "さらに読み込む" }}
+        </button>
+      </div>
     </div>
   </section>
 </template>

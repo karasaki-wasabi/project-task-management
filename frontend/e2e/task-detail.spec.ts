@@ -54,7 +54,7 @@ test("インライン編集、コメント権限、編集済み表示、タイ�
   await titleRow.hover();
   await titleRow.getByRole("button", { name: "タイトルを編集" }).click();
   await page.getByLabel("タイトルを入力").fill(updatedTitle);
-  await page.getByTestId("inline-editable-picker").getByRole("button", { name: "保存" }).click();
+  await page.getByTestId("inline-editable-picker").getByRole("button", { name: "更新" }).click();
   await expect(page.getByRole("heading", { name: updatedTitle })).toBeVisible();
   await expect(page.getByText(new RegExp(`タイトルを ${originalTitle} から ${updatedTitle} に変更しました`))).toBeVisible();
 
@@ -93,9 +93,9 @@ test("インライン編集、コメント権限、編集済み表示、タイ�
   const reloadedOwnCommentCard = page.locator("article", { hasText: ownComment });
   await reloadedOwnCommentCard.getByLabel("自分のコメントを編集").click();
   await page.getByPlaceholder("コメントを編集").fill(editedComment);
-  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await page.getByRole("button", { name: "更新", exact: true }).click();
   const editedCommentCard = page.locator("article", { hasText: editedComment });
-  await expect(editedCommentCard.getByText("編集済み", { exact: true })).toBeVisible();
+  await expect(editedCommentCard.getByText("（編集済み）", { exact: true })).toBeVisible();
 
   const commentsResponse = page.waitForResponse(
     (response) =>
@@ -142,7 +142,7 @@ test("論理削除済みタスクは詳細とタイムラインだけを参照�
 
   await page.goto(detailPath);
   await expect(page.getByText("削除済み", { exact: true })).toBeVisible();
-  await expect(page.getByText("このタスクは参照専用です。")).toBeVisible();
+  await expect(page.getByText("このタスクは削除されています。閲覧のみ可能です。")).toBeVisible();
   await expect(page.getByText(comment, { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "タスクを複製" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "タスクを削除" })).toHaveCount(0);

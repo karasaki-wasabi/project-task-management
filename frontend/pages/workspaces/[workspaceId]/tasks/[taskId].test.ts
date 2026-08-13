@@ -57,8 +57,8 @@ const TaskFieldCardStub = defineComponent({
   },
   template: `
     <section data-testid="field-card" :data-editable="String(editable)">
-      {{ task.title }}
       <button type="button" data-testid="update-title" @click="onUpdate('title', '更新後')">タイトル更新</button>
+      <button type="button" data-testid="update-stage" @click="onUpdate('developmentStageId', 'stage-done').catch(() => {})">段階更新</button>
     </section>
   `,
 });
@@ -108,10 +108,6 @@ function mountPage() {
   return mount(TaskDetailPage, {
     global: {
       stubs: {
-        NuxtLink: defineComponent({
-          props: { to: { type: [String, Object], required: true } },
-          template: `<a :href="typeof to === 'string' ? to : '#'"><slot /></a>`,
-        }),
         TaskFieldCard: TaskFieldCardStub,
         TaskTimeline: TaskTimelineStub,
         CommentComposer: CommentComposerStub,
@@ -166,12 +162,15 @@ describe("TaskDetailPage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("フィールド、コメント投稿、現在ユーザー付きタイムラインを1カラムに構成する", async () => {
+  it("フィールドとタイムラインを1カラムに構成し、投稿欄はページ直下に独立させない", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
     expect(wrapper.get('[data-testid="field-card"]').attributes("data-editable")).toBe("true");
-    expect(wrapper.get('[data-testid="comment-composer"]').text()).toBe("コメント");
+    expect(wrapper.find('[data-testid="comment-composer"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("タスク一覧へ");
+    expect(wrapper.get("h1").text()).toBe("詳細ページを作る");
+    expect(wrapper.get('button[aria-label="タイトルを編集"]').exists()).toBe(true);
     expect(wrapper.get('[data-testid="timeline"]').attributes("data-user-id")).toBe("user-1");
     expect(wrapper.get('[data-testid="field-card"]').element.compareDocumentPosition(
       wrapper.get('[data-testid="timeline"]').element,
@@ -226,18 +225,77 @@ describe("TaskDetailPage", () => {
     expect(navigateTo).toHaveBeenCalledWith("/workspaces/ws-1/tasks");
   });
 
+  it("タイトルはヘッダー行から更新する", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.get('button[aria-label="タイトルを編集"]').trigger("click");
+    expect(wrapper.find("h1").exists()).toBe(false);
+    const picker = wrapper.get('[data-testid="inline-editable-picker"]');
+    expect(picker.text()).not.toContain("Enter で保存");
+    expect(picker.get("button[type='submit']").text()).toBe("更新");
+    expect(picker.get("button[type='button']").text()).toBe("キャンセル");
+    await wrapper.get('input[aria-label="タイトルを入力"]').setValue("更新後タイトル");
+    await wrapper.get('input[aria-label="タイトルを入力"]').trigger("keydown", {
+      key: "Enter",
+      ctrlKey: true,
+    });
+    await flushPromises();
+
+    expect(updateTask).toHaveBeenCalledWith("task-1", { title: "更新後タイトル" });
+    expect(wrapper.get("h1").text()).toBe("更新後タイトル");
+  });
+
+  it("未クローズの子タスクがある完了段階への移動は日本語で拒否理由を出す", async () => {
+    const rejection = Object.assign(
+      new Error(
+        '[PATCH] "http://localhost:3400/api/tasks/task-1/development-stage": 409 Conflict',
+      ),
+      {
+        statusCode: 409,
+        data: { error: "Task has incomplete children: task-1" },
+      },
+    );
+    updateTaskDevelopmentStage.mockRejectedValue(rejection);
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="update-stage"]').trigger("click");
+    await flushPromises();
+
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      "未完了の子タスクがあるため完了にできません。子タスクを完了または中止してください。",
+    );
+    expect(wrapper.get('[role="alert"]').text()).not.toContain("409 Conflict");
+  });
+
+  it("空のタイトルは保存せず必須エラーを表示する", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.get('button[aria-label="タイトルを編集"]').trigger("click");
+    await wrapper.get('input[aria-label="タイトルを入力"]').setValue("   ");
+    await wrapper.get('[data-testid="inline-editable-picker"] form').trigger("submit");
+    await flushPromises();
+
+    expect(updateTask).not.toHaveBeenCalled();
+    expect(wrapper.get('[role="alert"]').text()).toBe("タイトルは必須です。");
+  });
+
   it("削除済みタスクは参照専用で編集、複製、削除、コメント投稿を隠す", async () => {
     getTask.mockResolvedValue(makeTask({ deletedAt: "2026-08-12T00:00:00.000Z" }));
     const wrapper = mountPage();
     await flushPromises();
 
     expect(wrapper.get('[data-testid="field-card"]').attributes("data-editable")).toBe("false");
+    expect(wrapper.find('button[aria-label="タイトルを編集"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="comment-composer"]').exists()).toBe(false);
     expect(wrapper.find('button[aria-label="タスクを複製"]').exists()).toBe(false);
     expect(wrapper.find('button[aria-label="タスクを削除"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="timeline"]').text()).toBe("タイムライン");
     expect(wrapper.get('[data-testid="timeline"]').attributes("data-read-only")).toBe("true");
     expect(wrapper.text()).toContain("削除済み");
+    expect(wrapper.text()).toContain("このタスクは削除されています。閲覧のみ可能です。");
   });
 
   it("タスクが存在しない場合は404エラーを表示する", async () => {

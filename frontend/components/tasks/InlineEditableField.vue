@@ -7,10 +7,16 @@ const props = withDefaults(
     label: string;
     modelValue: unknown;
     editable?: boolean;
+    placement?: "popover" | "inline";
+    surface?: "panel" | "plain";
+    replaceDisplay?: boolean;
     onSave: (value: unknown) => Promise<void>;
   }>(),
   {
     editable: true,
+    placement: "popover",
+    surface: "panel",
+    replaceDisplay: false,
   },
 );
 
@@ -37,6 +43,10 @@ watch(
     }
   },
 );
+
+watch(selected, (isSelected) => {
+  if (!isSelected && editing.value) cancel();
+});
 
 function selectRow() {
   if (props.editable && !editing.value) selection.selectedId.value = selectionId;
@@ -79,6 +89,11 @@ async function save() {
   }
 }
 
+async function saveValue(value: unknown) {
+  draftValue.value = value;
+  await save();
+}
+
 onUnmounted(() => {
   if (selected.value) selection.selectedId.value = null;
 });
@@ -97,6 +112,14 @@ function onKeydown(event: KeyboardEvent) {
 <template>
   <div class="relative" @keydown="onKeydown">
     <div
+      v-if="editing && placement === 'popover'"
+      data-testid="inline-editable-backdrop"
+      class="fixed inset-0 z-40"
+      @click="cancel"
+    />
+
+    <div
+      v-if="!(editing && replaceDisplay)"
       data-testid="inline-editable-row"
       class="group flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 transition-colors"
       :class="selected && editable ? 'bg-primary-50' : 'hover:bg-slate-50'"
@@ -126,8 +149,13 @@ function onKeydown(event: KeyboardEvent) {
 
     <div
       v-if="editing"
-      class="mt-1 rounded-md border border-slate-200 bg-white p-3 shadow-sm"
       data-testid="inline-editable-picker"
+      :class="[
+        placement === 'popover' ? 'absolute left-0 z-50 mt-1 min-w-[16rem]' : replaceDisplay ? '' : 'mt-1',
+        surface === 'panel'
+          ? 'rounded-md border border-slate-200 bg-white p-3 shadow-lg'
+          : '',
+      ]"
     >
       <p
         v-if="error"
@@ -141,6 +169,7 @@ function onKeydown(event: KeyboardEvent) {
         :draftValue="draftValue"
         :setDraftValue="setDraftValue"
         :save="save"
+        :saveValue="saveValue"
         :cancel="cancel"
         :saving="saving"
       />

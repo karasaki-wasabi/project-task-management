@@ -90,7 +90,7 @@ describe("ParentTaskCombobox", () => {
     const wrapper = mountCombobox("task-valid");
     await flushPromises();
 
-    await wrapper.get('button[aria-label="親タスクを解除"]').trigger("click");
+    await wrapper.get('button[aria-label="親タスクを解除する"]').trigger("click");
 
     expect(wrapper.emitted("update:modelValue")).toEqual([[null]]);
   });

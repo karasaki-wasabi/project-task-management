@@ -114,11 +114,11 @@ onMounted(() => {
         </div>
         <button
           type="button"
-          aria-label="親タスクを解除"
+          aria-label="親タスクを解除する"
           class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           @click="clearSelection"
         >
-          なし
+          親タスクを解除する
         </button>
       </div>
     </div>

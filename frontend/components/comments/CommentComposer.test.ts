@@ -58,7 +58,7 @@ describe("CommentComposer", () => {
     });
 
     expect((wrapper.get("textarea").element as HTMLTextAreaElement).value).toBe("投稿本文");
-    expect(wrapper.get('button[type="submit"]').text()).toBe("保存");
+    expect(wrapper.get('button[type="submit"]').text()).toBe("更新");
   });
 
   it("edit モードで既存本文を表示し、コメントを更新する", async () => {
@@ -113,5 +113,73 @@ describe("CommentComposer", () => {
 
     expect(wrapper.get('[role="alert"]').text()).toContain("コメントを投稿できませんでした");
     expect(wrapper.emitted("success")).toBeUndefined();
+  });
+
+  it("create モードで Ctrl+Enter のヒントを出し、ショートカットで投稿する", async () => {
+    const created = makeComment();
+    createComment.mockResolvedValue(created);
+    const wrapper = mount(CommentComposer, {
+      props: { taskId: "task-1", mode: "create" },
+    });
+
+    expect(wrapper.text()).toContain("Ctrl + Enter で投稿");
+    expect(wrapper.get("textarea").attributes("placeholder")).toBe("コメントを入力…");
+    await wrapper.get("textarea").setValue("投稿本文");
+    await wrapper.get("textarea").trigger("keydown", { key: "Enter", ctrlKey: true });
+    await flushPromises();
+
+    expect(createComment).toHaveBeenCalledWith("task-1", "投稿本文");
+    expect(wrapper.emitted("success")).toEqual([[created]]);
+  });
+
+  it("Enter だけでは改行相当として投稿しない", async () => {
+    const wrapper = mount(CommentComposer, {
+      props: { taskId: "task-1", mode: "create" },
+    });
+
+    await wrapper.get("textarea").setValue("投稿本文");
+    await wrapper.get("textarea").trigger("keydown", { key: "Enter" });
+    await flushPromises();
+
+    expect(createComment).not.toHaveBeenCalled();
+    expect(wrapper.emitted("success")).toBeUndefined();
+  });
+
+  it("edit モードはショートカット説明を出さず、Ctrl+Enter で更新する", async () => {
+    const updated = makeComment({ body: "編集後" });
+    updateComment.mockResolvedValue(updated);
+    const wrapper = mount(CommentComposer, {
+      props: {
+        taskId: "task-1",
+        mode: "edit",
+        commentId: "comment-1",
+        initialBody: "編集前",
+      },
+    });
+
+    expect(wrapper.text()).not.toContain("Ctrl + Enter");
+    expect(wrapper.get("button[type='submit']").text()).toBe("更新");
+    expect(wrapper.get("button[type='button']").text()).toBe("キャンセル");
+    await wrapper.get("textarea").setValue("編集後");
+    await wrapper.get("textarea").trigger("keydown", { key: "Enter", ctrlKey: true });
+    await flushPromises();
+
+    expect(updateComment).toHaveBeenCalledWith("task-1", "comment-1", "編集後");
+  });
+
+  it("edit モードのキャンセルは API を呼ばず cancel を emit する", async () => {
+    const wrapper = mount(CommentComposer, {
+      props: {
+        taskId: "task-1",
+        mode: "edit",
+        commentId: "comment-1",
+        initialBody: "編集前",
+      },
+    });
+
+    await wrapper.get("button[type='button']").trigger("click");
+
+    expect(updateComment).not.toHaveBeenCalled();
+    expect(wrapper.emitted("cancel")).toEqual([[]]);
   });
 });

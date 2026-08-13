@@ -8,6 +8,8 @@
 
 **Impact**: `tasks` モジュールの更新API（`PATCH /api/tasks/:id`）が `parentTaskId` と `scheduledEndDate`（終了予定日）を受け付けるよう拡張される。作成API（`POST /api/tasks`）も任意の `scheduledEndDate` を受け付け、複製（Requirement 2.9）を1回の POST で完結できるようにする。`TasksService` の書き込み系メソッド（`create`/`update`/`updateStatus`/`updateDevelopmentStage`/`addChild`/`splitTask`/`delete`）すべてに操作ログ記録が追加される。`comments`・`activity-logs` という2つの新規ドメインモジュールが追加される。フィールド語彙は先行仕様 `task-field-rename` 完了後の `detail` / `scheduledEndDate` を前提とする。
 
+画面の見た目は `research.md`「ビジュアルデザイン確定」に従う。モック `Task Detail Page.dc.html` との差分のうち、同節「実装時の意図的なモック差分」に書いたものは合意済みであり、モック不一致として扱わない。
+
 ### Goals
 - タスク詳細ページで CRUD・コメント・タイムラインを1画面に統合する
 - タスクへの操作（作成・削除・フィールド変更・コメント操作）を漏れなくドメインイベントとして永続化する

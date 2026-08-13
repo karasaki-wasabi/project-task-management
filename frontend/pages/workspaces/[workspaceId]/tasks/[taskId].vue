@@ -11,6 +11,8 @@ import {
   type User,
 } from "../../../../composables/useApiClient";
 import { useAuth } from "../../../../composables/useAuth";
+import InlineEditableField from "../../../../components/tasks/InlineEditableField.vue";
+import { apiErrorMessage } from "../../../../utils/apiErrorMessage";
 
 const api = useApiClient();
 const route = useRoute();
@@ -53,8 +55,22 @@ function statusCode(caught: unknown): number | undefined {
   return candidate.statusCode ?? candidate.status ?? candidate.response?.status;
 }
 
-function caughtMessage(caught: unknown): string {
-  return caught instanceof Error ? caught.message : String(caught);
+function inputValue(event: Event): string {
+  return (event.target as HTMLInputElement).value;
+}
+
+function saveTitle(value: unknown) {
+  const title = typeof value === "string" ? value.trim() : "";
+  if (title.length === 0) {
+    throw new Error("タイトルは必須です。");
+  }
+  return updateField("title", title);
+}
+
+function onTitleKeydown(event: KeyboardEvent, save: () => Promise<void>) {
+  if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) return;
+  event.preventDefault();
+  void save();
 }
 
 async function load() {
@@ -89,7 +105,7 @@ async function load() {
       );
       return;
     }
-    error.value = caughtMessage(caught);
+    error.value = apiErrorMessage(caught);
   } finally {
     loading.value = false;
   }
@@ -129,8 +145,9 @@ async function updateField(field: string, value: unknown) {
     }
     updateTaskInLists(updated);
   } catch (caught) {
-    error.value = caughtMessage(caught);
-    throw caught;
+    const message = apiErrorMessage(caught);
+    error.value = message;
+    throw new Error(message);
   }
 }
 
@@ -157,7 +174,7 @@ async function duplicateTask() {
     const duplicate = await api.createTask(duplicateInput(task.value));
     await navigateTo(`/workspaces/${workspaceId}/tasks/${duplicate.id}`);
   } catch (caught) {
-    error.value = caughtMessage(caught);
+    error.value = apiErrorMessage(caught);
   } finally {
     processing.value = false;
   }
@@ -171,15 +188,11 @@ async function confirmDelete() {
     await api.deleteTask(taskId);
     await navigateTo(taskListPath.value);
   } catch (caught) {
-    error.value = caughtMessage(caught);
+    error.value = apiErrorMessage(caught);
     confirmingDelete.value = false;
   } finally {
     processing.value = false;
   }
-}
-
-function refreshTimeline() {
-  timelineKey.value += 1;
 }
 
 onMounted(() => {
@@ -189,24 +202,60 @@ onMounted(() => {
 
 <template>
   <main class="mx-auto w-full max-w-5xl space-y-6">
-    <NuxtLink
-      :to="taskListPath"
-      class="inline-flex text-sm font-medium text-slate-600 hover:text-slate-900"
-    >
-      ← タスク一覧へ
-    </NuxtLink>
-
     <p v-if="loading" aria-live="polite" class="py-12 text-center text-sm text-slate-500">
       読み込み中...
     </p>
 
     <template v-else-if="task">
       <header class="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
-        <div class="min-w-0">
+        <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
-            <h1 class="break-words text-2xl font-semibold tracking-tight text-slate-900">
-              {{ task.title }}
-            </h1>
+            <InlineEditableField
+              class="-mx-2 w-full min-w-0 max-w-full"
+              label="タイトル"
+              placement="inline"
+              surface="plain"
+              replaceDisplay
+              :modelValue="task.title"
+              :editable="!deleted"
+              :onSave="saveTitle"
+            >
+              <template #default="{ value }">
+                <h1 class="break-words text-2xl font-semibold tracking-tight text-slate-900">
+                  {{ value }}
+                </h1>
+              </template>
+              <template #picker="{ draftValue, setDraftValue, save, cancel, saving }">
+                <form class="flex flex-col gap-2" @submit.prevent="save">
+                  <input
+                    :value="typeof draftValue === 'string' ? draftValue : ''"
+                    aria-label="タイトルを入力"
+                    autofocus
+                    :disabled="saving"
+                    class="w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-2xl font-semibold tracking-tight text-slate-900 focus:border-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500/35 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    @input="setDraftValue(inputValue($event))"
+                    @keydown="onTitleKeydown($event, save)"
+                  >
+                  <div class="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      :disabled="saving"
+                      class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      @click="cancel"
+                    >
+                      キャンセル
+                    </button>
+                    <button
+                      type="submit"
+                      :disabled="saving"
+                      class="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {{ saving ? "送信中..." : "更新" }}
+                    </button>
+                  </div>
+                </form>
+              </template>
+            </InlineEditableField>
             <span
               v-if="deleted"
               class="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700"
@@ -215,7 +264,7 @@ onMounted(() => {
             </span>
           </div>
           <p v-if="deleted" class="mt-2 text-sm text-slate-600">
-            このタスクは参照専用です。コメントと操作ログは引き続き確認できます。
+            このタスクは削除されています。閲覧のみ可能です。
           </p>
         </div>
 
@@ -283,17 +332,11 @@ onMounted(() => {
         :cases="cases"
         :parentTask="parentTask"
         :childTasks="childTasks"
+        :workspaceId="workspaceId"
         :editable="!deleted"
+        :currentUserId="user?.id ?? ''"
         :onUpdate="updateField"
       />
-
-      <section v-if="!deleted" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <CommentComposer
-          :taskId="taskId"
-          mode="create"
-          @success="refreshTimeline"
-        />
-      </section>
 
       <TaskTimeline
         :key="timelineKey"

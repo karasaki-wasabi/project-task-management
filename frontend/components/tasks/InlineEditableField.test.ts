@@ -7,6 +7,7 @@ interface PickerSlotProps {
   draftValue: unknown;
   setDraftValue: (value: unknown) => void;
   save: () => Promise<void>;
+  saveValue: (value: unknown) => Promise<void>;
   cancel: () => void;
   saving: boolean;
 }
@@ -14,6 +15,8 @@ interface PickerSlotProps {
 function mountField(options: {
   editable?: boolean;
   modelValue?: string;
+  placement?: "popover" | "inline";
+  replaceDisplay?: boolean;
   onSave?: (value: unknown) => Promise<void>;
 } = {}) {
   return mount(InlineEditableField, {
@@ -21,12 +24,14 @@ function mountField(options: {
       label: "優先度",
       modelValue: options.modelValue ?? "中",
       editable: options.editable ?? true,
+      placement: options.placement,
+      replaceDisplay: options.replaceDisplay,
       onSave: options.onSave ?? vi.fn().mockResolvedValue(undefined),
     },
     slots: {
       default: ({ value }: { value: unknown }) =>
         h("span", { "data-testid": "display-value" }, String(value)),
-      picker: ({ draftValue, setDraftValue, save, cancel, saving }: PickerSlotProps) =>
+      picker: ({ draftValue, setDraftValue, save, saveValue, cancel, saving }: PickerSlotProps) =>
         h(
           "form",
           {
@@ -45,6 +50,17 @@ function mountField(options: {
             }),
             h("button", { type: "submit", disabled: saving }, "保存"),
             h("button", { type: "button", onClick: cancel }, "キャンセル"),
+            h(
+              "button",
+              {
+                type: "button",
+                "aria-label": "高を即保存",
+                onClick: () => {
+                  void saveValue("高");
+                },
+              },
+              "高",
+            ),
           ],
         ),
     },
@@ -135,6 +151,58 @@ describe("InlineEditableField", () => {
     await flushPromises();
 
     expect(onSave).toHaveBeenCalledWith("高");
+    expect(wrapper.find('[data-testid="picker"]').exists()).toBe(false);
+  });
+
+  it("既定ではピッカーを行下のインライン展開ではなくポップオーバーとして開く", async () => {
+    const wrapper = mountField();
+
+    await wrapper.get('button[aria-label="優先度を編集"]').trigger("click");
+
+    expect(wrapper.get('[data-testid="inline-editable-picker"]').classes()).toContain("absolute");
+    expect(wrapper.find('[data-testid="inline-editable-backdrop"]').exists()).toBe(true);
+  });
+
+  it("placement=inline のときは行の下に展開する", async () => {
+    const wrapper = mountField({ placement: "inline" });
+
+    await wrapper.get('button[aria-label="優先度を編集"]').trigger("click");
+
+    expect(wrapper.get('[data-testid="inline-editable-picker"]').classes()).not.toContain("absolute");
+    expect(wrapper.find('[data-testid="inline-editable-backdrop"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="inline-editable-row"]').exists()).toBe(true);
+  });
+
+  it("replaceDisplay のときは表示行を隠して同じ位置にピッカーを出す", async () => {
+    const wrapper = mountField({ placement: "inline", replaceDisplay: true });
+
+    await wrapper.get('button[aria-label="優先度を編集"]').trigger("click");
+
+    expect(wrapper.find('[data-testid="inline-editable-row"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="inline-editable-picker"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="inline-editable-picker"]').classes()).not.toContain("mt-1");
+  });
+
+  it("選択肢の即保存は値を渡してピッカーを閉じる", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mountField({ onSave });
+
+    await wrapper.get('button[aria-label="優先度を編集"]').trigger("click");
+    await wrapper.get('button[aria-label="高を即保存"]').trigger("click");
+    await flushPromises();
+
+    expect(onSave).toHaveBeenCalledWith("高");
+    expect(wrapper.find('[data-testid="picker"]').exists()).toBe(false);
+  });
+
+  it("背景クリックでピッカーを閉じ、保存しない", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mountField({ onSave });
+
+    await wrapper.get('button[aria-label="優先度を編集"]').trigger("click");
+    await wrapper.get('[data-testid="inline-editable-backdrop"]').trigger("click");
+
+    expect(onSave).not.toHaveBeenCalled();
     expect(wrapper.find('[data-testid="picker"]').exists()).toBe(false);
   });
 

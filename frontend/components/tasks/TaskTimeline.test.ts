@@ -12,6 +12,7 @@ import type {
 
 const getTaskTimeline =
   vi.fn<(taskId: string, options: TaskTimelineOptions) => Promise<TaskTimelinePage>>();
+const createComment = vi.fn<(taskId: string, body: string) => Promise<Comment>>();
 const updateComment =
   vi.fn<(taskId: string, commentId: string, body: string) => Promise<Comment>>();
 const deleteComment = vi.fn<(taskId: string, commentId: string) => Promise<void>>();
@@ -22,6 +23,7 @@ vi.mock("../../composables/useApiClient", async (importOriginal) => {
     ...actual,
     useApiClient: () => ({
       getTaskTimeline,
+      createComment,
       updateComment,
       deleteComment,
     }),
@@ -77,6 +79,7 @@ function mountTimeline(readOnly = false) {
 describe("TaskTimeline", () => {
   beforeEach(() => {
     getTaskTimeline.mockReset();
+    createComment.mockReset();
     updateComment.mockReset();
     deleteComment.mockReset();
     getTaskTimeline.mockResolvedValue(page([]));
@@ -104,7 +107,7 @@ describe("TaskTimeline", () => {
     await flushPromises();
 
     expect(getTaskTimeline).toHaveBeenNthCalledWith(3, "task-1", { filter: "changes" });
-    expect(wrapper.text()).toContain("タイトルを 変更前 から 変更後 に変更しました");
+    expect(wrapper.text()).toMatch(/タイトルを 変更前 から 変更後 に変更しました/);
     expect(wrapper.text()).not.toContain("コメントだけ");
   });
 
@@ -292,6 +295,53 @@ describe("TaskTimeline", () => {
     expect(wrapper.text()).not.toContain("秘密の変更後");
     expect(wrapper.text()).toContain("user-actor がこのタスクを必須タスクに設定しました");
     expect(wrapper.text()).toContain("user-actor が必須タスクの設定を解除しました");
+    expect(wrapper.get('[data-testid="timeline-value-chip"]').text()).toBe("未設定");
+  });
+
+  it("日付見出しで塊化し、時刻は HH:mm で出す", async () => {
+    getTaskTimeline.mockResolvedValue(
+      page([
+        makeChange({ id: "newer", occurredAt: "2026-08-12T10:00:00.000Z" }),
+        makeChange({
+          id: "older-same-day",
+          occurredAt: "2026-08-12T08:00:00.000Z",
+          fieldName: "detail",
+        }),
+        makeChange({
+          id: "previous-day",
+          occurredAt: "2026-08-11T10:00:00.000Z",
+          fieldName: "priority",
+        }),
+      ]),
+    );
+    const wrapper = mountTimeline();
+    await flushPromises();
+
+    const headings = wrapper.findAll('[data-testid="timeline-date-heading"]');
+    expect(headings).toHaveLength(2);
+    expect(wrapper.text()).not.toContain("新しい順");
+    expect(wrapper.findAll("time").every((time) => /^\d{2}:\d{2}$/.test(time.text()))).toBe(true);
+    expect(
+      wrapper.findAll("time").every((time) => time.classes().includes("shrink-0")),
+    ).toBe(true);
+  });
+
+  it("ステータス変更は日本語ラベルのチップで表示する", async () => {
+    getTaskTimeline.mockResolvedValue(
+      page([
+        makeChange({
+          fieldName: "status",
+          beforeValue: "not_started",
+          afterValue: "in_progress",
+        }),
+      ]),
+    );
+    const wrapper = mountTimeline();
+    await flushPromises();
+
+    const chips = wrapper.findAll('[data-testid="timeline-value-chip"]');
+    expect(chips.map((chip) => chip.text())).toEqual(["未着手", "作業中"]);
+    expect(wrapper.text()).toMatch(/ステータスを 未着手 から 作業中 に変更しました/);
   });
 
   it("編集済み表示を行い、自分のコメントだけに編集・削除操作を提示する", async () => {
@@ -308,7 +358,7 @@ describe("TaskTimeline", () => {
     const wrapper = mountTimeline();
     await flushPromises();
 
-    expect(wrapper.text()).toContain("編集済み");
+    expect(wrapper.text()).toContain("（編集済み）");
     expect(wrapper.find('button[aria-label="自分のコメントを編集"]').exists()).toBe(true);
     expect(wrapper.find('button[aria-label="自分のコメントを削除"]').exists()).toBe(true);
     expect(wrapper.find('button[aria-label="他人のコメントを編集"]').exists()).toBe(false);
@@ -323,6 +373,23 @@ describe("TaskTimeline", () => {
     expect(wrapper.text()).toContain("自分のコメント");
     expect(wrapper.find('button[aria-label="自分のコメントを編集"]').exists()).toBe(false);
     expect(wrapper.find('button[aria-label="自分のコメントを削除"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="comment-composer-create"]').exists()).toBe(false);
+  });
+
+  it("ヘッダー・投稿欄・一覧を1枚のカードに収める", async () => {
+    getTaskTimeline.mockResolvedValue(page([makeComment()]));
+    const wrapper = mountTimeline();
+    await flushPromises();
+
+    const card = wrapper.get('[data-testid="task-timeline"]');
+    expect(card.classes()).toEqual(
+      expect.arrayContaining(["rounded-xl", "border", "border-slate-200", "bg-white"]),
+    );
+    expect(card.find("#task-timeline-heading").exists()).toBe(true);
+    expect(card.find('[data-testid="comment-composer-create"]').exists()).toBe(true);
+    expect(card.find("article").exists()).toBe(true);
+    expect(card.find("article").classes()).not.toContain("shadow-sm");
+    expect(wrapper.findAll('[data-testid="task-timeline"]').length).toBe(1);
   });
 
   it("自分のコメントを CommentComposer で編集し、成功後に再取得する", async () => {
@@ -338,13 +405,30 @@ describe("TaskTimeline", () => {
     await flushPromises();
 
     await wrapper.get('button[aria-label="自分のコメントを編集"]').trigger("click");
-    await wrapper.get("textarea").setValue("編集後のコメント");
-    await wrapper.get("form").trigger("submit");
+    expect(wrapper.find("article").exists()).toBe(false);
+    expect(wrapper.get("time").attributes("datetime")).toBe("2026-08-12T00:00:00.000Z");
+    const editor = wrapper.get('[data-testid="comment-composer-edit"]');
+    expect(editor.text()).not.toContain("Ctrl + Enter");
+    await editor.get("textarea").setValue("編集後のコメント");
+    await editor.trigger("submit");
     await flushPromises();
 
     expect(updateComment).toHaveBeenCalledWith("task-1", "comment-own", "編集後のコメント");
     expect(getTaskTimeline).toHaveBeenLastCalledWith("task-1", { filter: "all" });
     expect(wrapper.text()).toContain("編集後のコメント");
+  });
+
+  it("コメント編集をキャンセルすると本文表示に戻る", async () => {
+    getTaskTimeline.mockResolvedValue(page([makeComment()]));
+    const wrapper = mountTimeline();
+    await flushPromises();
+
+    await wrapper.get('button[aria-label="自分のコメントを編集"]').trigger("click");
+    await wrapper.get('[data-testid="comment-composer-edit"] button[type="button"]').trigger("click");
+
+    expect(updateComment).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="comment-composer-edit"]').exists()).toBe(false);
+    expect(wrapper.get("article").text()).toContain("自分のコメント");
   });
 
   it("自分のコメントを削除し、成功後に再取得する", async () => {
@@ -356,11 +440,35 @@ describe("TaskTimeline", () => {
     await flushPromises();
 
     await wrapper.get('button[aria-label="自分のコメントを削除"]').trigger("click");
+    expect(wrapper.get("article").text()).toContain("自分のコメント");
+    expect(wrapper.find('button[aria-label="自分のコメントを編集"]').exists()).toBe(true);
+    expect(wrapper.get("time").attributes("datetime")).toBe("2026-08-12T00:00:00.000Z");
+    expect(wrapper.get('[data-testid="delete-comment-confirm"]').text()).toContain(
+      "本当に削除しますか?",
+    );
+    expect(wrapper.text()).not.toContain("削除するとタイムラインから消えます");
+    expect(deleteComment).not.toHaveBeenCalled();
+
+    await wrapper.get('button[aria-label="コメント削除を確定"]').trigger("click");
     await flushPromises();
 
     expect(deleteComment).toHaveBeenCalledWith("task-1", "comment-own");
     expect(getTaskTimeline).toHaveBeenLastCalledWith("task-1", { filter: "all" });
     expect(wrapper.text()).not.toContain("自分のコメント");
+  });
+
+  it("コメント削除の確認をキャンセルすると API を呼ばない", async () => {
+    getTaskTimeline.mockResolvedValue(page([makeComment()]));
+    const wrapper = mountTimeline();
+    await flushPromises();
+
+    await wrapper.get('button[aria-label="自分のコメントを削除"]').trigger("click");
+    await wrapper.get('button[aria-label="コメント削除をキャンセル"]').trigger("click");
+    await flushPromises();
+
+    expect(deleteComment).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="delete-comment-confirm"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain("自分のコメント");
   });
 
   it("次ページを同じフィルターとカーソルで取得して追記する", async () => {
@@ -372,7 +480,7 @@ describe("TaskTimeline", () => {
     const wrapper = mountTimeline();
     await flushPromises();
 
-    await wrapper.get('button[aria-label="続きを読み込む"]').trigger("click");
+    await wrapper.get('button[aria-label="さらに読み込む"]').trigger("click");
     await flushPromises();
 
     expect(getTaskTimeline).toHaveBeenLastCalledWith("task-1", {
@@ -381,6 +489,18 @@ describe("TaskTimeline", () => {
     });
     expect(wrapper.text()).toContain("自分のコメント");
     expect(wrapper.text()).toContain("優先度を 変更前 から 変更後 に変更しました");
+  });
+
+  it("コメントタブが空のときはまだコメントはありませんと表示する", async () => {
+    getTaskTimeline.mockResolvedValue(page([]));
+    const wrapper = mountTimeline();
+    await flushPromises();
+
+    await wrapper.get('button[role="tab"][data-filter="comments"]').trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("まだコメントはありません");
+    expect(wrapper.text()).not.toContain("表示する項目がありません");
   });
 
   it("取得・削除エラーを画面内に表示する", async () => {
@@ -396,6 +516,7 @@ describe("TaskTimeline", () => {
     const failedDelete = mountTimeline();
     await flushPromises();
     await failedDelete.get('button[aria-label="自分のコメントを削除"]').trigger("click");
+    await failedDelete.get('button[aria-label="コメント削除を確定"]').trigger("click");
     await flushPromises();
 
     expect(failedDelete.get('[role="alert"]').text()).toContain(
