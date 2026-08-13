@@ -835,6 +835,90 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     }
   });
 
+  it("GET /api/tasks/:id/timeline pages a mixed stream without loading every row", async () => {
+    const task = await db.task.create({
+      data: {
+        title: `timeline-page-${randomUUID()}`,
+        priority: "medium",
+        workspaceId: workspaceA,
+      },
+    });
+    const origin = new Date("2038-06-01T00:00:00.000Z");
+
+    try {
+      const comments = Array.from({ length: 15 }, (_, index) => {
+        const occurredAt = new Date(origin.getTime() + index * 2_000);
+        return {
+          id: `tl-c-${index.toString().padStart(2, "0")}-${randomUUID()}`,
+          taskId: task.id,
+          authorUserId: memberId,
+          body: `comment-${index}`,
+          createdAt: occurredAt,
+          updatedAt: occurredAt,
+        };
+      });
+      const changes = Array.from({ length: 15 }, (_, index) => {
+        const occurredAt = new Date(origin.getTime() + index * 2_000 + 1_000);
+        return {
+          id: `tl-a-${index.toString().padStart(2, "0")}-${randomUUID()}`,
+          taskId: task.id,
+          actorUserId: memberId,
+          operationType: "field_changed" as const,
+          fieldName: "title" as const,
+          beforeValue: `before-${index}`,
+          afterValue: `after-${index}`,
+          occurredAt,
+        };
+      });
+      await db.comment.createMany({ data: comments });
+      await db.activityLog.createMany({ data: changes });
+      const expectedIds = [
+        ...comments.map((comment) => ({ id: comment.id, occurredAt: comment.createdAt })),
+        ...changes.map((change) => ({ id: change.id, occurredAt: change.occurredAt })),
+      ]
+        .sort((left, right) => {
+          const timeDifference = right.occurredAt.getTime() - left.occurredAt.getTime();
+          if (timeDifference !== 0) return timeDifference;
+          return left.id < right.id ? 1 : -1;
+        })
+        .map((entry) => entry.id);
+
+      const collected: string[] = [];
+      let cursor: string | null = null;
+      for (let pageIndex = 0; pageIndex < 6; pageIndex += 1) {
+        const response = await app.inject(
+          withWorkspace(
+            {
+              method: "GET",
+              url:
+                `/api/tasks/${task.id}/timeline?filter=all&limit=10` +
+                (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""),
+            },
+            memberCsrf.cookie,
+            undefined,
+            workspaceA,
+          ),
+        );
+        expect(response.statusCode).toBe(200);
+        const body = response.json() as {
+          items: Array<{ id: string }>;
+          nextCursor: string | null;
+        };
+        expect(body.items.length).toBeLessThanOrEqual(10);
+        collected.push(...body.items.map((item) => item.id));
+        cursor = body.nextCursor;
+        if (!cursor) break;
+      }
+
+      expect(cursor).toBeNull();
+      expect(collected).toEqual(expectedIds);
+    } finally {
+      await db.$executeRaw`DELETE FROM activity_logs WHERE task_id = ${task.id}`;
+      await db.$executeRaw`DELETE FROM comments WHERE task_id = ${task.id}`;
+      await hardDelete("tasks", [task.id]);
+    }
+  });
+
   it("GET /api/tasks?unassignedCase=true returns only tasks with no case assigned", async () => {
     const caseRecord = await db.case.create({
       data: { name: `route-case-${randomUUID()}`, endDate: new Date(), workspaceId: workspaceA },

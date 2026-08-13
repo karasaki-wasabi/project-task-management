@@ -12,18 +12,35 @@ interface AppendActivityLogInput {
   afterValue: string | null;
 }
 
+export interface TimelinePageQuery {
+  cursor?: { occurredAt: Date; id: string };
+  take: number;
+}
+
+function afterOccurredAtCursor(cursor?: { occurredAt: Date; id: string }) {
+  if (!cursor) return {};
+  return {
+    OR: [
+      { occurredAt: { lt: cursor.occurredAt } },
+      { occurredAt: cursor.occurredAt, id: { lt: cursor.id } },
+    ],
+  };
+}
+
 export const activityLogRepository = {
   async append(input: AppendActivityLogInput, tx: SoftDeleteTx): Promise<void> {
     await tx.activityLog.create({ data: input });
   },
 
-  listDisplayable(taskId: string): Promise<ActivityLogEntry[]> {
+  listDisplayable(taskId: string, page?: TimelinePageQuery): Promise<ActivityLogEntry[]> {
     return db.activityLog.findMany({
       where: {
         taskId,
         operationType: "field_changed",
+        ...afterOccurredAtCursor(page?.cursor),
       },
       orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      ...(page ? { take: page.take } : {}),
     });
   },
 };

@@ -166,4 +166,36 @@ describe("activityLogService", () => {
     expect(activityLogRepository).not.toHaveProperty("update");
     expect(activityLogRepository).not.toHaveProperty("delete");
   });
+
+  it("limits displayable rows when a page take is provided", async () => {
+    const task = await db.task.create({
+      data: {
+        title: `activity-log-page-${randomUUID()}`,
+        priority: "medium",
+        workspaceId,
+      },
+    });
+
+    try {
+      await db.activityLog.createMany({
+        data: Array.from({ length: 25 }, (_, index) => ({
+          taskId: task.id,
+          actorUserId: userId,
+          operationType: "field_changed" as const,
+          fieldName: "title" as const,
+          beforeValue: `before-${index}`,
+          afterValue: `after-${index}`,
+          occurredAt: new Date(`2038-07-01T00:00:${index.toString().padStart(2, "0")}.000Z`),
+        })),
+      });
+
+      const page = await activityLogService.listDisplayable(task.id, { take: 3 });
+      expect(page).toHaveLength(3);
+      const all = await activityLogService.listDisplayable(task.id);
+      expect(all).toHaveLength(25);
+    } finally {
+      await db.$executeRawUnsafe("DELETE FROM activity_logs WHERE task_id = ?", task.id);
+      await db.$executeRawUnsafe("DELETE FROM tasks WHERE id = ?", task.id);
+    }
+  });
 });

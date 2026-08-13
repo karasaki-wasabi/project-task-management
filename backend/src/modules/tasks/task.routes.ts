@@ -114,12 +114,6 @@ function decodeTimelineCursor(encoded: string): TimelineCursor {
   }
 }
 
-function isAfterTimelineCursor(entry: TimelineEntry, cursor: TimelineCursor): boolean {
-  const cursorTime = new Date(cursor.occurredAt).getTime();
-  const entryTime = entry.occurredAt.getTime();
-  return entryTime < cursorTime || (entryTime === cursorTime && entry.id < cursor.id);
-}
-
 function requireCurrentWorkspaceId(request: FastifyRequest): VerifiedWorkspaceId {
   if (!request.currentWorkspaceId) {
     throw badRequest("X-Workspace-Id is required");
@@ -194,9 +188,20 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       return;
     }
 
+    const limit = query.limit ?? 20;
+    const take = limit + 1;
+    const decodedCursor = query.cursor ? decodeTimelineCursor(query.cursor) : undefined;
+    const pageQuery = {
+      take,
+      ...(decodedCursor
+        ? { cursor: { occurredAt: new Date(decodedCursor.occurredAt), id: decodedCursor.id } }
+        : {}),
+    };
     const [comments, changes] = await Promise.all([
-      query.filter === "changes" ? Promise.resolve([]) : commentService.list(params.id),
-      query.filter === "comments" ? Promise.resolve([]) : activityLogService.listDisplayable(params.id),
+      query.filter === "changes" ? Promise.resolve([]) : commentService.list(params.id, pageQuery),
+      query.filter === "comments"
+        ? Promise.resolve([])
+        : activityLogService.listDisplayable(params.id, pageQuery),
     ]);
     const entries: TimelineEntry[] = [
       ...comments.map((comment) => ({
@@ -209,12 +214,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         type: "change" as const,
       })),
     ].sort(compareTimelineEntries);
-    const cursor = query.cursor ? decodeTimelineCursor(query.cursor) : null;
-    const remainingEntries = cursor
-      ? entries.filter((entry) => isAfterTimelineCursor(entry, cursor))
-      : entries;
-    const limit = query.limit ?? 20;
-    const page = remainingEntries.slice(0, limit + 1);
+    const page = entries.slice(0, take);
     const hasNextPage = page.length > limit;
     const items = hasNextPage ? page.slice(0, limit) : page;
 

@@ -1,5 +1,6 @@
 import type { SoftDeleteTx } from "../../shared/soft-delete.repository.js";
 import { activityLogRepository } from "./activity-log.repository.js";
+import type { TimelinePageQuery } from "./activity-log.repository.js";
 import type { ActivityLogEntry, RecordActivityLogInput } from "./activity-log.types.js";
 
 export const activityLogService = {
@@ -22,7 +23,7 @@ export const activityLogService = {
     );
   },
 
-  listDisplayable(taskId: string): Promise<ActivityLogEntry[]> {
-    return activityLogRepository.listDisplayable(taskId);
+  listDisplayable(taskId: string, page?: TimelinePageQuery): Promise<ActivityLogEntry[]> {
+    return activityLogRepository.listDisplayable(taskId, page);
   },
 };

@@ -3,7 +3,7 @@ import { badRequest, forbidden, HttpError, notFound } from "../../shared/http-er
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { activityLogService } from "../activity-logs/activity-log.service.js";
 import { tasksService } from "../tasks/task.service.js";
-import { commentRepository } from "./comment.repository.js";
+import { commentRepository, type TimelinePageQuery } from "./comment.repository.js";
 import type { Comment } from "./comment.types.js";
 
 function assertBody(body: string): void {
@@ -26,8 +26,8 @@ async function assertTaskWritable(
 }
 
 export const commentService = {
-  list(taskId: string): Promise<Comment[]> {
-    return commentRepository.list(taskId);
+  list(taskId: string, page?: TimelinePageQuery): Promise<Comment[]> {
+    return commentRepository.list(taskId, page);
   },
 
   async create(

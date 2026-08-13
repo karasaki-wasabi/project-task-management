@@ -2,11 +2,30 @@ import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import type { Comment } from "./comment.types.js";
 
+export interface TimelinePageQuery {
+  cursor?: { occurredAt: Date; id: string };
+  take: number;
+}
+
+function afterCreatedAtCursor(cursor?: { occurredAt: Date; id: string }) {
+  if (!cursor) return {};
+  return {
+    OR: [
+      { createdAt: { lt: cursor.occurredAt } },
+      { createdAt: cursor.occurredAt, id: { lt: cursor.id } },
+    ],
+  };
+}
+
 export const commentRepository = {
-  list(taskId: string): Promise<Comment[]> {
+  list(taskId: string, page?: TimelinePageQuery): Promise<Comment[]> {
     return db.comment.findMany({
-      where: { taskId },
+      where: {
+        taskId,
+        ...afterCreatedAtCursor(page?.cursor),
+      },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      ...(page ? { take: page.take } : {}),
     });
   },
 
