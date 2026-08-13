@@ -16,10 +16,11 @@ async function createTask(
   request: APIRequestContext,
   workspaceId: string,
   title: string,
+  extra: Record<string, unknown> = {},
 ): Promise<{ id: string; title: string }> {
   const response = await request.post(`${API_BASE_URL}/api/tasks`, {
     headers: await workspaceScopedHeaders(request, workspaceId),
-    data: { title, priority: "medium" },
+    data: { title, priority: "medium", ...extra },
   });
   expect(response.status()).toBe(201);
   return (await response.json()) as { id: string; title: string };
@@ -171,4 +172,112 @@ test("カンバンの詳細モーダルはタイムラインを持たず詳細�
 
   await expect(page).toHaveURL(detailPath);
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
+});
+
+test("複製は指定フィールドを引き継ぎ初期状態の新規詳細へ遷移する", async ({
+  page,
+  workspace,
+}) => {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const headers = await workspaceScopedHeaders(page.request, workspace.id);
+  const meResponse = await page.request.get(`${API_BASE_URL}/api/auth/me`);
+  expect(meResponse.ok()).toBeTruthy();
+  const me = (await meResponse.json()) as { id: string; name: string };
+  const caseResponse = await page.request.post(`${API_BASE_URL}/api/cases`, {
+    headers,
+    data: { name: `e2e-task-detail-dup-case-${suffix}`, templateOperations: [] },
+  });
+  expect(caseResponse.status()).toBe(201);
+  const createdCase = (await caseResponse.json()) as { id: string; name: string };
+  const parent = await createTask(page.request, workspace.id, `e2e-task-detail-dup-parent-${suffix}`);
+  const sourceTitle = `e2e-task-detail-dup-source-${suffix}`;
+  const source = await createTask(page.request, workspace.id, sourceTitle, {
+    priority: "high",
+    detail: `e2e-task-detail-dup-detail-${suffix}`,
+    assigneeUserId: me.id,
+    caseId: createdCase.id,
+    isRequiredForCase: true,
+    parentTaskId: parent.id,
+    scheduledEndDate: "2036-08-20T00:00:00.000Z",
+  });
+  const stageResponse = await page.request.post(`${API_BASE_URL}/api/development-stages`, {
+    headers,
+    data: { name: `e2e-task-detail-dup-stage-${suffix}` },
+  });
+  expect(stageResponse.status()).toBe(201);
+  const stage = (await stageResponse.json()) as { id: string; name: string };
+  const stagePatch = await page.request.patch(
+    `${API_BASE_URL}/api/tasks/${source.id}/development-stage`,
+    { headers, data: { developmentStageId: stage.id } },
+  );
+  expect(stagePatch.status()).toBe(200);
+  const statusPatch = await page.request.patch(`${API_BASE_URL}/api/tasks/${source.id}/status`, {
+    headers,
+    data: { status: "in_progress" },
+  });
+  expect(statusPatch.status()).toBe(200);
+  const childTitle = `e2e-task-detail-dup-child-${suffix}`;
+  const childResponse = await page.request.post(`${API_BASE_URL}/api/tasks/${source.id}/children`, {
+    headers,
+    data: { title: childTitle, priority: "low" },
+  });
+  expect(childResponse.status()).toBe(201);
+  const commentBody = `e2e-task-detail-dup-comment-${suffix}`;
+  const commentResponse = await page.request.post(`${API_BASE_URL}/api/tasks/${source.id}/comments`, {
+    headers,
+    data: { body: commentBody },
+  });
+  expect(commentResponse.status()).toBe(201);
+
+  await page.goto(`${workspacePagePath(workspace.id, "tasks")}/${source.id}`);
+  await expect(page.getByRole("heading", { name: sourceTitle })).toBeVisible();
+  await page.getByRole("button", { name: "タスクを複製" }).click();
+
+  await expect(page).not.toHaveURL(new RegExp(`/tasks/${source.id}(?:/|$)`));
+  await expect(page).toHaveURL(new RegExp(`/workspaces/${workspace.id}/tasks/[\\w-]+$`));
+  await expect(page.getByRole("heading", { name: sourceTitle })).toBeVisible();
+  await expect(page.getByTestId("task-field-card").getByText("高", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("task-detail-display")).toContainText(`e2e-task-detail-dup-detail-${suffix}`);
+  await expect(page.getByTestId("task-field-card").getByText(me.name)).toBeVisible();
+  await expect(page.getByTestId("task-field-card").getByText(createdCase.name)).toBeVisible();
+  await expect(page.getByTestId("task-field-card").getByText("必須", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("task-field-card").getByText("2036/08/20")).toBeVisible();
+  await expect(page.getByTestId("task-field-card").getByText("未着手", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("task-field-card").getByText(stage.name)).toHaveCount(0);
+  await expect(page.getByText(commentBody, { exact: true })).toHaveCount(0);
+  await page.getByTestId("related-tasks-toggle").click();
+  await expect(page.getByTestId("parent-task-link")).toHaveText(parent.title);
+  await expect(page.getByText(childTitle, { exact: true })).toHaveCount(0);
+});
+
+test("削除済みタスクをカンバンのモーダルで開くと参照専用になる", async ({
+  page,
+  workspace,
+}) => {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const title = `e2e-task-detail-modal-deleted-${suffix}`;
+  const task = await createTask(page.request, workspace.id, title);
+
+  await page.goto(workspacePagePath(workspace.id, "kanban"));
+  await page.getByRole("button", { name: /展開/ }).click();
+  await page.locator(`.card[data-task-id="${task.id}"]`).click();
+  const modal = page.locator(".task-detail-modal");
+  await expect(modal).toBeVisible();
+  await expect(modal.getByRole("button", { name: "編集", exact: true })).toBeVisible();
+  await expect(modal.getByRole("button", { name: "削除", exact: true })).toBeVisible();
+
+  const deleteResponse = await page.request.delete(`${API_BASE_URL}/api/tasks/${task.id}`, {
+    headers: await workspaceScopedHeaders(page.request, workspace.id),
+  });
+  expect(deleteResponse.status()).toBe(204);
+
+  await modal.getByLabel("閉じる").click();
+  await expect(modal).toBeHidden();
+  await page.locator(`.card[data-task-id="${task.id}"]`).click();
+  await expect(modal).toBeVisible();
+  await expect(modal.getByText("削除済み", { exact: true })).toBeVisible();
+  await expect(modal.getByText("このタスクは参照専用です。編集・削除はできません。")).toBeVisible();
+  await expect(modal.getByRole("button", { name: "編集", exact: true })).toHaveCount(0);
+  await expect(modal.getByRole("button", { name: "削除", exact: true })).toHaveCount(0);
+  await expect(modal.getByRole("link", { name: "詳細ページを開く ↗", exact: true })).toBeVisible();
 });
