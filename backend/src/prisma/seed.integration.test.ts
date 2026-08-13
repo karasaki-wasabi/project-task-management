@@ -10,7 +10,11 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import {
+  SEED_TASK_CHILD_ID,
+  SEED_TASK_CHILD_SIBLING_ID,
   SEED_TASK_DONE_ID,
+  SEED_TASK_GRANDCHILD_ID,
+  SEED_TASK_ROOT_ID,
   SEED_WORKSPACE_ID,
   seedManualConfirmationData,
 } from "./seed-manual-data.js";
@@ -51,5 +55,27 @@ describe("manual confirmation seed (task-status-model 1.2)", () => {
     expect(doneTask.developmentStage?.kind).toBe("completed");
     expect(doneTask.status).toBe("not_started");
     expect(doneTask.completedAt).not.toBeNull();
+  });
+
+  it("seeds a three-level parent-child tree for task detail confirmation", async () => {
+    await seedManualConfirmationData(prisma);
+
+    const [parent, child, sibling, grandchild] = await Promise.all([
+      prisma.task.findUniqueOrThrow({ where: { id: SEED_TASK_ROOT_ID } }),
+      prisma.task.findUniqueOrThrow({ where: { id: SEED_TASK_CHILD_ID } }),
+      prisma.task.findUniqueOrThrow({ where: { id: SEED_TASK_CHILD_SIBLING_ID } }),
+      prisma.task.findUniqueOrThrow({ where: { id: SEED_TASK_GRANDCHILD_ID } }),
+    ]);
+
+    expect(parent.parentTaskId).toBeNull();
+    expect(child.parentTaskId).toBe(SEED_TASK_ROOT_ID);
+    expect(sibling.parentTaskId).toBe(SEED_TASK_ROOT_ID);
+    expect(grandchild.parentTaskId).toBe(SEED_TASK_CHILD_ID);
+
+    const logs = await prisma.activityLog.findMany({
+      where: { taskId: SEED_TASK_ROOT_ID, operationType: "field_changed" },
+    });
+    const logDays = new Set(logs.map((log) => log.occurredAt.toISOString().slice(0, 10)));
+    expect(logDays.size).toBeGreaterThanOrEqual(2);
   });
 });

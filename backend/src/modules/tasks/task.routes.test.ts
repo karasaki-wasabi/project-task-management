@@ -57,6 +57,12 @@ async function csrfToken(app: App, cookie: string): Promise<{ token: string; coo
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  if (table === "tasks") {
+    await db.$executeRawUnsafe(
+      `DELETE FROM activity_logs WHERE task_id IN (${ids.map(() => "?").join(",")})`,
+      ...ids,
+    );
+  }
   // workspaceService.create provisions terminal development_stages (1.2/1.3);
   // clear them before removing the workspace row (FK).
   if (table === "workspaces") {
@@ -154,6 +160,32 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [body.id]);
   });
 
+  it("POST /api/tasks stores an optional scheduledEndDate (task-detail 2.9)", async () => {
+    const response = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: {
+            title: "duplicated task with end date",
+            priority: "medium",
+            scheduledEndDate: "2036-08-15",
+          },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    const body = response.json();
+    if (response.statusCode === 201) {
+      await hardDelete("tasks", [body.id]);
+    }
+    expect(response.statusCode).toBe(201);
+    expect(body.scheduledEndDate).toBe("2036-08-15T00:00:00.000Z");
+  });
+
   it("POST /api/tasks returns 400 for an empty title", async () => {
     const response = await app.inject(
       withWorkspace(
@@ -200,6 +232,15 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     );
     expect(okResponse.statusCode).toBe(200);
     expect(okResponse.json().status).toBe("on_hold");
+    await expect(
+      db.activityLog.findFirst({
+        where: { taskId: id, operationType: "field_changed", fieldName: "status" },
+      }),
+    ).resolves.toMatchObject({
+      actorUserId: memberId,
+      beforeValue: "not_started",
+      afterValue: "on_hold",
+    });
 
     const missingResponse = await app.inject(
       withWorkspace(
@@ -312,6 +353,12 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(okResponse.json()).toMatchObject({ title: "edited", priority: "high", detail: "new" });
     expect(okResponse.json()).not.toHaveProperty("memo");
     expect(okResponse.json()).not.toHaveProperty("scheduledDate");
+    const fieldLogs = await db.activityLog.findMany({
+      where: { taskId: id, operationType: "field_changed" },
+      orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
+    });
+    expect(fieldLogs.map((log) => log.fieldName)).toEqual(["title", "priority", "detail"]);
+    expect(fieldLogs.every((log) => log.actorUserId === memberId)).toBe(true);
 
     const badResponse = await app.inject(
       withWorkspace(
@@ -470,6 +517,408 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [idA, idB]);
   });
 
+  it("returns a deleted task for detail reads and rejects every task write with 409 (task-detail 1.4)", async () => {
+    const created = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "read-only deleted task", priority: "medium" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(created.statusCode).toBe(201);
+    const taskId = created.json().id as string;
+
+    const deleted = await app.inject(
+      withWorkspace(
+        { method: "DELETE", url: `/api/tasks/${taskId}` },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(deleted.statusCode).toBe(204);
+
+    const detail = await app.inject(
+      withWorkspace({ method: "GET", url: `/api/tasks/${taskId}` }, memberCsrf.cookie, undefined, workspaceA),
+    );
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json()).toMatchObject({ id: taskId, title: "read-only deleted task" });
+    expect(detail.json().deletedAt).toEqual(expect.any(String));
+
+    const list = await app.inject(
+      withWorkspace({ method: "GET", url: "/api/tasks" }, memberCsrf.cookie, undefined, workspaceA),
+    );
+    expect(list.statusCode).toBe(200);
+    expect(list.json().map((task: { id: string }) => task.id)).not.toContain(taskId);
+
+    const writes = await Promise.all([
+      app.inject(
+        withWorkspace(
+          { method: "PATCH", url: `/api/tasks/${taskId}`, payload: { title: "must not change" } },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      ),
+      app.inject(
+        withWorkspace(
+          { method: "PATCH", url: `/api/tasks/${taskId}/status`, payload: { status: "on_hold" } },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      ),
+      app.inject(
+        withWorkspace(
+          {
+            method: "PATCH",
+            url: `/api/tasks/${taskId}/development-stage`,
+            payload: { developmentStageId: null },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      ),
+      app.inject(
+        withWorkspace(
+          { method: "DELETE", url: `/api/tasks/${taskId}` },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      ),
+      app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: `/api/tasks/${taskId}/children`,
+            payload: { title: "must not create child", priority: "low" },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      ),
+      app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: `/api/tasks/${taskId}/split`,
+            payload: {
+              parts: [
+                { title: "must not split 1", priority: "low" },
+                { title: "must not split 2", priority: "low" },
+              ],
+            },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      ),
+    ]);
+
+    expect(writes.map((response) => response.statusCode)).toEqual([409, 409, 409, 409, 409, 409]);
+    for (const response of writes) {
+      expect(response.json().error).toMatch(/task is deleted/i);
+    }
+
+    await hardDelete("tasks", [taskId]);
+  });
+
+  it("GET /api/tasks/:id/timeline filters, orders, pages, and reads deleted tasks", async () => {
+    const task = await db.task.create({
+      data: {
+        title: `timeline-${randomUUID()}`,
+        priority: "medium",
+        workspaceId: workspaceA,
+      },
+    });
+    const occurredAt = new Date("2037-04-05T06:07:08.000Z");
+    const olderAt = new Date("2037-04-04T06:07:08.000Z");
+    const commentIds = [`timeline-comment-a-${randomUUID()}`, `timeline-comment-z-${randomUUID()}`];
+    const changeIds = [`timeline-change-a-${randomUUID()}`, `timeline-change-z-${randomUUID()}`];
+
+    await db.comment.createMany({
+      data: [
+        {
+          id: commentIds[0],
+          taskId: task.id,
+          authorUserId: memberId,
+          body: "older comment",
+          createdAt: olderAt,
+          updatedAt: olderAt,
+        },
+        {
+          id: commentIds[1],
+          taskId: task.id,
+          authorUserId: memberId,
+          body: "newer comment",
+          createdAt: occurredAt,
+          updatedAt: occurredAt,
+        },
+      ],
+    });
+    await db.activityLog.createMany({
+      data: [
+        {
+          id: changeIds[0],
+          taskId: task.id,
+          actorUserId: memberId,
+          operationType: "field_changed",
+          fieldName: "title",
+          beforeValue: "before",
+          afterValue: "after",
+          occurredAt,
+        },
+        {
+          id: changeIds[1],
+          taskId: task.id,
+          actorUserId: memberId,
+          operationType: "field_changed",
+          fieldName: "priority",
+          beforeValue: "low",
+          afterValue: "high",
+          occurredAt,
+        },
+        {
+          taskId: task.id,
+          actorUserId: memberId,
+          operationType: "task_created",
+          occurredAt: new Date("2037-04-06T06:07:08.000Z"),
+        },
+        {
+          taskId: task.id,
+          actorUserId: memberId,
+          operationType: "comment_edited",
+          occurredAt: new Date("2037-04-07T06:07:08.000Z"),
+        },
+      ],
+    });
+    await db.task.delete({ where: { id: task.id } });
+
+    try {
+      const firstPage = await app.inject(
+        withWorkspace(
+          { method: "GET", url: `/api/tasks/${task.id}/timeline?filter=all&limit=2` },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(firstPage.statusCode).toBe(200);
+      const firstBody = firstPage.json() as {
+        items: Array<{ id: string; type: string; occurredAt: string }>;
+        nextCursor: string | null;
+      };
+      expect(firstBody.items).toHaveLength(2);
+      expect(firstBody.items.map((item) => item.id)).toEqual(
+        [commentIds[1], ...changeIds].sort((a, b) => b.localeCompare(a)).slice(0, 2),
+      );
+      expect(firstBody.items.every((item) => item.occurredAt === occurredAt.toISOString())).toBe(true);
+      expect(firstBody.nextCursor).toEqual(expect.any(String));
+
+      const secondPage = await app.inject(
+        withWorkspace(
+          {
+            method: "GET",
+            url:
+              `/api/tasks/${task.id}/timeline?filter=all&limit=2&cursor=` +
+              encodeURIComponent(firstBody.nextCursor!),
+          },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(secondPage.statusCode).toBe(200);
+      expect(secondPage.json().items.map((item: { id: string }) => item.id)).toEqual([
+        [commentIds[1], ...changeIds].sort((a, b) => b.localeCompare(a))[2],
+        commentIds[0],
+      ]);
+      expect(secondPage.json().nextCursor).toBeNull();
+
+      const comments = await app.inject(
+        withWorkspace(
+          { method: "GET", url: `/api/tasks/${task.id}/timeline?filter=comments&limit=1` },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(comments.statusCode).toBe(200);
+      expect(comments.json().items).toEqual([
+        expect.objectContaining({ id: commentIds[1], type: "comment", body: "newer comment" }),
+      ]);
+      expect(comments.json().nextCursor).toEqual(expect.any(String));
+
+      const commentsNextPage = await app.inject(
+        withWorkspace(
+          {
+            method: "GET",
+            url:
+              `/api/tasks/${task.id}/timeline?filter=comments&limit=1&cursor=` +
+              encodeURIComponent(comments.json().nextCursor as string),
+          },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(commentsNextPage.statusCode).toBe(200);
+      expect(commentsNextPage.json()).toEqual({
+        items: [
+          expect.objectContaining({ id: commentIds[0], type: "comment", body: "older comment" }),
+        ],
+        nextCursor: null,
+      });
+
+      const changes = await app.inject(
+        withWorkspace(
+          { method: "GET", url: `/api/tasks/${task.id}/timeline?filter=changes&limit=1` },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(changes.statusCode).toBe(200);
+      const sortedChangeIds = [...changeIds].sort((a, b) => b.localeCompare(a));
+      expect(changes.json().items).toEqual([
+        expect.objectContaining({
+          id: sortedChangeIds[0],
+          type: "change",
+          operationType: "field_changed",
+        }),
+      ]);
+      expect(changes.json().nextCursor).toEqual(expect.any(String));
+      expect(changes.json().items).not.toContainEqual(
+        expect.objectContaining({ operationType: "task_created" }),
+      );
+      expect(changes.json().items).not.toContainEqual(
+        expect.objectContaining({ operationType: "comment_edited" }),
+      );
+
+      const changesNextPage = await app.inject(
+        withWorkspace(
+          {
+            method: "GET",
+            url:
+              `/api/tasks/${task.id}/timeline?filter=changes&limit=1&cursor=` +
+              encodeURIComponent(changes.json().nextCursor as string),
+          },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(changesNextPage.statusCode).toBe(200);
+      expect(changesNextPage.json()).toEqual({
+        items: [
+          expect.objectContaining({
+            id: sortedChangeIds[1],
+            type: "change",
+            operationType: "field_changed",
+          }),
+        ],
+        nextCursor: null,
+      });
+    } finally {
+      await db.$executeRaw`DELETE FROM activity_logs WHERE task_id = ${task.id}`;
+      await db.$executeRaw`DELETE FROM comments WHERE task_id = ${task.id}`;
+      await hardDelete("tasks", [task.id]);
+    }
+  });
+
+  it("GET /api/tasks/:id/timeline pages a mixed stream without loading every row", async () => {
+    const task = await db.task.create({
+      data: {
+        title: `timeline-page-${randomUUID()}`,
+        priority: "medium",
+        workspaceId: workspaceA,
+      },
+    });
+    const origin = new Date("2038-06-01T00:00:00.000Z");
+
+    try {
+      const comments = Array.from({ length: 15 }, (_, index) => {
+        const occurredAt = new Date(origin.getTime() + index * 2_000);
+        return {
+          id: `tl-c-${index.toString().padStart(2, "0")}-${randomUUID()}`,
+          taskId: task.id,
+          authorUserId: memberId,
+          body: `comment-${index}`,
+          createdAt: occurredAt,
+          updatedAt: occurredAt,
+        };
+      });
+      const changes = Array.from({ length: 15 }, (_, index) => {
+        const occurredAt = new Date(origin.getTime() + index * 2_000 + 1_000);
+        return {
+          id: `tl-a-${index.toString().padStart(2, "0")}-${randomUUID()}`,
+          taskId: task.id,
+          actorUserId: memberId,
+          operationType: "field_changed" as const,
+          fieldName: "title" as const,
+          beforeValue: `before-${index}`,
+          afterValue: `after-${index}`,
+          occurredAt,
+        };
+      });
+      await db.comment.createMany({ data: comments });
+      await db.activityLog.createMany({ data: changes });
+      const expectedIds = [
+        ...comments.map((comment) => ({ id: comment.id, occurredAt: comment.createdAt })),
+        ...changes.map((change) => ({ id: change.id, occurredAt: change.occurredAt })),
+      ]
+        .sort((left, right) => {
+          const timeDifference = right.occurredAt.getTime() - left.occurredAt.getTime();
+          if (timeDifference !== 0) return timeDifference;
+          return left.id < right.id ? 1 : -1;
+        })
+        .map((entry) => entry.id);
+
+      const collected: string[] = [];
+      let cursor: string | null = null;
+      for (let pageIndex = 0; pageIndex < 6; pageIndex += 1) {
+        const response = await app.inject(
+          withWorkspace(
+            {
+              method: "GET",
+              url:
+                `/api/tasks/${task.id}/timeline?filter=all&limit=10` +
+                (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""),
+            },
+            memberCsrf.cookie,
+            undefined,
+            workspaceA,
+          ),
+        );
+        expect(response.statusCode).toBe(200);
+        const body = response.json() as {
+          items: Array<{ id: string }>;
+          nextCursor: string | null;
+        };
+        expect(body.items.length).toBeLessThanOrEqual(10);
+        collected.push(...body.items.map((item) => item.id));
+        cursor = body.nextCursor;
+        if (!cursor) break;
+      }
+
+      expect(cursor).toBeNull();
+      expect(collected).toEqual(expectedIds);
+    } finally {
+      await db.$executeRaw`DELETE FROM activity_logs WHERE task_id = ${task.id}`;
+      await db.$executeRaw`DELETE FROM comments WHERE task_id = ${task.id}`;
+      await hardDelete("tasks", [task.id]);
+    }
+  });
+
   it("GET /api/tasks?unassignedCase=true returns only tasks with no case assigned", async () => {
     const caseRecord = await db.case.create({
       data: { name: `route-case-${randomUUID()}`, endDate: new Date(), workspaceId: workspaceA },
@@ -518,6 +967,74 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
 
     await hardDelete("tasks", [unassignedId, assignedId]);
     await hardDelete("cases", [caseRecord.id]);
+  });
+
+  it("GET /api/tasks filters parent candidates by title, subtree, and closure state", async () => {
+    const token = `parent-candidate-${randomUUID()}`;
+    const completedStage = await db.developmentStage.findFirstOrThrow({
+      where: { workspaceId: workspaceA, kind: "completed" },
+    });
+    const root = await db.task.create({
+      data: { title: `${token}-root`, priority: "low", workspaceId: workspaceA },
+    });
+    const child = await db.task.create({
+      data: {
+        title: `${token}-child`,
+        priority: "low",
+        parentTaskId: root.id,
+        workspaceId: workspaceA,
+      },
+    });
+    const grandchild = await db.task.create({
+      data: {
+        title: `${token}-grandchild`,
+        priority: "low",
+        parentTaskId: child.id,
+        workspaceId: workspaceA,
+      },
+    });
+    const matchingOpen = await db.task.create({
+      data: { title: `${token}-available`, priority: "low", workspaceId: workspaceA },
+    });
+    const matchingClosed = await db.task.create({
+      data: {
+        title: `${token}-closed`,
+        priority: "low",
+        developmentStageId: completedStage.id,
+        workspaceId: workspaceA,
+      },
+    });
+    const nonMatchingOpen = await db.task.create({
+      data: { title: `other-${randomUUID()}`, priority: "low", workspaceId: workspaceA },
+    });
+
+    try {
+      const response = await app.inject(
+        withWorkspace(
+          {
+            method: "GET",
+            url:
+              `/api/tasks?titleContains=${encodeURIComponent(token)}` +
+              `&excludeSubtreeOf=${root.id}&excludeClosed=true`,
+          },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().map((task: { id: string }) => task.id)).toEqual([matchingOpen.id]);
+    } finally {
+      await hardDelete("tasks", [
+        grandchild.id,
+        child.id,
+        root.id,
+        matchingOpen.id,
+        matchingClosed.id,
+        nonMatchingOpen.id,
+      ]);
+    }
   });
 
   it('GET /api/tasks?unassignedCase=false is rejected (only the literal "true" is accepted)', async () => {
@@ -634,6 +1151,215 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     expect(response.json().workspaceId).toBe(workspaceA);
 
     await hardDelete("tasks", [response.json().id, parentId]);
+  });
+
+  it("PATCH /api/tasks/:id updates parentTaskId and scheduledEndDate (task-detail 2.1, 2.2)", async () => {
+    const parent = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "new parent", priority: "medium" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const task = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "move under parent", priority: "low" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const parentId = parent.json().id as string;
+    const taskId = task.json().id as string;
+
+    const response = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${taskId}`,
+          payload: { parentTaskId: parentId, scheduledEndDate: "2036-09-20" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    const body = response.json();
+    const cleared = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${taskId}`,
+          payload: { parentTaskId: null, scheduledEndDate: null },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    await hardDelete("tasks", [taskId, parentId]);
+    expect(response.statusCode).toBe(200);
+    expect(body).toMatchObject({
+      parentTaskId: parentId,
+      scheduledEndDate: "2036-09-20T00:00:00.000Z",
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toMatchObject({
+      parentTaskId: null,
+      scheduledEndDate: null,
+    });
+  });
+
+  it("PATCH /api/tasks/:id rejects self and descendant parents as cycles (task-detail 2.5)", async () => {
+    const parent = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "cycle parent", priority: "medium" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const parentId = parent.json().id as string;
+    const child = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "cycle child", priority: "low", parentTaskId: parentId },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const childId = child.json().id as string;
+    const grandchild = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "cycle grandchild", priority: "low", parentTaskId: childId },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const grandchildId = grandchild.json().id as string;
+
+    const selfResponse = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${parentId}`,
+          payload: { parentTaskId: parentId },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const descendantResponse = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${parentId}`,
+          payload: { parentTaskId: grandchildId },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    await hardDelete("tasks", [grandchildId, childId, parentId]);
+    expect(selfResponse.statusCode).toBe(400);
+    expect(selfResponse.json().error).toMatch(/cycle/i);
+    expect(descendantResponse.statusCode).toBe(400);
+    expect(descendantResponse.json().error).toMatch(/cycle/i);
+  });
+
+  it("PATCH /api/tasks/:id rejects a closed parent with 409 (task-detail 2.6)", async () => {
+    const parent = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "closed update parent", priority: "medium" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const task = await app.inject(
+      withWorkspace(
+        {
+          method: "POST",
+          url: "/api/tasks",
+          payload: { title: "child candidate", priority: "low" },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    const parentId = parent.json().id as string;
+    const taskId = task.json().id as string;
+    const completedStage = await db.developmentStage.create({
+      data: {
+        name: `completed-update-parent-${randomUUID()}`,
+        order: 962,
+        kind: "completed",
+        workspaceId: workspaceA,
+      },
+    });
+    const moved = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${parentId}/development-stage`,
+          payload: { developmentStageId: completedStage.id },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+    expect(moved.statusCode).toBe(200);
+
+    const response = await app.inject(
+      withWorkspace(
+        {
+          method: "PATCH",
+          url: `/api/tasks/${taskId}`,
+          payload: { parentTaskId: parentId },
+        },
+        memberCsrf.cookie,
+        memberCsrf.token,
+        workspaceA,
+      ),
+    );
+
+    await hardDelete("tasks", [taskId, parentId]);
+    await hardDelete("development_stages", [completedStage.id]);
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toMatch(/closed task cannot take children/i);
   });
 
   it("POST /api/tasks/:id/children returns 404 for a non-existent parent", async () => {
@@ -978,6 +1704,19 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().developmentStageId).toBe(stage.id);
+    await expect(
+      db.activityLog.findFirst({
+        where: {
+          taskId,
+          operationType: "field_changed",
+          fieldName: "developmentStage",
+        },
+      }),
+    ).resolves.toMatchObject({
+      actorUserId: memberId,
+      beforeValue: null,
+      afterValue: stage.id,
+    });
 
     await hardDelete("tasks", [taskId]);
     await hardDelete("development_stages", [stage.id]);

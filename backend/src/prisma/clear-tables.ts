@@ -7,6 +7,8 @@
 import type { PrismaClient } from "@prisma/client";
 
 export const TABLES_IN_TRUNCATE_ORDER = [
+  "activity_logs",
+  "comments",
   "tasks",
   "recurring_task_templates",
   "non_business_days",

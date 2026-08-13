@@ -62,6 +62,14 @@ const BadgeStub = defineComponent({
   template: `<span data-testid="badge">{{ label }}</span>`,
 });
 
+const NuxtLinkStub = defineComponent({
+  name: "NuxtLink",
+  props: {
+    to: { type: String, required: true },
+  },
+  template: `<a :href="to"><slot /></a>`,
+});
+
 const stages: DevelopmentStage[] = [
   { id: "s-normal", name: "作業中", order: 1, kind: "normal" },
   { id: "s-done", name: "完了", order: 2, kind: "completed" },
@@ -120,6 +128,7 @@ async function mountDetail(task: Task) {
         StatusBadge: StatusBadgeStub,
         PriorityBadge: PriorityBadgeStub,
         Badge: BadgeStub,
+        NuxtLink: NuxtLinkStub,
       },
       components: {
         StageBadge,
@@ -139,6 +148,7 @@ function stageIndexInBadges(wrapper: Awaited<ReturnType<typeof mountDetail>>): n
 describe("TaskDetailModal (task-status-model 5.3)", () => {
   beforeEach(() => {
     getTask.mockReset();
+    vi.stubGlobal("useRoute", () => ({ params: { workspaceId: "w1" } }));
   });
 
   afterEach(() => {
@@ -194,5 +204,35 @@ describe("TaskDetailModal (task-status-model 5.3)", () => {
     expect(open.find('[data-testid="status-badge"]').exists()).toBe(true);
     expect(closed.find('[data-testid="status-badge"]').exists()).toBe(false);
     expect(stageIndexInBadges(open)).toBe(stageIndexInBadges(closed));
+  });
+
+  it("links to the task detail page while keeping light edits and omitting comments and timeline", async () => {
+    const wrapper = await mountDetail(makeTask());
+
+    const detailLink = wrapper.get('a[href="/workspaces/w1/tasks/t1"]');
+    expect(detailLink.text()).toBe("詳細ページを開く ↗");
+    expect(wrapper.text()).not.toContain("コメント");
+    expect(wrapper.text()).not.toContain("タイムライン");
+
+    await wrapper.get("button").trigger("click");
+    expect(wrapper.find("#task-detail-title").exists()).toBe(true);
+    expect(wrapper.find("#task-detail-priority").exists()).toBe(true);
+    expect(wrapper.find("#task-detail-stage").exists()).toBe(true);
+    expect(wrapper.find("#task-detail-assignee").exists()).toBe(true);
+    expect(wrapper.find("#task-detail-case").exists()).toBe(true);
+    expect(wrapper.find("#task-detail-detail").exists()).toBe(true);
+  });
+
+  it("treats soft-deleted tasks as read-only and hides edit/delete actions", async () => {
+    const wrapper = await mountDetail(
+      makeTask({ deletedAt: "2026-08-12T00:00:00.000Z" }),
+    );
+
+    expect(wrapper.text()).toContain("削除済み");
+    expect(wrapper.text()).toContain("このタスクは参照専用です");
+    expect(wrapper.findAll("button").some((button) => button.text() === "編集")).toBe(false);
+    expect(wrapper.findAll("button").some((button) => button.text() === "削除")).toBe(false);
+    expect(wrapper.find("#task-detail-title").exists()).toBe(false);
+    expect(wrapper.get('a[href="/workspaces/w1/tasks/t1"]').exists()).toBe(true);
   });
 });

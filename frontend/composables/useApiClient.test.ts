@@ -5,11 +5,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import type {
   CaseTemplateApplyOperation,
+  Comment,
   CreateCaseInput,
   CreateTaskInput,
   RegisterTemplateInput,
   RecurringTaskTemplate,
+  Task,
+  TaskTimelinePage,
   UpdateCaseInput,
+  UpdateTaskInput,
 } from "./useApiClient";
 import { joinApiUrl, useApiClient } from "./useApiClient";
 
@@ -132,6 +136,112 @@ describe("useApiClient task-field-rename contract (task-field-rename 5.1)", () =
     expect(clientSource).not.toMatch(/\bmemo\??:/);
     expect(clientSource).not.toMatch(/\bscheduledDate\??:/);
     expect(clientSource).not.toMatch(/\bdefaultMemo\??:/);
+  });
+});
+
+describe("useApiClient task detail contract (task-detail 8)", () => {
+  it("types task create/update fields and deleted task responses", () => {
+    const createInput: CreateTaskInput = {
+      title: "終了予定日付きタスク",
+      priority: "high",
+      scheduledEndDate: "2026-08-31",
+    };
+    const updateInput: UpdateTaskInput = {
+      parentTaskId: null,
+      scheduledEndDate: null,
+    };
+    const deletedTask: Task = {
+      id: "task-1",
+      title: createInput.title,
+      status: "not_started",
+      priority: createInput.priority,
+      isRequiredForCase: false,
+      createdAt: "2026-08-12T00:00:00.000Z",
+      updatedAt: "2026-08-12T00:00:00.000Z",
+      deletedAt: "2026-08-13T00:00:00.000Z",
+    };
+
+    expect(createInput.scheduledEndDate).toBe("2026-08-31");
+    expect(updateInput).toEqual({ parentTaskId: null, scheduledEndDate: null });
+    expect(deletedTask.deletedAt).toBe("2026-08-13T00:00:00.000Z");
+  });
+
+  it("passes parent candidate filters to listTasks", async () => {
+    const api = useApiClient();
+
+    await api.listTasks({
+      titleContains: "親候補",
+      excludeSubtreeOf: "task-1",
+      excludeClosed: true,
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/tasks", {
+      query: {
+        titleContains: "親候補",
+        excludeSubtreeOf: "task-1",
+        excludeClosed: "true",
+        unassignedCase: undefined,
+      },
+      credentials: "include",
+    });
+  });
+
+  it("gets a typed task timeline with filter, cursor, and limit", async () => {
+    const page: TaskTimelinePage = { items: [], nextCursor: null };
+    fetchMock.mockResolvedValueOnce({ token: "csrf" }).mockResolvedValueOnce(page);
+    const api = useApiClient();
+
+    const result = await api.getTaskTimeline("task-1", {
+      filter: "comments",
+      cursor: "next-page",
+      limit: 10,
+    });
+
+    expect(result).toBe(page);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://backend:3000/api/tasks/task-1/timeline",
+      {
+        query: { filter: "comments", cursor: "next-page", limit: 10 },
+        credentials: "include",
+      },
+    );
+  });
+
+  it("creates, updates, and deletes comments", async () => {
+    const comment: Comment = {
+      id: "comment-1",
+      taskId: "task-1",
+      authorUserId: "user-1",
+      body: "本文",
+      editedAt: null,
+      createdAt: "2026-08-12T00:00:00.000Z",
+      updatedAt: "2026-08-12T00:00:00.000Z",
+      deletedAt: null,
+    };
+    fetchMock
+      .mockResolvedValueOnce({ token: "csrf" })
+      .mockResolvedValueOnce(comment)
+      .mockResolvedValueOnce({ ...comment, body: "編集後" })
+      .mockResolvedValueOnce(undefined);
+    const api = useApiClient();
+
+    await api.createComment("task-1", "本文");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://backend:3000/api/tasks/task-1/comments",
+      { method: "POST", body: { body: "本文" }, credentials: "include", headers: { "csrf-token": "csrf" } },
+    );
+
+    await api.updateComment("task-1", "comment-1", "編集後");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://backend:3000/api/tasks/task-1/comments/comment-1",
+      { method: "PATCH", body: { body: "編集後" }, credentials: "include", headers: { "csrf-token": "csrf" } },
+    );
+
+    await api.deleteComment("task-1", "comment-1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://backend:3000/api/tasks/task-1/comments/comment-1",
+      { method: "DELETE", credentials: "include", headers: { "csrf-token": "csrf" } },
+    );
   });
 });
 

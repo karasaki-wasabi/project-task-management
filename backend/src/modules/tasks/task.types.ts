@@ -21,10 +21,8 @@ export interface CreateTaskInput {
   isRequiredForCase?: boolean;
   assigneeUserId?: string;
   parentTaskId?: string;
-  // RecurrenceService-only fields (design.md "Backend/recurrence"
-  // Implementation Notes: instance generation goes through this internal
-  // function rather than duplicating the Prisma insert). Never set by the
-  // public POST /api/tasks route's own request schema.
+  // RecurrenceService-only source metadata. scheduledEndDate is also accepted
+  // by the public create route so task duplication can finish in one request.
   sourceTemplateId?: string;
   // Snapshot of the template caseAnchor at generation time (Req 5.3).
   sourceAnchor?: PrismaTask["sourceAnchor"];
@@ -36,6 +34,9 @@ export interface CreateTaskInput {
 export interface TaskListFilter {
   caseId?: string;
   assigneeUserId?: string;
+  titleContains?: string;
+  excludeSubtreeOf?: string;
+  excludeClosed?: boolean;
   // design.md "Backend/tasks > TasksService.list 未割当フィルタ拡張": when
   // truthy, exclusively filters caseId IS NULL regardless of any other
   // caseId value also present on this filter.
@@ -51,10 +52,17 @@ export interface UpdateTaskInput {
   caseId?: string | null;
   isRequiredForCase?: boolean;
   assigneeUserId?: string | null;
+  parentTaskId?: string | null;
+  scheduledEndDate?: Date | null;
+}
+
+export interface GetTaskOptions {
+  includeDeleted?: boolean;
 }
 
 export type TaskError =
   | { type: "not_found"; taskId: string }
+  | { type: "deleted_task"; taskId: string }
   | { type: "incomplete_children"; taskId: string }
   // task-status-model 3.2: status edits are rejected on terminal stages (4.5).
   | { type: "status_not_applicable"; taskId: string }

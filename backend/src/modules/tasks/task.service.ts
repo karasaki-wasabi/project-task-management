@@ -14,15 +14,28 @@ import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { db } from "../../shared/db.js";
 import { err, ok, type Result } from "../../shared/result.js";
-import type { DbClient } from "../../shared/soft-delete.repository.js";
+import type { DbClient, SoftDeleteTx } from "../../shared/soft-delete.repository.js";
 import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
+import { activityLogService } from "../activity-logs/activity-log.service.js";
+import type {
+  FieldName,
+  RecordActorInput,
+} from "../activity-logs/activity-log.types.js";
 import { caseRepository } from "../cases/case.repository.js";
 import { developmentStagesService } from "../development-stages/development-stage.service.js";
 import type { DevelopmentStageKind } from "../development-stages/development-stage.types.js";
 import { workspaceService } from "../workspaces/workspace.service.js";
 import { resolveClosureState } from "./task.closure.js";
 import { taskRepository } from "./task.repository.js";
-import type { CreateTaskInput, Task, TaskError, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
+import type {
+  CreateTaskInput,
+  GetTaskOptions,
+  Task,
+  TaskError,
+  TaskListFilter,
+  TaskStatus,
+  UpdateTaskInput,
+} from "./task.types.js";
 
 function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
@@ -45,6 +58,52 @@ async function assertParentCanTakeOpenChildren(
   if (resolveClosureState(kind) !== "open") {
     return err({ type: "closed_task_cannot_take_children", taskId: parent.id });
   }
+  return ok(undefined);
+}
+
+async function assertParentChangeIsValid(
+  taskId: string,
+  workspaceId: VerifiedWorkspaceId,
+  parentTaskId: string | null,
+): Promise<Result<void, TaskError>> {
+  if (parentTaskId === null) {
+    return ok(undefined);
+  }
+
+  const parent = await taskRepository.findById(parentTaskId, workspaceId);
+  if (!parent) {
+    return err({
+      type: "validation_error",
+      message: "parentTaskId does not exist in the current workspace",
+    });
+  }
+
+  const visited = new Set<string>();
+  let ancestor: Task | null = parent;
+  while (ancestor !== null) {
+    if (ancestor.id === taskId || visited.has(ancestor.id)) {
+      return err({
+        type: "validation_error",
+        message: "parentTaskId would create a cycle",
+      });
+    }
+    visited.add(ancestor.id);
+
+    ancestor =
+      ancestor.parentTaskId === null
+        ? null
+        : await taskRepository.findById(
+            ancestor.parentTaskId,
+            workspaceId,
+            { includeDeleted: true },
+          );
+  }
+
+  const closedParentCheck = await assertParentCanTakeOpenChildren(parent, workspaceId);
+  if (!closedParentCheck.ok) {
+    return closedParentCheck;
+  }
+
   return ok(undefined);
 }
 
@@ -87,7 +146,7 @@ async function assertRelatedResourcesInWorkspace(
     }
   }
   if (refs.parentTaskId != null) {
-    const parent = await taskRepository.findById(refs.parentTaskId, workspaceId, client);
+    const parent = await taskRepository.findById(refs.parentTaskId, workspaceId, {}, client);
     if (!parent) {
       return err({
         type: "validation_error",
@@ -109,8 +168,71 @@ async function assertRelatedResourcesInWorkspace(
   return ok(undefined);
 }
 
+async function getWritableTask(
+  taskId: string,
+  workspaceId: VerifiedWorkspaceId,
+  client: DbClient = db,
+): Promise<Result<Task, TaskError>> {
+  const task = await taskRepository.findById(taskId, workspaceId, { includeDeleted: true }, client);
+  if (!task) {
+    return err({ type: "not_found", taskId });
+  }
+  if (task.deletedAt !== null) {
+    return err({ type: "deleted_task", taskId });
+  }
+  return ok(task);
+}
+
+function activityValue(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
+async function runActivityWrite<T>(
+  client: DbClient,
+  write: (writeClient: DbClient) => Promise<T>,
+): Promise<T> {
+  if (client === db) {
+    return db.$transaction((tx) => write(tx));
+  }
+  return write(client);
+}
+
+async function recordFieldChanges(
+  taskId: string,
+  actor: RecordActorInput,
+  fields: Array<{
+    field: FieldName;
+    beforeValue: unknown;
+    afterValue: unknown;
+  }>,
+  client: DbClient,
+): Promise<void> {
+  for (const change of fields) {
+    const beforeValue = activityValue(change.beforeValue);
+    const afterValue = activityValue(change.afterValue);
+    if (beforeValue === afterValue) continue;
+    await activityLogService.record(
+      {
+        taskId,
+        actor,
+        operation: "field_changed",
+        field: change.field,
+        beforeValue,
+        afterValue,
+      },
+      client as SoftDeleteTx,
+    );
+  }
+}
+
 export const tasksService = {
-  async create(input: CreateTaskInput, client: DbClient = db): Promise<Result<Task, TaskError>> {
+  async create(
+    input: CreateTaskInput,
+    actor: RecordActorInput,
+    client: DbClient = db,
+  ): Promise<Result<Task, TaskError>> {
     const title = input.title.trim();
     if (title.length === 0) {
       return err({ type: "validation_error", message: "title is required" });
@@ -134,7 +256,7 @@ export const tasksService = {
     }
 
     if (input.parentTaskId != null) {
-      const parent = await taskRepository.findById(input.parentTaskId, input.workspaceId, client);
+      const parent = await taskRepository.findById(input.parentTaskId, input.workspaceId, {}, client);
       if (!parent) {
         return err({
           type: "validation_error",
@@ -148,7 +270,18 @@ export const tasksService = {
     }
 
     try {
-      const task = await taskRepository.create({ ...input, title }, client);
+      const task = await runActivityWrite(client, async (writeClient) => {
+        const created = await taskRepository.create({ ...input, title }, writeClient);
+        await activityLogService.record(
+          {
+            taskId: created.id,
+            actor,
+            operation: "task_created",
+          },
+          writeClient as SoftDeleteTx,
+        );
+        return created;
+      });
       return ok(task);
     } catch (error) {
       if (isForeignKeyViolation(error)) {
@@ -158,8 +291,12 @@ export const tasksService = {
     }
   },
 
-  async getById(taskId: string, workspaceId: VerifiedWorkspaceId): Promise<Result<Task, TaskError>> {
-    const task = await taskRepository.findById(taskId, workspaceId);
+  async getById(
+    taskId: string,
+    workspaceId: VerifiedWorkspaceId,
+    options: GetTaskOptions = {},
+  ): Promise<Result<Task, TaskError>> {
+    const task = await taskRepository.findById(taskId, workspaceId, options);
     if (!task) {
       return err({ type: "not_found", taskId });
     }
@@ -173,11 +310,11 @@ export const tasksService = {
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
     status: TaskStatus,
+    actor: RecordActorInput,
   ): Promise<Result<Task, TaskError>> {
-    const current = await taskRepository.findById(taskId, workspaceId);
-    if (!current) {
-      return err({ type: "not_found", taskId });
-    }
+    const writable = await getWritableTask(taskId, workspaceId);
+    if (!writable.ok) return writable;
+    const current = writable.value;
 
     if (current.developmentStageId != null) {
       const stage = await developmentStagesService.getById(current.developmentStageId, workspaceId);
@@ -187,7 +324,20 @@ export const tasksService = {
     }
 
     try {
-      const task = await taskRepository.updateStatus(taskId, workspaceId, status);
+      const task = await runActivityWrite(db, async (writeClient) => {
+        const updated = await taskRepository.updateStatus(taskId, workspaceId, status, writeClient);
+        await recordFieldChanges(
+          taskId,
+          actor,
+          [{
+            field: "status",
+            beforeValue: current.status,
+            afterValue: updated.status,
+          }],
+          writeClient,
+        );
+        return updated;
+      });
       return ok(task);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
@@ -207,12 +357,12 @@ export const tasksService = {
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
     developmentStageId: string | null,
+    actor: RecordActorInput,
     assigneeUserId?: string,
   ): Promise<Result<Task, TaskError>> {
-    const current = await taskRepository.findById(taskId, workspaceId);
-    if (!current) {
-      return err({ type: "not_found", taskId });
-    }
+    const writable = await getWritableTask(taskId, workspaceId);
+    if (!writable.ok) return writable;
+    const current = writable.value;
 
     const relatedCheck = await assertRelatedResourcesInWorkspace(workspaceId, { developmentStageId });
     if (!relatedCheck.ok) {
@@ -260,7 +410,32 @@ export const tasksService = {
     }
 
     try {
-      const task = await taskRepository.updateDevelopmentStage(taskId, workspaceId, data);
+      const task = await runActivityWrite(db, async (writeClient) => {
+        const updated = await taskRepository.updateDevelopmentStage(
+          taskId,
+          workspaceId,
+          data,
+          writeClient,
+        );
+        await recordFieldChanges(
+          taskId,
+          actor,
+          [
+            {
+              field: "developmentStage",
+              beforeValue: current.developmentStageId,
+              afterValue: updated.developmentStageId,
+            },
+            {
+              field: "assignee",
+              beforeValue: current.assigneeUserId,
+              afterValue: updated.assigneeUserId,
+            },
+          ],
+          writeClient,
+        );
+        return updated;
+      });
       return ok(task);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
@@ -274,18 +449,18 @@ export const tasksService = {
   },
 
   // General field edit (title/priority/detail/caseId/isRequiredForCase/
-  // assigneeUserId), distinct from the kanban-move-specific
+  // assigneeUserId/parentTaskId/scheduledEndDate), distinct from the kanban-move-specific
   // updateDevelopmentStage above: an explicit edit always overwrites
   // assigneeUserId, it doesn't defer to "only if currently unassigned".
   async update(
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
     input: UpdateTaskInput,
+    actor: RecordActorInput,
   ): Promise<Result<Task, TaskError>> {
-    const current = await taskRepository.findById(taskId, workspaceId);
-    if (!current) {
-      return err({ type: "not_found", taskId });
-    }
+    const writable = await getWritableTask(taskId, workspaceId);
+    if (!writable.ok) return writable;
+    const current = writable.value;
 
     const data: UpdateTaskInput = {};
     if (input.title !== undefined) {
@@ -297,6 +472,7 @@ export const tasksService = {
     }
     if (input.priority !== undefined) data.priority = input.priority;
     if (input.detail !== undefined) data.detail = input.detail;
+    if (input.scheduledEndDate !== undefined) data.scheduledEndDate = input.scheduledEndDate;
     if (input.assigneeUserId !== undefined) {
       const assigneeCheck = await assertAssigneeIsWorkspaceMember(workspaceId, input.assigneeUserId);
       if (!assigneeCheck.ok) {
@@ -322,15 +498,52 @@ export const tasksService = {
       data.isRequiredForCase = input.isRequiredForCase;
     }
 
+    if (input.parentTaskId !== undefined) {
+      const parentCheck = await assertParentChangeIsValid(taskId, workspaceId, input.parentTaskId);
+      if (!parentCheck.ok) {
+        return parentCheck;
+      }
+      data.parentTaskId = input.parentTaskId;
+    }
+
     try {
-      const task = await taskRepository.update(taskId, workspaceId, data);
+      const task = await runActivityWrite(db, async (writeClient) => {
+        const updated = await taskRepository.update(taskId, workspaceId, data, writeClient);
+        await recordFieldChanges(
+          taskId,
+          actor,
+          [
+            { field: "title", beforeValue: current.title, afterValue: updated.title },
+            { field: "priority", beforeValue: current.priority, afterValue: updated.priority },
+            { field: "detail", beforeValue: current.detail, afterValue: updated.detail },
+            { field: "assignee", beforeValue: current.assigneeUserId, afterValue: updated.assigneeUserId },
+            { field: "case", beforeValue: current.caseId, afterValue: updated.caseId },
+            {
+              field: "isRequiredForCase",
+              beforeValue: current.isRequiredForCase,
+              afterValue: updated.isRequiredForCase,
+            },
+            { field: "parentTask", beforeValue: current.parentTaskId, afterValue: updated.parentTaskId },
+            {
+              field: "scheduledEndDate",
+              beforeValue: current.scheduledEndDate,
+              afterValue: updated.scheduledEndDate,
+            },
+          ],
+          writeClient,
+        );
+        return updated;
+      });
       return ok(task);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         return err({ type: "not_found", taskId });
       }
       if (isForeignKeyViolation(error)) {
-        return err({ type: "validation_error", message: "caseId or assigneeUserId does not exist" });
+        return err({
+          type: "validation_error",
+          message: "caseId, assigneeUserId, or parentTaskId does not exist",
+        });
       }
       throw error;
     }
@@ -340,11 +553,11 @@ export const tasksService = {
     parentTaskId: string,
     workspaceId: VerifiedWorkspaceId,
     input: CreateTaskInput,
+    actor: RecordActorInput,
   ): Promise<Result<Task, TaskError>> {
-    const parent = await taskRepository.findById(parentTaskId, workspaceId);
-    if (!parent) {
-      return err({ type: "not_found", taskId: parentTaskId });
-    }
+    const writable = await getWritableTask(parentTaskId, workspaceId);
+    if (!writable.ok) return writable;
+    const parent = writable.value;
 
     const closedParentCheck = await assertParentCanTakeOpenChildren(parent, workspaceId);
     if (!closedParentCheck.ok) {
@@ -370,7 +583,21 @@ export const tasksService = {
     }
 
     try {
-      const child = await taskRepository.create({ ...input, title, parentTaskId, workspaceId });
+      const child = await runActivityWrite(db, async (writeClient) => {
+        const created = await taskRepository.create(
+          { ...input, title, parentTaskId, workspaceId },
+          writeClient,
+        );
+        await activityLogService.record(
+          {
+            taskId: created.id,
+            actor,
+            operation: "task_created",
+          },
+          writeClient as SoftDeleteTx,
+        );
+        return created;
+      });
       return ok(child);
     } catch (error) {
       if (isForeignKeyViolation(error)) {
@@ -384,7 +611,12 @@ export const tasksService = {
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
     parts: CreateTaskInput[],
+    actor: RecordActorInput,
   ): Promise<Result<Task[], TaskError>> {
+    const writable = await getWritableTask(taskId, workspaceId);
+    if (!writable.ok) return writable;
+    const original = writable.value;
+
     if (parts.length < 2) {
       return err({ type: "validation_error", message: "splitTask requires at least 2 parts" });
     }
@@ -392,11 +624,6 @@ export const tasksService = {
       if (part.title.trim().length === 0) {
         return err({ type: "validation_error", message: "title is required for every part" });
       }
-    }
-
-    const original = await taskRepository.findById(taskId, workspaceId);
-    if (!original) {
-      return err({ type: "not_found", taskId });
     }
 
     const closedParentCheck = await assertParentCanTakeOpenChildren(original, workspaceId);
@@ -432,7 +659,20 @@ export const tasksService = {
     }));
 
     try {
-      const created = await taskRepository.createMany(inheritedParts);
+      const created = await runActivityWrite(db, async (writeClient) => {
+        const createdParts = await taskRepository.createMany(inheritedParts, writeClient);
+        for (const part of createdParts) {
+          await activityLogService.record(
+            {
+              taskId: part.id,
+              actor,
+              operation: "task_created",
+            },
+            writeClient as SoftDeleteTx,
+          );
+        }
+        return createdParts;
+      });
       return ok(created);
     } catch (error) {
       if (isForeignKeyViolation(error)) {
@@ -445,11 +685,25 @@ export const tasksService = {
   async delete(
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
+    actor: RecordActorInput,
     requestId: string = randomUUID(),
     client: DbClient = db,
   ): Promise<Result<void, TaskError>> {
+    const writable = await getWritableTask(taskId, workspaceId, client);
+    if (!writable.ok) return writable;
+
     try {
-      await taskRepository.delete(taskId, workspaceId, client);
+      await runActivityWrite(client, async (writeClient) => {
+        await taskRepository.delete(taskId, workspaceId, writeClient);
+        await activityLogService.record(
+          {
+            taskId,
+            actor,
+            operation: "task_deleted",
+          },
+          writeClient as SoftDeleteTx,
+        );
+      });
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         return err({ type: "not_found", taskId });

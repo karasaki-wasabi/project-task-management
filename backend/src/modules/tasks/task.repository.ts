@@ -8,7 +8,44 @@ import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { openTaskFilter } from "./task.closure.js";
-import type { CreateTaskInput, Task, TaskListFilter, TaskStatus, UpdateTaskInput } from "./task.types.js";
+import type {
+  CreateTaskInput,
+  GetTaskOptions,
+  Task,
+  TaskListFilter,
+  TaskStatus,
+  UpdateTaskInput,
+} from "./task.types.js";
+
+async function findSubtreeIds(
+  rootTaskId: string,
+  workspaceId: VerifiedWorkspaceId,
+): Promise<string[]> {
+  const tasks = await db.task.findMany({
+    where: withWorkspaceScope({ deletedAt: undefined }, workspaceId),
+    select: { id: true, parentTaskId: true },
+  });
+  const childrenByParent = new Map<string, string[]>();
+  for (const task of tasks) {
+    if (task.parentTaskId === null) continue;
+    const children = childrenByParent.get(task.parentTaskId) ?? [];
+    children.push(task.id);
+    childrenByParent.set(task.parentTaskId, children);
+  }
+
+  const subtreeIds = new Set([rootTaskId]);
+  const pending = [rootTaskId];
+  while (pending.length > 0) {
+    const parentId = pending.pop();
+    if (parentId === undefined) break;
+    for (const childId of childrenByParent.get(parentId) ?? []) {
+      if (subtreeIds.has(childId)) continue;
+      subtreeIds.add(childId);
+      pending.push(childId);
+    }
+  }
+  return [...subtreeIds];
+}
 
 export const taskRepository = {
   create(input: CreateTaskInput, client: DbClient = db): Promise<Task> {
@@ -32,14 +69,25 @@ export const taskRepository = {
     });
   },
 
-  findById(id: string, workspaceId: VerifiedWorkspaceId, client: DbClient = db): Promise<Task | null> {
-    return client.task.findFirst({ where: withWorkspaceScope({ id }, workspaceId) });
+  findById(
+    id: string,
+    workspaceId: VerifiedWorkspaceId,
+    options: GetTaskOptions = {},
+    client: DbClient = db,
+  ): Promise<Task | null> {
+    const where = options.includeDeleted ? { id, deletedAt: undefined } : { id };
+    return client.task.findFirst({ where: withWorkspaceScope(where, workspaceId) });
   },
 
   // task-status-model 3.2: status only — completedAt is owned by updateDevelopmentStage.
-  updateStatus(id: string, workspaceId: VerifiedWorkspaceId, status: TaskStatus): Promise<Task> {
-    return db.task.update({
-      where: withWorkspaceScope({ id }, workspaceId),
+  updateStatus(
+    id: string,
+    workspaceId: VerifiedWorkspaceId,
+    status: TaskStatus,
+    client: DbClient = db,
+  ): Promise<Task> {
+    return client.task.update({
+      where: withWorkspaceScope({ id, deletedAt: null }, workspaceId),
       data: { status },
     });
   },
@@ -53,19 +101,30 @@ export const taskRepository = {
       status?: TaskStatus;
       completedAt?: Date | null;
     },
+    client: DbClient = db,
   ): Promise<Task> {
-    return db.task.update({ where: withWorkspaceScope({ id }, workspaceId), data });
+    return client.task.update({ where: withWorkspaceScope({ id, deletedAt: null }, workspaceId), data });
   },
 
-  update(id: string, workspaceId: VerifiedWorkspaceId, data: UpdateTaskInput): Promise<Task> {
-    return db.task.update({ where: withWorkspaceScope({ id }, workspaceId), data });
+  update(
+    id: string,
+    workspaceId: VerifiedWorkspaceId,
+    data: UpdateTaskInput,
+    client: DbClient = db,
+  ): Promise<Task> {
+    return client.task.update({ where: withWorkspaceScope({ id, deletedAt: null }, workspaceId), data });
   },
 
   delete(id: string, workspaceId: VerifiedWorkspaceId, client: DbClient = db): Promise<Task> {
-    return client.task.delete({ where: withWorkspaceScope({ id }, workspaceId) });
+    return client.task.delete({ where: withWorkspaceScope({ id, deletedAt: null }, workspaceId) });
   },
 
-  list(filter: TaskListFilter): Promise<Task[]> {
+  async list(filter: TaskListFilter): Promise<Task[]> {
+    const excludedTaskIds =
+      filter.excludeSubtreeOf === undefined
+        ? undefined
+        : await findSubtreeIds(filter.excludeSubtreeOf, filter.workspaceId);
+
     return db.task.findMany({
       where: withWorkspaceScope(
         {
@@ -74,6 +133,9 @@ export const taskRepository = {
           // also present on the filter.
           caseId: filter.unassignedCase ? null : filter.caseId,
           assigneeUserId: filter.assigneeUserId,
+          title: filter.titleContains ? { contains: filter.titleContains } : undefined,
+          id: excludedTaskIds === undefined ? undefined : { notIn: excludedTaskIds },
+          ...(filter.excludeClosed ? openTaskFilter : {}),
         },
         filter.workspaceId,
       ),
@@ -88,30 +150,24 @@ export const taskRepository = {
     return db.task.count({ where: { parentTaskId, ...openTaskFilter } });
   },
 
-  // Interactive-transaction callback form; equivalent to the `$transaction([...])`
-  // array form for this client (verified: no `query.create` hook exists on the
-  // soft-delete extension), used here for readability when building the
-  // per-part insert loop.
-  createMany(inputs: CreateTaskInput[]): Promise<Task[]> {
-    return db.$transaction(async (tx) => {
-      const created: Task[] = [];
-      for (const input of inputs) {
-        created.push(
-          await tx.task.create({
-            data: {
-              title: input.title,
-              priority: input.priority,
-              detail: input.detail,
-              caseId: input.caseId,
-              isRequiredForCase: input.caseId ? (input.isRequiredForCase ?? false) : false,
-              assigneeUserId: input.assigneeUserId,
-              parentTaskId: input.parentTaskId,
-              workspaceId: input.workspaceId,
-            },
-          }),
-        );
-      }
-      return created;
-    });
+  async createMany(inputs: CreateTaskInput[], client: DbClient = db): Promise<Task[]> {
+    const created: Task[] = [];
+    for (const input of inputs) {
+      created.push(
+        await client.task.create({
+          data: {
+            title: input.title,
+            priority: input.priority,
+            detail: input.detail,
+            caseId: input.caseId,
+            isRequiredForCase: input.caseId ? (input.isRequiredForCase ?? false) : false,
+            assigneeUserId: input.assigneeUserId,
+            parentTaskId: input.parentTaskId,
+            workspaceId: input.workspaceId,
+          },
+        }),
+      );
+    }
+    return created;
   },
 };

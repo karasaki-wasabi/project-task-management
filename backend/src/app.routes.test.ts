@@ -114,6 +114,10 @@ function withAuthenticatedInject(app: ReturnType<typeof buildApp>) {
   app.addHook("onClose", async () => {
     const authenticated = await auth;
     if (!authenticated) return;
+    await db.$executeRawUnsafe(
+      `DELETE FROM activity_logs WHERE task_id IN (SELECT id FROM tasks WHERE workspace_id = ?)`,
+      authenticated.workspaceId,
+    );
     await db.$executeRawUnsafe(`DELETE FROM tasks WHERE workspace_id = ?`, authenticated.workspaceId);
     await db.$executeRawUnsafe(
       `DELETE FROM recurring_task_templates WHERE workspace_id = ?`,
@@ -196,7 +200,22 @@ describe("app.ts route registration (task 10.3)", () => {
 
     expect(response.statusCode).toBe(200);
 
+    await db.$executeRawUnsafe(`DELETE FROM activity_logs WHERE task_id = ?`, taskId);
     await db.$executeRawUnsafe(`DELETE FROM tasks WHERE id = ?`, taskId);
+    await app.close();
+  });
+
+  it("POST /api/tasks/:id/comments is registered and workspace scoped", async () => {
+    const { app } = buildTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/tasks/${randomUUID()}/comments`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toHaveProperty("error");
     await app.close();
   });
 

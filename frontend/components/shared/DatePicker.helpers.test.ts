@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeTodayIso, formatSlashDate, generateMonthGrid, weekdayKanji } from "./DatePicker.helpers";
+import { computeTodayIso, formatSlashDate, generateMonthGrid, parseLocalDateOnly, weekdayKanji } from "./DatePicker.helpers";
 
 describe("computeTodayIso (task 11.1, Requirement 10.2)", () => {
   it("formats the reference date's local calendar day as YYYY-MM-DD", () => {
@@ -94,9 +94,30 @@ describe("formatSlashDate / weekdayKanji (design drift fix — claude design moc
     expect(formatSlashDate("2026-09-14")).toBe("2026/09/14");
   });
 
+  it("API の日時 ISO からも日付部分だけを YYYY/MM/DD にする", () => {
+    expect(formatSlashDate("2026-08-10T00:00:00.000Z")).toBe("2026/08/10");
+  });
+
   it("maps dayOfWeek indices to the mockup's kanji labels", () => {
     expect(weekdayKanji(0)).toBe("日");
     expect(weekdayKanji(1)).toBe("月");
     expect(weekdayKanji(6)).toBe("土");
+  });
+});
+
+describe("parseLocalDateOnly", () => {
+  it("parses YYYY-MM-DD as a local calendar day", () => {
+    const parsed = parseLocalDateOnly("2026-08-10");
+    expect(parsed.getFullYear()).toBe(2026);
+    expect(parsed.getMonth()).toBe(7);
+    expect(parsed.getDate()).toBe(10);
+  });
+
+  it("API の日時 ISO は UTC 変換せず日付部分だけを使う", () => {
+    const parsed = parseLocalDateOnly("2026-08-10T00:00:00.000Z");
+    expect(parsed.getFullYear()).toBe(2026);
+    expect(parsed.getMonth()).toBe(7);
+    expect(parsed.getDate()).toBe(10);
+    expect(Number.isNaN(parsed.getTime())).toBe(false);
   });
 });

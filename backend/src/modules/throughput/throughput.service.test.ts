@@ -24,6 +24,8 @@ let workspaceId: string;
 let verifiedWorkspaceId: VerifiedWorkspaceId;
 let ownerUserId: string;
 
+const taskActor = () => ({ type: "user" as const, userId: ownerUserId });
+
 // throughput 集計はワークスペース非依存のグローバル COUNT のため、共有 DB 上の
 // 他テスト／前回失敗の残留 `completedAt` が絶対件数アサートを壊す。
 // このスイート専用の歴史日付帯だけを beforeEach で物理削除して隔離する。
@@ -47,6 +49,10 @@ async function completedTask(completedAt: Date): Promise<string> {
 async function cleanup(): Promise<void> {
   if (createdTaskIds.length > 0) {
     await db.$executeRawUnsafe(
+      `DELETE FROM activity_logs WHERE task_id IN (${createdTaskIds.map(() => "?").join(",")})`,
+      ...createdTaskIds,
+    );
+    await db.$executeRawUnsafe(
       `DELETE FROM tasks WHERE id IN (${createdTaskIds.map(() => "?").join(",")})`,
       ...createdTaskIds,
     );
@@ -62,6 +68,13 @@ async function cleanup(): Promise<void> {
 }
 
 async function purgeThroughputDateBand(): Promise<void> {
+  await db.$executeRawUnsafe(
+    `DELETE FROM activity_logs WHERE task_id IN (
+      SELECT id FROM tasks WHERE completed_at >= ? AND completed_at < ?
+    )`,
+    THROUGHPUT_BAND_START,
+    THROUGHPUT_BAND_END_EXCLUSIVE,
+  );
   await db.$executeRawUnsafe(
     `DELETE FROM tasks WHERE completed_at >= ? AND completed_at < ?`,
     THROUGHPUT_BAND_START,
@@ -85,7 +98,12 @@ async function createStage(kind: "normal" | "completed" | "cancelled", order: nu
 
 /** Stamp via stage move, then place completedAt inside the isolated historical band. */
 async function completeIntoBand(taskId: string, completedStageId: string, completedAt: Date): Promise<void> {
-  const moved = await tasksService.updateDevelopmentStage(taskId, verifiedWorkspaceId, completedStageId);
+  const moved = await tasksService.updateDevelopmentStage(
+    taskId,
+    verifiedWorkspaceId,
+    completedStageId,
+    taskActor(),
+  );
   if (!moved.ok) throw new Error(`move to completed failed: ${JSON.stringify(moved.error)}`);
   // Stamp→throughput chain must fail here if completed-stage move stops stamping.
   expect(moved.value.completedAt).toBeInstanceOf(Date);
@@ -237,11 +255,14 @@ describe("throughputService (task 7.1)", () => {
 // task-status-model 7.1: completion stamp ↔ digest non-regression (7.1–7.4).
 describe("throughputService completion stamp non-regression (task-status-model 7.1)", () => {
   it("counts after move into completed and drops after move out (7.1, 7.4)", async () => {
-    const created = await tasksService.create({
-      title: `throughput-stage-roundtrip-${randomUUID()}`,
-      priority: "low",
-      workspaceId: verifiedWorkspaceId,
-    });
+    const created = await tasksService.create(
+      {
+        title: `throughput-stage-roundtrip-${randomUUID()}`,
+        priority: "low",
+        workspaceId: verifiedWorkspaceId,
+      },
+      taskActor(),
+    );
     if (!created.ok) throw new Error("setup failed");
     const completed = await createStage("completed", 810);
     const normal = await createStage("normal", 100);
@@ -258,6 +279,7 @@ describe("throughputService completion stamp non-regression (task-status-model 7
       created.value.id,
       verifiedWorkspaceId,
       normal.id,
+      taskActor(),
     );
     expect(left.ok).toBe(true);
     if (!left.ok) return;
@@ -270,11 +292,14 @@ describe("throughputService completion stamp non-regression (task-status-model 7
   });
 
   it("does not count a cancelled-stage task because completedAt stays null — no stage-kind filter (7.2)", async () => {
-    const created = await tasksService.create({
-      title: `throughput-cancelled-${randomUUID()}`,
-      priority: "low",
-      workspaceId: verifiedWorkspaceId,
-    });
+    const created = await tasksService.create(
+      {
+        title: `throughput-cancelled-${randomUUID()}`,
+        priority: "low",
+        workspaceId: verifiedWorkspaceId,
+      },
+      taskActor(),
+    );
     if (!created.ok) throw new Error("setup failed");
     createdTaskIds.push(created.value.id);
     const cancelled = await createStage("cancelled", 820);
@@ -283,6 +308,7 @@ describe("throughputService completion stamp non-regression (task-status-model 7
       created.value.id,
       verifiedWorkspaceId,
       cancelled.id,
+      taskActor(),
     );
     expect(cancelledMove.ok).toBe(true);
     if (!cancelledMove.ok) return;

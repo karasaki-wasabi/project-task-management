@@ -22,6 +22,8 @@ export const SEED_TASK_ROOT_ID = "66666666-6666-4666-8666-666666666601";
 export const SEED_TASK_CHILD_ID = "66666666-6666-4666-8666-666666666602";
 export const SEED_TASK_KANBAN_ID = "66666666-6666-4666-8666-666666666603";
 export const SEED_TASK_DONE_ID = "66666666-6666-4666-8666-666666666604";
+export const SEED_TASK_CHILD_SIBLING_ID = "66666666-6666-4666-8666-666666666605";
+export const SEED_TASK_GRANDCHILD_ID = "66666666-6666-4666-8666-666666666606";
 export const SEED_TEMPLATE_ID = "77777777-7777-4777-8777-777777777701";
 export const SEED_HOLIDAY_ID = "88888888-8888-4888-8888-888888888801";
 
@@ -30,6 +32,20 @@ export const SEED_LOGIN_PASSWORD = "root@example.com";
 
 function utcDate(year: number, monthIndex: number, day: number): Date {
   return new Date(Date.UTC(year, monthIndex, day));
+}
+
+function atUtc(
+  year: number,
+  monthIndex: number,
+  day: number,
+  daysBefore: number,
+  hour: number,
+  minute: number,
+): Date {
+  const date = utcDate(year, monthIndex, day);
+  date.setUTCDate(date.getUTCDate() - daysBefore);
+  date.setUTCHours(hour, minute, 0, 0);
+  return date;
 }
 
 export async function seedManualConfirmationData(
@@ -147,13 +163,14 @@ export async function seedManualConfirmationData(
     },
   });
 
+  // 詳細ページの親子表示確認用: 親 → 子2件（うち1件はさらに孫を持つ）
   await prisma.task.create({
     data: {
       id: SEED_TASK_ROOT_ID,
-      title: "親タスク（案件紐付け）",
+      title: "認証機能を実装",
       status: "in_progress",
       priority: "high",
-      detail: "シード親タスク",
+      detail: "詳細ページで子タスクが2件並ぶ親。ログイン画面とパスワードリセットを子に持つ。",
       caseId: SEED_CASE_ACTIVE_ID,
       isRequiredForCase: true,
       assigneeUserId: SEED_USER_ID,
@@ -166,9 +183,10 @@ export async function seedManualConfirmationData(
   await prisma.task.create({
     data: {
       id: SEED_TASK_CHILD_ID,
-      title: "子タスク",
+      title: "ログイン画面を作る",
       status: "not_started",
       priority: "medium",
+      detail: "親は「認証機能を実装」。自身の子として「バリデーションを追加」を持つ。",
       caseId: SEED_CASE_ACTIVE_ID,
       isRequiredForCase: false,
       parentTaskId: SEED_TASK_ROOT_ID,
@@ -177,6 +195,111 @@ export async function seedManualConfirmationData(
       scheduledEndDate: utcDate(year, month, Math.min(28, day + 1)),
       workspaceId: SEED_WORKSPACE_ID,
     },
+  });
+
+  await prisma.task.create({
+    data: {
+      id: SEED_TASK_CHILD_SIBLING_ID,
+      title: "パスワードリセットを作る",
+      status: "in_progress",
+      priority: "medium",
+      detail: "親は「認証機能を実装」。子は持たない兄弟タスク。",
+      caseId: SEED_CASE_ACTIVE_ID,
+      isRequiredForCase: false,
+      parentTaskId: SEED_TASK_ROOT_ID,
+      assigneeUserId: SEED_USER_ID,
+      developmentStageId: SEED_STAGE_DOING_ID,
+      scheduledEndDate: utcDate(year, month, Math.min(28, day + 3)),
+      workspaceId: SEED_WORKSPACE_ID,
+    },
+  });
+
+  await prisma.task.create({
+    data: {
+      id: SEED_TASK_GRANDCHILD_ID,
+      title: "バリデーションを追加",
+      status: "not_started",
+      priority: "low",
+      detail: "親は「ログイン画面を作る」。孫階層で親のみ表示されることを確認する。",
+      caseId: SEED_CASE_ACTIVE_ID,
+      isRequiredForCase: false,
+      parentTaskId: SEED_TASK_CHILD_ID,
+      assigneeUserId: SEED_USER_ID,
+      developmentStageId: SEED_STAGE_BACKLOG_ID,
+      scheduledEndDate: utcDate(year, month, Math.min(28, day + 5)),
+      workspaceId: SEED_WORKSPACE_ID,
+    },
+  });
+
+  // 詳細ページのタイムライン日付見出し確認用（新しい順・複数日）
+  await prisma.activityLog.createMany({
+    data: [
+      {
+        taskId: SEED_TASK_ROOT_ID,
+        actorUserId: SEED_USER_ID,
+        operationType: "field_changed",
+        fieldName: "scheduledEndDate",
+        beforeValue: null,
+        afterValue: utcDate(year, month, day).toISOString(),
+        occurredAt: atUtc(year, month, day, 0, 1, 2),
+      },
+      {
+        taskId: SEED_TASK_ROOT_ID,
+        actorUserId: SEED_USER_ID,
+        operationType: "field_changed",
+        fieldName: "isRequiredForCase",
+        beforeValue: "false",
+        afterValue: "true",
+        occurredAt: atUtc(year, month, day, 0, 0, 48),
+      },
+      {
+        taskId: SEED_TASK_ROOT_ID,
+        actorUserId: SEED_USER_ID,
+        operationType: "field_changed",
+        fieldName: "detail",
+        beforeValue: null,
+        afterValue: "updated",
+        occurredAt: atUtc(year, month, day, 1, 5, 35),
+      },
+      {
+        taskId: SEED_TASK_ROOT_ID,
+        actorUserId: SEED_USER_ID,
+        operationType: "field_changed",
+        fieldName: "status",
+        beforeValue: "not_started",
+        afterValue: "in_progress",
+        occurredAt: atUtc(year, month, day, 1, 0, 15),
+      },
+      {
+        taskId: SEED_TASK_ROOT_ID,
+        actorUserId: SEED_USER_ID,
+        operationType: "field_changed",
+        fieldName: "assignee",
+        beforeValue: null,
+        afterValue: SEED_USER_ID,
+        occurredAt: atUtc(year, month, day, 2, 0, 12),
+      },
+    ],
+  });
+
+  await prisma.comment.createMany({
+    data: [
+      {
+        taskId: SEED_TASK_ROOT_ID,
+        authorUserId: SEED_USER_ID,
+        body: "案件の完了条件に入れました。終了予定までにお願いします。",
+        createdAt: atUtc(year, month, day, 0, 0, 45),
+        updatedAt: atUtc(year, month, day, 0, 0, 45),
+      },
+      {
+        taskId: SEED_TASK_ROOT_ID,
+        authorUserId: SEED_USER_ID,
+        body: "ページ分割処理が原因でした。ライブラリを上げます。",
+        editedAt: atUtc(year, month, day, 1, 5, 32),
+        createdAt: atUtc(year, month, day, 1, 5, 30),
+        updatedAt: atUtc(year, month, day, 1, 5, 32),
+      },
+    ],
   });
 
   await prisma.task.create({

@@ -79,6 +79,163 @@ describe("recurrence schema shape (task 1.1)", () => {
   });
 });
 
+describe("task-detail persistence schema (task 1)", () => {
+  it("exposes Comment and append-only ActivityLog models with the designed enums", () => {
+    expect(Prisma).toHaveProperty("CommentScalarFieldEnum");
+    expect(Prisma).toHaveProperty("ActivityLogScalarFieldEnum");
+
+    expect(Prisma.CommentScalarFieldEnum).toMatchObject({
+      id: "id",
+      taskId: "taskId",
+      authorUserId: "authorUserId",
+      body: "body",
+      editedAt: "editedAt",
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      deletedAt: "deletedAt",
+    });
+    expect(Prisma.ActivityLogScalarFieldEnum).toMatchObject({
+      id: "id",
+      taskId: "taskId",
+      actorUserId: "actorUserId",
+      actorSourceLabel: "actorSourceLabel",
+      operationType: "operationType",
+      fieldName: "fieldName",
+      beforeValue: "beforeValue",
+      afterValue: "afterValue",
+      occurredAt: "occurredAt",
+    });
+    expect(Prisma.ActivityLogScalarFieldEnum).not.toHaveProperty("updatedAt");
+    expect(Prisma.ActivityLogScalarFieldEnum).not.toHaveProperty("deletedAt");
+
+    expect(PrismaClientModule.OperationType).toEqual({
+      task_created: "task_created",
+      task_deleted: "task_deleted",
+      field_changed: "field_changed",
+      comment_created: "comment_created",
+      comment_edited: "comment_edited",
+      comment_deleted: "comment_deleted",
+    });
+    expect(PrismaClientModule.FieldName).toEqual({
+      title: "title",
+      status: "status",
+      priority: "priority",
+      detail: "detail",
+      assignee: "assignee",
+      case: "case",
+      isRequiredForCase: "isRequiredForCase",
+      developmentStage: "developmentStage",
+      parentTask: "parentTask",
+      scheduledEndDate: "scheduledEndDate",
+    });
+  });
+
+  it("creates comments and activity_logs with the required columns and indexes", async () => {
+    const commentColumns = await prisma.$queryRaw<Array<{ Field: string }>>`
+      SHOW COLUMNS FROM comments
+    `;
+    const activityLogColumns = await prisma.$queryRaw<Array<{ Field: string }>>`
+      SHOW COLUMNS FROM activity_logs
+    `;
+
+    expect(commentColumns.map((column) => column.Field)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "task_id",
+        "author_user_id",
+        "body",
+        "edited_at",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+      ]),
+    );
+    expect(activityLogColumns.map((column) => column.Field)).toEqual([
+      "id",
+      "task_id",
+      "actor_user_id",
+      "actor_source_label",
+      "operation_type",
+      "field_name",
+      "before_value",
+      "after_value",
+      "occurred_at",
+    ]);
+
+    const commentIndexes = await prisma.$queryRaw<
+      Array<{ Key_name: string; Column_name: string }>
+    >`SHOW INDEX FROM comments`;
+    const activityLogIndexes = await prisma.$queryRaw<
+      Array<{ Key_name: string; Column_name: string }>
+    >`SHOW INDEX FROM activity_logs`;
+
+    expect(
+      commentIndexes
+        .filter((row) => row.Key_name === "comments_task_id_created_at_idx")
+        .map((row) => row.Column_name),
+    ).toEqual(["task_id", "created_at"]);
+    expect(
+      activityLogIndexes
+        .filter((row) => row.Key_name === "activity_logs_task_id_occurred_at_idx")
+        .map((row) => row.Column_name),
+    ).toEqual(["task_id", "occurred_at"]);
+  });
+
+  it("retains comments and activity logs when their task is soft-deleted", async () => {
+    const suffix = randomUUID();
+    const user = await prisma.user.create({
+      data: {
+        email: `task-detail-${suffix}@example.test`,
+        name: `task-detail-${suffix}`,
+        passwordHash: "test-password-hash",
+      },
+    });
+    const workspace = await prisma.workspace.create({
+      data: {
+        name: `task-detail-${suffix}`,
+        createdByUserId: user.id,
+      },
+    });
+    const task = await prisma.task.create({
+      data: {
+        title: `task-detail-${suffix}`,
+        priority: "medium",
+        workspaceId: workspace.id,
+      },
+    });
+    const comment = await prisma.comment.create({
+      data: {
+        taskId: task.id,
+        authorUserId: user.id,
+        body: "persistent comment",
+      },
+    });
+    const activityLog = await prisma.activityLog.create({
+      data: {
+        taskId: task.id,
+        actorUserId: user.id,
+        operationType: "comment_created",
+      },
+    });
+
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { deletedAt: new Date() },
+    });
+
+    expect(await prisma.comment.findUnique({ where: { id: comment.id } })).not.toBeNull();
+    expect(
+      await prisma.activityLog.findUnique({ where: { id: activityLog.id } }),
+    ).not.toBeNull();
+
+    await prisma.activityLog.delete({ where: { id: activityLog.id } });
+    await prisma.comment.delete({ where: { id: comment.id } });
+    await prisma.task.delete({ where: { id: task.id } });
+    await prisma.workspace.delete({ where: { id: workspace.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+  });
+});
+
 describe("physical schema (task 1.2)", () => {
   async function createOwnedWorkspace(suffix: string) {
     const user = await prisma.user.create({

@@ -15,6 +15,12 @@
 //   asks for deleted rows (e.g. `deletedAt: { not: null } `).
 import { Prisma, PrismaClient } from "@prisma/client";
 
+const softDeleteModels = new Set(
+  Prisma.dmmf.datamodel.models
+    .filter((model) => model.fields.some((field) => field.name === "deletedAt"))
+    .map((model) => model.name),
+);
+
 function withDefaultActiveFilter<W extends Record<string, unknown> | undefined>(where: W): W {
   const base = (where ?? {}) as Record<string, unknown>;
   if ("deletedAt" in base) {
@@ -28,35 +34,43 @@ export function withSoftDelete(prisma: PrismaClient) {
     name: "soft-delete-repository",
     query: {
       $allModels: {
-        async findMany({ args, query }) {
+        async findMany({ model, args, query }) {
+          if (!softDeleteModels.has(model)) return query(args);
           args.where = withDefaultActiveFilter(args.where);
           return query(args);
         },
-        async findFirst({ args, query }) {
+        async findFirst({ model, args, query }) {
+          if (!softDeleteModels.has(model)) return query(args);
           args.where = withDefaultActiveFilter(args.where);
           return query(args);
         },
-        async findFirstOrThrow({ args, query }) {
+        async findFirstOrThrow({ model, args, query }) {
+          if (!softDeleteModels.has(model)) return query(args);
           args.where = withDefaultActiveFilter(args.where);
           return query(args);
         },
-        async findUnique({ args, query }) {
+        async findUnique({ model, args, query }) {
+          if (!softDeleteModels.has(model)) return query(args);
           args.where = withDefaultActiveFilter(args.where);
           return query(args);
         },
-        async findUniqueOrThrow({ args, query }) {
+        async findUniqueOrThrow({ model, args, query }) {
+          if (!softDeleteModels.has(model)) return query(args);
           args.where = withDefaultActiveFilter(args.where);
           return query(args);
         },
-        async count({ args, query }) {
+        async count({ model, args, query }) {
+          if (!softDeleteModels.has(model)) return query(args);
           args.where = withDefaultActiveFilter(args.where);
           return query(args);
         },
-        async update({ args, query }) {
+        async update({ model, args, query }) {
+          if (!softDeleteModels.has(model)) return query(args);
           args.data = { ...args.data, updatedAt: new Date() };
           return query(args);
         },
-        async updateMany({ args, query }) {
+        async updateMany({ model, args, query }) {
+          if (!softDeleteModels.has(model)) return query(args);
           args.data = { ...args.data, updatedAt: new Date() };
           return query(args);
         },

@@ -5,7 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { createUserData } from "../../test/user.fixture.js";
-import { tasksService } from "./task.service.js";
+import type { RecordActorInput } from "../activity-logs/activity-log.types.js";
+import { tasksService as rawTasksService } from "./task.service.js";
 
 function asVerified(id: string): VerifiedWorkspaceId {
   return id as VerifiedWorkspaceId;
@@ -13,6 +14,10 @@ function asVerified(id: string): VerifiedWorkspaceId {
 
 async function hardDeleteTasks(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  await db.$executeRawUnsafe(
+    `DELETE FROM activity_logs WHERE task_id IN (${ids.map(() => "?").join(",")})`,
+    ...ids,
+  );
   await db.$executeRawUnsafe(`DELETE FROM tasks WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
@@ -49,6 +54,66 @@ let workspaceA: VerifiedWorkspaceId;
 let workspaceB: VerifiedWorkspaceId;
 let ownerUserId: string;
 
+function testActor(): RecordActorInput {
+  return { type: "user", userId: ownerUserId };
+}
+
+const tasksService = {
+  ...rawTasksService,
+  create(input: Parameters<typeof rawTasksService.create>[0]) {
+    return rawTasksService.create(input, testActor());
+  },
+  updateStatus(
+    taskId: Parameters<typeof rawTasksService.updateStatus>[0],
+    workspaceId: Parameters<typeof rawTasksService.updateStatus>[1],
+    status: Parameters<typeof rawTasksService.updateStatus>[2],
+  ) {
+    return rawTasksService.updateStatus(taskId, workspaceId, status, testActor());
+  },
+  updateDevelopmentStage(
+    taskId: Parameters<typeof rawTasksService.updateDevelopmentStage>[0],
+    workspaceId: Parameters<typeof rawTasksService.updateDevelopmentStage>[1],
+    developmentStageId: Parameters<typeof rawTasksService.updateDevelopmentStage>[2],
+    assigneeUserId?: Parameters<typeof rawTasksService.updateDevelopmentStage>[4],
+  ) {
+    return rawTasksService.updateDevelopmentStage(
+      taskId,
+      workspaceId,
+      developmentStageId,
+      testActor(),
+      assigneeUserId,
+    );
+  },
+  update(
+    taskId: Parameters<typeof rawTasksService.update>[0],
+    workspaceId: Parameters<typeof rawTasksService.update>[1],
+    input: Parameters<typeof rawTasksService.update>[2],
+  ) {
+    return rawTasksService.update(taskId, workspaceId, input, testActor());
+  },
+  addChild(
+    parentTaskId: Parameters<typeof rawTasksService.addChild>[0],
+    workspaceId: Parameters<typeof rawTasksService.addChild>[1],
+    input: Parameters<typeof rawTasksService.addChild>[2],
+  ) {
+    return rawTasksService.addChild(parentTaskId, workspaceId, input, testActor());
+  },
+  splitTask(
+    taskId: Parameters<typeof rawTasksService.splitTask>[0],
+    workspaceId: Parameters<typeof rawTasksService.splitTask>[1],
+    parts: Parameters<typeof rawTasksService.splitTask>[2],
+  ) {
+    return rawTasksService.splitTask(taskId, workspaceId, parts, testActor());
+  },
+  delete(
+    taskId: Parameters<typeof rawTasksService.delete>[0],
+    workspaceId: Parameters<typeof rawTasksService.delete>[1],
+    requestId?: Parameters<typeof rawTasksService.delete>[3],
+  ) {
+    return rawTasksService.delete(taskId, workspaceId, testActor(), requestId);
+  },
+};
+
 beforeAll(async () => {
   const user = await db.user.create({ data: createUserData("task-svc-ws") });
   ownerUserId = user.id;
@@ -64,6 +129,13 @@ afterAll(async () => {
   // Leftover stages from failed cases still reference the workspace.
   await db.$executeRawUnsafe(
     `DELETE FROM development_stages WHERE workspace_id IN (?, ?)`,
+    workspaceA,
+    workspaceB,
+  );
+  await db.$executeRawUnsafe(
+    `DELETE FROM activity_logs WHERE task_id IN (
+      SELECT id FROM tasks WHERE workspace_id IN (?, ?)
+    )`,
     workspaceA,
     workspaceB,
   );

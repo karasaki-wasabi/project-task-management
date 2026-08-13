@@ -40,7 +40,14 @@ export function weekdayKanji(dayOfWeek: number): string {
 // header), this is purely a presentation transform for the trigger label
 // and popover header.
 export function formatSlashDate(dateOnly: string): string {
-  return dateOnly.replaceAll("-", "/");
+  return toDateOnlyIso(dateOnly).replaceAll("-", "/");
+}
+
+// Prisma `@db.Date` is serialized by Fastify as UTC midnight ISO
+// (`2026-08-10T00:00:00.000Z`). DatePicker's wire format is the calendar-day
+// prefix `YYYY-MM-DD`. Slicing avoids `new Date(...)` timezone shifts.
+export function toDateOnlyIso(value: string): string {
+  return value.slice(0, 10);
 }
 
 // Formats a Date's local calendar day as `YYYY-MM-DD`. Local getters
@@ -58,7 +65,7 @@ function formatLocalDateOnly(date: Date): string {
 // UTC), so `parseLocalDateOnly(formatLocalDateOnly(d))` always yields the
 // same calendar day regardless of timezone.
 function parseLocalDateOnly(dateOnly: string): Date {
-  const parts = dateOnly.split("-").map(Number);
+  const parts = toDateOnlyIso(dateOnly).split("-").map(Number);
   const year = parts[0] ?? 0;
   const month = parts[1] ?? 1;
   const day = parts[2] ?? 1;

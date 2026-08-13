@@ -14,7 +14,7 @@ colors:
   warning-text: "#92400e"
   success-bg: "#dcfce7"
   success-text: "#15803d"
-  info-bg: "#dbeafe"
+  info-bg: "#eff6ff"
   info-text: "#1d4ed8"
   neutral-tag-bg: "#f1f5f9"
   neutral-tag-text: "#334155"
@@ -87,7 +87,7 @@ Restrained戦略: 中立色(スレート系グレー)が画面の大半を占め
 - **ボーダー**(`#e2e8f0`): カード・テーブルの輪郭線
 
 ### Named Rules
-The Badge-Only Color Rule. 意味を持つ色(赤=危険/優先度高、黄=保留/優先度中、緑=完了段階、青=作業中、ティール=引継待ち)は、常にバッジとしてのみ使う。ステータスは塗りピル、開発段階は枠線つき角丸矩形（`StageBadge`）で形を分ける。行全体やセクション全体を状態色で塗りつぶすのは、期限超過の納品を強調する場合(`danger-bg`の淡い背景)のみの例外とする。
+The Badge-Only Color Rule. 意味を持つ色(赤=危険/優先度高、黄=保留、緑=完了段階、青=作業中、ティール=引継待ち)は、常にバッジとしてのみ使う。優先度「中」は色を持たず白地+グレー枠のアウトラインにする（「高」だけが強く主張する）。ステータスは塗りピル、開発段階は枠線つき角丸矩形（`StageBadge`）で形を分ける。行全体やセクション全体を状態色で塗りつぶすのは、期限超過の納品を強調する場合(`danger-bg`の淡い背景)のみの例外とする。
 
 ## Typography
 
@@ -121,11 +121,12 @@ The Badge-Only Color Rule. 意味を持つ色(赤=危険/優先度高、黄=保�
   - ステータス・優先度: pill(`rounded-full px-2 py-0.5 text-xs font-medium`)
   - 開発段階（`StageBadge`）: 角丸 6px・枠線・接頭辞つき（塗りピルではない）
 - トーン
-  - `neutral`（スレート、未着手）
-  - `info`（青、作業中）
+  - `neutral`（スレート、未着手・優先度低）
+  - `info`（`bg-blue-50 text-blue-700`、作業中）
   - `handoff`（ティール `#ccfbf1` / `#0f766e`、引継待ち）
-  - `warning`（黄、保留・優先度中）
+  - `warning`（黄、保留）
   - `danger`（赤、優先度高・期限超過）
+  - `outline`（白地+スレート枠、優先度中。塗りつぶし無し）
   - `success`（緑）はステータスには使わず、完了種別の段階バッジに予約する
 - `StatusBadge` / `PriorityBadge` はこの `Badge` の薄いラッパーで、値→トーン+日本語ラベルのマッピングのみを持つ
 - ステータス語彙: 未着手 / 作業中 / 引継待ち / 保留（タスク全体の完了は開発段階の種別で表す）
