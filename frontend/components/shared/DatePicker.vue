@@ -58,20 +58,33 @@
   of unbounded-hit-area bare glyphs.
 -->
 <script setup lang="ts">
+import { computed, ref } from "vue";
 import {
   computeTodayIso,
   formatLocalDateOnly,
   formatSlashDate,
   generateMonthGrid,
   parseLocalDateOnly,
+  toDateOnlyIso,
   weekdayKanji,
   type DateCell,
 } from "./DatePicker.helpers";
 
-const props = defineProps<{ modelValue: string; ariaLabel: string }>();
-const emit = defineEmits<{ "update:modelValue": [value: string] }>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: string;
+    ariaLabel: string;
+    embedded?: boolean;
+    clearLabel?: string;
+  }>(),
+  { embedded: false, clearLabel: "クリア" },
+);
+const emit = defineEmits<{
+  "update:modelValue": [value: string];
+  dismissed: [];
+}>();
 
-const open = ref(false);
+const open = ref(props.embedded);
 const draftDate = ref("");
 const visibleYear = ref(0);
 const visibleMonth = ref(1); // 1-indexed (matches DatePicker.helpers.generateMonthGrid)
@@ -121,11 +134,18 @@ function navigateToMonthOf(iso: string) {
   visibleMonth.value = parsed.getMonth() + 1;
 }
 
-function openPicker() {
-  const base = props.modelValue ? parseLocalDateOnly(props.modelValue) : new Date();
-  draftDate.value = props.modelValue;
+function seedFromModel() {
+  const dateOnly = props.modelValue ? toDateOnlyIso(props.modelValue) : "";
+  const base = dateOnly ? parseLocalDateOnly(dateOnly) : new Date();
+  draftDate.value = dateOnly;
   visibleYear.value = base.getFullYear();
   visibleMonth.value = base.getMonth() + 1;
+}
+
+if (props.embedded) seedFromModel();
+
+function openPicker() {
+  seedFromModel();
   open.value = true;
 }
 
@@ -169,16 +189,18 @@ function nextMonth() {
 }
 
 // Requirement 10.4: only 決定 commits the draft to modelValue.
+// embedded では親ピッカーが保存成否を持つので、ここではパネルを閉じない。
 function decide() {
   emit("update:modelValue", draftDate.value);
-  open.value = false;
+  if (!props.embedded) open.value = false;
 }
 
 // Requirement 10.5: キャンセル/背景クリック/Esc discard the draft (implicit —
 // draftDate is re-seeded from modelValue on the next openPicker() call) and
-// close without emitting.
+// close without emitting. embedded では親へ dismissed を返し、閉じる判断は親に任せる。
 function cancel() {
-  open.value = false;
+  if (!props.embedded) open.value = false;
+  emit("dismissed");
 }
 
 // Requirement 10.6: クリア resets the draft to empty without closing the
@@ -195,6 +217,7 @@ function clear() {
 <template>
   <div class="relative inline-block">
     <button
+      v-if="!embedded"
       type="button"
       class="min-w-[9rem] rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-left text-sm text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
       :class="{ 'text-slate-400': !modelValue }"
@@ -210,8 +233,9 @@ function clear() {
          (Requirement 10.5) — same `@click.self`-on-overlay pattern as
          shared/Modal.vue, just without the visible dim layer since this is
          a popover, not a modal. v-if lives directly on this element (not a
-         wrapping <template>) for the same reason as the panel below. -->
-    <div v-if="open" class="fixed inset-0 z-40" @click="cancel" />
+         wrapping <template>) for the same reason as the panel below.
+         embedded では親の InlineEditableField が背景クリックを持つ。 -->
+    <div v-if="open && !embedded" class="fixed inset-0 z-40" @click="cancel" />
 
     <!-- The panel's v-if must be on the element Transition directly wraps,
          not on an ancestor <template> — Vue's enter/leave transition hooks
@@ -234,7 +258,8 @@ function clear() {
         ref="panelRef"
         role="dialog"
         :aria-label="`${ariaLabel}を選択`"
-        class="absolute left-0 top-full z-50 mt-1 w-72 origin-top rounded-lg border border-slate-200 bg-white p-3 shadow-xl"
+        class="w-72 origin-top rounded-lg border border-slate-200 bg-white p-3 shadow-xl"
+        :class="embedded ? 'relative' : 'absolute left-0 top-full z-50 mt-1'"
         @keydown.esc="cancel"
       >
         <!-- Header: currently-selected draft date (Requirement 10.3 — this
@@ -315,25 +340,27 @@ function clear() {
         </table>
 
         <!-- Footer: クリア(left) / キャンセル・決定(right) — 10.5/10.6 -->
-        <div class="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
-          <button
-            type="button"
-            class="rounded-md px-2.5 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100"
-            @click="clear"
-          >
-            クリア
-          </button>
-          <div class="flex items-center gap-2">
+        <div class="mt-2 flex items-start gap-2 border-t border-slate-100 pt-2">
+          <div class="min-w-0 flex-1">
             <button
               type="button"
-              class="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              class="max-w-full rounded-md px-2.5 py-1.5 text-left text-sm font-medium leading-5 text-slate-500 hover:bg-slate-100"
+              @click="clear"
+            >
+              {{ props.clearLabel }}
+            </button>
+          </div>
+          <div class="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              class="shrink-0 whitespace-nowrap rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
               @click="cancel"
             >
               キャンセル
             </button>
             <button
               type="button"
-              class="rounded-md bg-primary-600 px-2.5 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+              class="shrink-0 whitespace-nowrap rounded-md bg-primary-600 px-2.5 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
               @click="decide"
             >
               決定

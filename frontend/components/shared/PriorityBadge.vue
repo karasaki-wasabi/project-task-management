@@ -1,10 +1,14 @@
 <!-- Task priority badge (screen polish pass). -->
 <script setup lang="ts">
+import { computed } from "vue";
+import type { Priority } from "../../composables/useApiClient";
+import Badge from "./Badge.vue";
+
 const props = defineProps<{ priority: Priority }>();
 
-const config: Record<Priority, { tone: "danger" | "warning" | "neutral"; label: string }> = {
+const config: Record<Priority, { tone: "danger" | "outline" | "neutral"; label: string }> = {
   high: { tone: "danger", label: "高" },
-  medium: { tone: "warning", label: "中" },
+  medium: { tone: "outline", label: "中" },
   low: { tone: "neutral", label: "低" },
 };
 

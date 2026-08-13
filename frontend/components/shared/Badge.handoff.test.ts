@@ -16,4 +16,13 @@ describe("Badge handoff tone (task-status-model 4.1)", () => {
       expect(config.tone).not.toBe("success");
     }
   });
+
+  it("uses the mock blue-50 fill for info (作業中) instead of blue-100", () => {
+    const wrapper = mount(Badge, { props: { tone: "info", label: "作業中" } });
+    const classes = wrapper.classes().join(" ");
+
+    expect(classes).toContain("bg-blue-50");
+    expect(classes).toContain("text-blue-700");
+    expect(classes).not.toContain("bg-blue-100");
+  });
 });
