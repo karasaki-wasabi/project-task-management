@@ -106,11 +106,12 @@ graph TB
     CommentRoutes --> CommentService
     CommentService --> CommentRepo
     CommentService --> ActivityLogService
+    CommentService --> TaskService
     ActivityLogService --> ActivityLogRepo
 ```
 
 **Architecture Integration**:
-- **Selected pattern**: 既存の feature-first モジュール構成を維持。`comments`・`activity-logs` を新規の独立モジュールとして追加し、`tasks` が両方に一方向依存する
+- **Selected pattern**: 既存の feature-first モジュール構成を維持。`comments`・`activity-logs` を新規の独立モジュールとして追加し、`tasks` が両方に一方向依存する。`comments` はタスクの存在／削除状態確認のため `TasksService.getById` のみに依存する（`taskRepository` 直読みはしない）
 - **Domain boundaries**: コメントの所有権判定は `comments` が持つ。操作ログの記録・表示用フィルタリングは `activity-logs` が持つ。タイムライン（コメント＋操作ログのマージ）はどちらの内部実装でもなく、`task.routes.ts` のルートハンドラ層で2つのサービスを呼び出して合成する（プレゼンテーション層の合成であり、ドメインの二重所有ではない）
 - **Existing patterns preserved**: 一方向依存、`HttpError` によるエラー表現、ソフトデリート拡張（`comments` のみ適用。`activity-logs` はRequirement 5.9により意図的に `deletedAt`/`updatedAt` を持たない = 事後変更不可）
 - **New components rationale**: `comments`/`activity-logs` を分けるのは、コメントは「誰が何を書いたか」というコンテンツの所有権、操作ログは「何が起きたか」という不変の記録という異なる性質を持ち、削除・編集可否のルールも正反対（コメントは編集可・操作ログは不可）なため
@@ -131,15 +132,15 @@ graph TB
 backend/src/modules/
 ├── comments/
 │   ├── comment.types.ts        # Comment型、入力型、エラー型
-│   ├── comment.repository.ts   # Prisma経由のCRUD（ソフトデリート適用）
-│   ├── comment.service.ts      # 投稿者本人チェック、空文字拒否、ActivityLogService呼び出し
+│   ├── comment.repository.ts   # Prisma経由のCRUD（ソフトデリート適用）。list は任意の cursor/take
+│   ├── comment.service.ts      # 投稿者本人チェック、空文字拒否、TasksService.getById、ActivityLogService呼び出し
 │   └── comment.routes.ts       # POST/PATCH/DELETE /api/tasks/:id/comments[/:commentId]。
 │                                # ルートパスは必ず /api/tasks で始める（WORKSPACE_SCOPED_PATH_PREFIXES の
 │                                # startsWith 判定でワークスペーススコープガードの対象にするため）
 ├── activity-logs/
 │   ├── activity-log.types.ts       # ActivityLog型、OperationType判別共用体
-│   ├── activity-log.repository.ts  # 追記専用（update/deleteメソッドを持たない）
-│   └── activity-log.service.ts     # record()（記録）、listDisplayable()（表示用フィルタ）
+│   ├── activity-log.repository.ts  # 追記専用（update/deleteメソッドを持たない）。listDisplayable は任意の cursor/take
+│   └── activity-log.service.ts     # record()（記録）、listDisplayable()（表示用フィルタ＋任意ページング）
 └── tasks/
     ├── task.service.ts             # 変更: 各書き込みメソッドにActivityLogService.record()呼び出しを追加。update()/create の scheduledEndDate・parentTaskId と循環・クローズ済み検証を追加。list に titleContains 等
     └── task.routes.ts              # 変更: POST/PATCH の Zod 拡張、GET list の titleContains/excludeSubtreeOf/excludeClosed、GET /api/tasks/:id/timeline（comment+activity-logのマージ）
@@ -148,10 +149,13 @@ frontend/
 ├── pages/workspaces/[workspaceId]/tasks/
 │   └── [taskId].vue                # タスク詳細ページ（新規）
 ├── components/tasks/
-│   ├── InlineEditableField.vue     # ホバー/タップ選択→✎→ピッカーの共通インタラクション（新規）
+│   ├── InlineEditableField.vue     # ホバー/タップ選択→✎→ピッカー。中身は slot。replaceDisplay で表示を入力へ差し替え（新規）
+│   ├── inlineEditableFieldSelection.ts  # タッチ時の行選択状態（新規）
+│   ├── FieldOptionList.vue         # ステータス等の選択肢リスト（新規）
 │   ├── ParentTaskCombobox.vue      # 検索付きセレクト、循環・クローズ済み除外（新規）
-│   ├── TaskFieldCard.vue           # フィールドカード（状態/担当・日程・案件/親子タスク/詳細のグルーピング）（新規）
-│   └── TaskTimeline.vue            # コメント＋変更履歴の統合表示、絞り込みタブ（新規）
+│   ├── TaskFieldCard.vue           # フィールドカード。親子タスクはアコーディオン（初期は閉じる）（新規）
+│   ├── TaskTimeline.vue            # コメント＋変更履歴の統合表示、絞り込みタブ（新規）
+│   └── TaskTimeline.helpers.ts     # タイムライン文言・日付グループ化（新規）
 ├── components/comments/
 │   └── CommentComposer.vue         # 投稿・編集フォーム（新規）
 ├── components/kanban/
@@ -176,8 +180,10 @@ frontend/
 ```mermaid
 sequenceDiagram
     participant UI as InlineEditableField
+    participant Page as TaskDetailPage
     participant API as task routes
     participant TS as TasksService
+    participant CS as CommentService
     participant AL as ActivityLogService
     participant DB as Prisma
 
@@ -189,10 +195,12 @@ sequenceDiagram
     AL->>DB: ActivityLog.create（追記のみ）
     TS-->>API: 更新後のTask
     API-->>UI: 200 OK
-    UI->>API: GET /api/tasks/:id/timeline?filter=all
-    API->>AL: listDisplayable(taskId)（filter に応じてコメント取得の要否も分岐）
-    API->>API: 対象種別のみマージ・日時降順ソート・カーソルページング
-    API-->>UI: 統合タイムライン
+    UI->>Page: 表示を更新し timelineKey を進めて TaskTimeline を再マウント
+    Page->>API: GET /api/tasks/:id/timeline?filter=all
+    API->>CS: list(taskId, pageQuery)
+    API->>AL: listDisplayable(taskId, pageQuery)
+    API->>API: 対象種別のみマージ・日時降順ソート・カーソルで切り出し
+    API-->>Page: 統合タイムライン
 ```
 
 **Key Decisions**:
@@ -200,6 +208,8 @@ sequenceDiagram
 - `addChild()`/`splitTask()` は `create()` を経由しないため、それぞれの内部で個別に `task_created` の記録を呼ぶ
 - 論理削除済みタスクの参照（Requirement 1.4）は、単一取得（`GET /api/tasks/:id`）とタイムライン（`GET /api/tasks/:id/timeline`）だけが soft-delete 既定フィルタを bypass する（`includeDeleted`）。一覧・親タスク候補・カンバン列などには載せない
 - タイムラインの「すべて／コメント／変更履歴」絞り込み（Requirement 6.8）はサーバー側 `filter` とし、種別ごとにカーソルページングする（クライアント側フィルタは採用しない）
+- フィールド保存後のタイムライン再取得は、ページが `timelineKey` を進めて `TaskTimeline` を再マウントし、マウント時の `GET /api/tasks/:id/timeline` に任せる（保存ハンドラから timeline を直接は呼ばない）
+- `list` / `listDisplayable` へ渡す `pageQuery` は `{ take: limit+1, cursor? }`。`filter=comments` のときは ActivityLog を読まない、`filter=changes` のときは Comment を読まない
 
 ## Requirements Traceability
 
@@ -231,7 +241,7 @@ sequenceDiagram
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies | Contracts |
 |-----------|--------------|--------|--------------|-------------------|-----------|
 | ActivityLogService | Backend/Service | 操作ログの記録と表示用フィルタ | 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 6.2, 6.3 | activityLogRepository (P0) | Service |
-| CommentService | Backend/Service | コメントCRUD、投稿者本人チェック | 4.1, 4.2, 4.3, 4.4, 4.5 | commentRepository (P0), ActivityLogService (P1) | Service, API |
+| CommentService | Backend/Service | コメントCRUD、投稿者本人チェック | 4.1, 4.2, 4.3, 4.4, 4.5 | commentRepository (P0), ActivityLogService (P1), TasksService (P0) | Service, API |
 | TasksService（拡張） | Backend/Service | 親タスク・終了予定日編集、全書き込みでの記録呼び出し、詳細取得の削除済み bypass | 1.4, 1.6, 1.7, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.8 | ActivityLogService (P0), DevelopmentStagesService (P1) | Service, API |
 | task routes（拡張） | Backend/Route | タイムライン集約エンドポイント | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8 | CommentService (P0), ActivityLogService (P0) | API |
 | InlineEditableField | Frontend/UI | ホバー/タップ選択→✎→ピッカーの共通コンポーネント | 2.1 | — | State |
@@ -278,24 +288,39 @@ type RecordActorInput =
   | { type: "user"; userId: string }
   | { type: "system"; sourceLabel: string }; // sourceLabel例: "recurring_template"
 
-interface RecordActivityLogInput {
+interface RecordActivityLogBase {
   taskId: string;
   actor: RecordActorInput;
-  operation: OperationType;
-  field?: FieldName;      // operation === "field_changed" のとき必須
-  beforeValue?: string | null;
-  afterValue?: string | null;
 }
 
-// PrismaTransactionClient は `Prisma.TransactionClient`（$transaction のコールバック引数型）
+type RecordActivityLogInput =
+  | (RecordActivityLogBase & {
+      operation: "field_changed";
+      field: FieldName;
+      beforeValue?: string | null;
+      afterValue?: string | null;
+    })
+  | (RecordActivityLogBase & {
+      operation: Exclude<OperationType, "field_changed">;
+      field?: never;
+      beforeValue?: never;
+      afterValue?: never;
+    });
+
+interface TimelinePageQuery {
+  cursor?: { occurredAt: Date; id: string };
+  take: number;
+}
+
+// SoftDeleteTx は `shared/soft-delete.repository.ts` のトランザクションクライアント型
 interface ActivityLogService {
-  record(input: RecordActivityLogInput, tx: PrismaTransactionClient): Promise<void>;
-  listDisplayable(taskId: string): Promise<ActivityLogEntry[]>; // operation === "field_changed" のみ返す（6.2, 6.3）
+  record(input: RecordActivityLogInput, tx: SoftDeleteTx): Promise<void>;
+  listDisplayable(taskId: string, page?: TimelinePageQuery): Promise<ActivityLogEntry[]>; // operation === "field_changed" のみ返す（6.2, 6.3）
 }
 ```
 - Preconditions: `taskId` は存在するタスクのID。`record()` は呼び出し元が開始した `prisma.$transaction` のコールバック内から、その `tx` を渡して呼ぶ（`tx` を省略できる形にしない）
 - Postconditions: `record()` は本体の更新（`tx.task.update` 等）と同一トランザクションでコミットされる。どちらかが失敗すれば両方ロールバックする（Requirement 5.2, 5.3, 5.8 が要求する「記録漏れゼロ」を担保する）
-- Invariants: 記録済みの行は不変。`listDisplayable` は `field_changed` 以外を返さない
+- Invariants: 記録済みの行は不変。`listDisplayable` は `field_changed` 以外を返さない。`TimelinePageQuery` は comments / activity-logs で同形を各リポジトリに定義する（共有型にはしない。activity-logs が comments に依存しないため）
 
 **Integration Note**: `TasksService`/`CommentService` の書き込みメソッドは、本体の更新と `activityLogService.record()` を `prisma.$transaction(async (tx) => { ... })` で1つのトランザクションにまとめる。`record()` を `tx` なしのグローバル `db` クライアントで呼ぶ実装は本設計の契約違反とする。
 
@@ -319,7 +344,7 @@ interface ActivityLogService {
 ##### Service Interface
 ```typescript
 interface CommentService {
-  list(taskId: string): Promise<Comment[]>; // GET /api/tasks/:id/timeline からのみ呼ばれる（サービスメソッドとしては公開するが、単独のGETルートは持たない）
+  list(taskId: string, page?: TimelinePageQuery): Promise<Comment[]>; // GET /api/tasks/:id/timeline からのみ呼ばれる（サービスメソッドとしては公開するが、単独のGETルートは持たない）
   create(
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
@@ -417,13 +442,13 @@ interface CommentService {
 **Responsibilities & Constraints**
 - `titleContains=<string>` パラメータ: タイトルの部分一致（大文字小文字は DB／照合順に従う）。空文字や未指定はタイトル条件なし。汎用の短い `q` は使わない（何を探すクエリかが後から読み取れなくなるため）
 - `excludeSubtreeOf=<taskId>` パラメータ: 指定タスク自身とその子孫（祖先チェーンではなく子孫方向）を候補から除外する。既存の `taskRepository` は親子関係を持つため、再帰CTEまたはアプリ側での子孫ID集合の事前計算で実現する
-- `excludeClosed=true` パラメータ: `task-status-model` の定めるクローズ済みタスクを候補から除外する（既存のクローズ述語 `task.closure.ts` を再利用し、新規に判定ロジックを複製しない）
+- `excludeClosed=true` パラメータ: `task-status-model` の定めるクローズ済みタスクを候補から除外する（既存のクローズ述語 `task.closure.ts` を再利用し、新規に判定ロジックを複製しない）。公開 Zod は `z.literal("true")`（boolean ではない）。未指定は条件なし。クライアントは `excludeClosed: true` のときだけクエリ `"true"` を付ける
 - クライアント（`ParentTaskCombobox`）は全件取得ではなく、上記パラメータ付きでサーバー側フィルタ済みの候補だけを受け取る
 
 ##### API Contract
 | Method | Endpoint | Request（追加分） | Response | Errors |
 |--------|----------|---------|----------|--------|
-| GET | /api/tasks | `titleContains?: string`, `excludeSubtreeOf?: string`, `excludeClosed?: boolean`（既存の `caseId` 等と併用可） | Task[] | 400 |
+| GET | /api/tasks | `titleContains?: string`, `excludeSubtreeOf?: string`, `excludeClosed?: "true"`（既存の `caseId` 等と併用可） | Task[] | 400 |
 
 #### task routes: GET /api/tasks/:id/timeline（新規）
 
@@ -439,13 +464,21 @@ interface CommentService {
   - `comments`: コメントのみ
   - `changes`: `field_changed` のみ（`ActivityLogService.listDisplayable`）
 - ルート層で対象ソースを取得し、発生日時降順にマージする（ドメインロジックではなくプレゼンテーション合成）。`filter=comments` のときは ActivityLog を読まない、`filter=changes` のときは Comment を読まない
-- カーソルベースページネーションは `filter` 適用後の結果に対して行う（1ページ20件、`occurredAt`降順→同時刻はID降順でタイブレーク）。タブ切替時はクライアントが `filter` を変えて先頭から再取得する
+- カーソルベースページネーションは `filter` 適用後の結果に対して行う（1ページ20件、`occurredAt`降順→同時刻はID降順でタイブレーク）。各ソースは `limit+1` 件だけをカーソル条件付きで取得し、ルート層でマージしてからページを切り出す（全件ロードしない）。タブ切替時はクライアントが `filter` を変えて先頭から再取得する
 - クライアント側での種別フィルタは行わない（ページングと両立しないため）
 
 ##### API Contract
 | Method | Endpoint | Request | Response | Errors |
 |--------|----------|---------|----------|--------|
 | GET | /api/tasks/:id/timeline | `?filter=all\|comments\|changes&cursor=&limit=`（`filter` 省略時は `all`） | `{ items: TimelineEntry[], nextCursor: string \| null }` | 404 |
+
+`TimelineEntry` は次の判別共用体。コメントは `createdAt` を `occurredAt` に写し、各 item に `type` を付ける。
+
+```typescript
+type TimelineEntry =
+  | (Comment & { type: "comment"; occurredAt: Date })
+  | (ActivityLogEntry & { type: "change" });
+```
 
 ### Frontend / tasks
 
@@ -457,9 +490,20 @@ interface CommentService {
 | Requirements | 2.1 |
 
 **Implementation Notes**
-- Integration: `TaskFieldCard` 内の各行がこのコンポーネントでラップされる。`fieldType`（text/select/date/combo/textarea）に応じて内部でピッカーUIを切り替える
+- Integration: `TaskFieldCard` 内の各行がこのコンポーネントでラップされる。ピッカーの中身は `#default` / `#picker` slot で注入し、本体は `fieldType` による内部切替を持たない。`replaceDisplay?: boolean` が true のときは表示行を隠して同じ位置にピッカーを出す（タイトル・詳細）
 - Validation: 保存失敗時はピッカー内上部にエラーを表示し（`error-handling.md` のパターンを踏襲）、値は保存前の状態に戻す
 - Risks: フィールドタイプごとの分岐が増えると肥大化するため、ピッカーの中身は `slot` で注入し本体はホバー/選択/開閉の状態管理のみを持つ
+
+#### TaskFieldCard
+
+| Field | Detail |
+|-------|--------|
+| Intent | フィールドのグルーピング表示（状態/担当・日程・案件/親子タスク/詳細） |
+| Requirements | 1.1, 1.5, 1.6, 1.7 |
+
+**Implementation Notes**
+- Integration: 親子タスクは `related-tasks-toggle` のアコーディオン（初期は閉じる。タスク切替で閉じる）。完了日時の未設定表示は「—」。必須・超過は共有 `Badge.vue` ではなく行内の `rounded-full` span
+- Validation: 該当なし（編集は `InlineEditableField` に委譲）
 
 #### TaskTimeline
 
@@ -469,7 +513,7 @@ interface CommentService {
 | Requirements | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8 |
 
 **Implementation Notes**
-- Integration: 絞り込みタブは `filter` クエリ付きで `GET /api/tasks/:id/timeline` を再取得する。レスポンス配列はそのまま描画し、クライアント側の種別フィルタは持たない
+- Integration: 絞り込みタブは `filter` クエリ付きで `GET /api/tasks/:id/timeline` を再取得する。レスポンス配列はそのまま描画し、クライアント側の種別フィルタは持たない。表示文言・日付グループ化は `TaskTimeline.helpers.ts` に置く。フィールド保存後は親ページの `timelineKey` 更新で再マウントし、`onMounted` の `loadTimeline()` が先頭から取り直す
 - Validation: 該当なし（表示専用）
 
 ## Data Models
@@ -573,3 +617,5 @@ erDiagram
   - タイムラインタブ切替でサーバー再取得し、選択種別だけが表示されること（6.8）
   - 論理削除済みタスクで編集操作が一切表示されないこと（1.4）
   - `TaskDetailModal` から「詳細ページを開く」で遷移すること（7.3）
+  - 複製は指定フィールドを引き継ぎ初期状態の新規詳細へ遷移する（2.9, 2.10, 2.11）
+  - 削除済みタスクをカンバンのモーダルで開くと参照専用になる（7.4）

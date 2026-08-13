@@ -122,7 +122,7 @@ The Badge-Only Color Rule. 意味を持つ色(赤=危険/優先度高、黄=保�
   - 開発段階（`StageBadge`）: 角丸 6px・枠線・接頭辞つき（塗りピルではない）
 - トーン
   - `neutral`（スレート、未着手・優先度低）
-  - `info`（青 `#eff6ff` / `#1d4ed8`、作業中）
+  - `info`（`bg-blue-50 text-blue-700`、作業中）
   - `handoff`（ティール `#ccfbf1` / `#0f766e`、引継待ち）
   - `warning`（黄、保留）
   - `danger`（赤、優先度高・期限超過）
