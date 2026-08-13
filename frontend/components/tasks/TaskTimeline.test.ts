@@ -125,6 +125,135 @@ describe("TaskTimeline", () => {
     expect(wrapper.text()).toContain(`user-actor が${expected}`);
   });
 
+  it("メンバー・案件・段階・親タスクの表示名を解決して表示する", async () => {
+    getTaskTimeline.mockResolvedValue(
+      page([
+        makeComment({
+          id: "comment-named",
+          authorUserId: "user-current",
+          body: "名前付きコメント",
+        }),
+        makeChange({
+          id: "change-named-assignee",
+          actorUserId: "user-actor",
+          fieldName: "assignee",
+          beforeValue: null,
+          afterValue: "user-next",
+        }),
+        makeChange({
+          id: "change-named-case",
+          actorUserId: "user-actor",
+          fieldName: "case",
+          beforeValue: "case-1",
+          afterValue: "case-2",
+        }),
+        makeChange({
+          id: "change-named-stage",
+          actorUserId: "user-actor",
+          fieldName: "developmentStage",
+          beforeValue: "stage-1",
+          afterValue: "stage-2",
+        }),
+        makeChange({
+          id: "change-named-parent",
+          actorUserId: "user-actor",
+          fieldName: "parentTask",
+          beforeValue: "task-parent-a",
+          afterValue: "task-parent-b",
+        }),
+      ]),
+    );
+    const wrapper = mount(TaskTimeline, {
+      props: {
+        taskId: "task-1",
+        currentUserId: "user-current",
+        users: [
+          {
+            id: "user-current",
+            name: "自分太郎",
+            createdAt: "",
+            updatedAt: "",
+          },
+          {
+            id: "user-actor",
+            name: "操作花子",
+            createdAt: "",
+            updatedAt: "",
+          },
+          {
+            id: "user-next",
+            name: "次郎",
+            createdAt: "",
+            updatedAt: "",
+          },
+        ],
+        cases: [
+          { id: "case-1", name: "案件A", createdAt: "", updatedAt: "" },
+          { id: "case-2", name: "案件B", createdAt: "", updatedAt: "" },
+        ],
+        stages: [
+          {
+            id: "stage-1",
+            name: "設計",
+            kind: "normal",
+            order: 1,
+          },
+          {
+            id: "stage-2",
+            name: "実装",
+            kind: "normal",
+            order: 2,
+          },
+        ],
+        tasks: [
+          {
+            id: "task-parent-a",
+            title: "親A",
+            status: "todo",
+            priority: "medium",
+            detail: null,
+            caseId: null,
+            isRequiredForCase: false,
+            parentTaskId: null,
+            assigneeUserId: null,
+            developmentStageId: null,
+            scheduledEndDate: null,
+            completedAt: null,
+            createdAt: "",
+            updatedAt: "",
+            deletedAt: null,
+          },
+          {
+            id: "task-parent-b",
+            title: "親B",
+            status: "todo",
+            priority: "medium",
+            detail: null,
+            caseId: null,
+            isRequiredForCase: false,
+            parentTaskId: null,
+            assigneeUserId: null,
+            developmentStageId: null,
+            scheduledEndDate: null,
+            completedAt: null,
+            createdAt: "",
+            updatedAt: "",
+            deletedAt: null,
+          },
+        ],
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("自分太郎");
+    expect(wrapper.text()).toContain("操作花子 が担当者を 未設定 から 次郎 に変更しました");
+    expect(wrapper.text()).toContain("操作花子 が案件を 案件A から 案件B に変更しました");
+    expect(wrapper.text()).toContain("操作花子 が開発段階を 設計 から 実装 に移しました");
+    expect(wrapper.text()).toContain("操作花子 が親タスクを 親A から 親B に変更しました");
+    expect(wrapper.text()).not.toContain("user-actor が");
+    expect(wrapper.text()).not.toContain("user-current");
+  });
+
   it("未設定値、詳細変更、必須タスク設定と解除を要件どおり表示する", async () => {
     getTaskTimeline.mockResolvedValue(
       page([

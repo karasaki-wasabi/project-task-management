@@ -300,6 +300,10 @@ onMounted(() => {
         :taskId="taskId"
         :currentUserId="user?.id ?? ''"
         :readOnly="deleted"
+        :users="users"
+        :cases="cases"
+        :stages="stages"
+        :tasks="allTasks"
       />
     </template>
 

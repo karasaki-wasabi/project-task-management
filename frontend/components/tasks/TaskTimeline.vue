@@ -3,10 +3,14 @@ import { onMounted, ref, watch } from "vue";
 import CommentComposer from "../comments/CommentComposer.vue";
 import {
   useApiClient,
+  type Case,
   type Comment,
+  type DevelopmentStage,
+  type Task,
   type TaskTimelineChange,
   type TaskTimelineEntry,
   type TaskTimelineFilter,
+  type User,
 } from "../../composables/useApiClient";
 
 const props = withDefaults(
@@ -14,9 +18,17 @@ const props = withDefaults(
     taskId: string;
     currentUserId: string;
     readOnly?: boolean;
+    users?: User[];
+    cases?: Case[];
+    stages?: DevelopmentStage[];
+    tasks?: Task[];
   }>(),
   {
     readOnly: false,
+    users: () => [],
+    cases: () => [],
+    stages: () => [],
+    tasks: () => [],
   },
 );
 
@@ -37,20 +49,59 @@ const tabs: ReadonlyArray<{ value: TaskTimelineFilter; label: string }> = [
   { value: "changes", label: "変更履歴" },
 ];
 
-function displayValue(value: string | null): string {
-  return value ?? "未設定";
+function userLabel(userId: string | null | undefined): string | null {
+  if (userId == null) return null;
+  return props.users.find((user) => user.id === userId)?.name ?? userId;
+}
+
+function caseLabel(caseId: string | null | undefined): string | null {
+  if (caseId == null) return null;
+  return props.cases.find((item) => item.id === caseId)?.name ?? caseId;
+}
+
+function stageLabel(stageId: string | null | undefined): string | null {
+  if (stageId == null) return null;
+  return props.stages.find((stage) => stage.id === stageId)?.name ?? stageId;
+}
+
+function taskLabel(taskId: string | null | undefined): string | null {
+  if (taskId == null) return null;
+  return props.tasks.find((task) => task.id === taskId)?.title ?? taskId;
+}
+
+function authorLabel(authorUserId: string): string {
+  return userLabel(authorUserId) ?? authorUserId;
 }
 
 function actorLabel(change: TaskTimelineChange): string {
-  if (change.actorUserId) return change.actorUserId;
+  if (change.actorUserId) return userLabel(change.actorUserId) ?? change.actorUserId;
   if (change.actorSourceLabel) return `システム（${change.actorSourceLabel}）`;
   return "システム";
 }
 
+function fieldValueLabel(
+  fieldName: TaskTimelineChange["fieldName"],
+  value: string | null,
+): string {
+  if (value == null) return "未設定";
+  switch (fieldName) {
+    case "assignee":
+      return userLabel(value) ?? value;
+    case "case":
+      return caseLabel(value) ?? value;
+    case "developmentStage":
+      return stageLabel(value) ?? value;
+    case "parentTask":
+      return taskLabel(value) ?? value;
+    default:
+      return value;
+  }
+}
+
 function changeMessage(change: TaskTimelineChange): string {
   const actor = actorLabel(change);
-  const before = displayValue(change.beforeValue);
-  const after = displayValue(change.afterValue);
+  const before = fieldValueLabel(change.fieldName, change.beforeValue);
+  const after = fieldValueLabel(change.fieldName, change.afterValue);
 
   switch (change.fieldName) {
     case "title":
@@ -231,7 +282,7 @@ onMounted(() => {
         >
           <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-              <span class="font-medium text-slate-700">{{ entry.authorUserId }}</span>
+              <span class="font-medium text-slate-700">{{ authorLabel(entry.authorUserId) }}</span>
               <time :datetime="entry.occurredAt">{{ formatDateTime(entry.occurredAt) }}</time>
               <span v-if="entry.editedAt" class="rounded bg-slate-100 px-1.5 py-0.5">
                 編集済み
