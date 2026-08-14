@@ -33,8 +33,15 @@ const NuxtLinkStub = defineComponent({
 
 const ThroughputTrendChartStub = defineComponent({
   name: "ThroughputTrendChart",
-  props: { periods: { type: Array, required: true } },
-  template: `<div data-testid="throughput-trend-chart" />`,
+  props: {
+    periods: { type: Array, required: true },
+    caseName: { type: String, default: null },
+  },
+  template: `
+    <div data-testid="throughput-trend-chart">
+      <span>{{ caseName ? '期間別の消化推移 — ' + caseName : '期間別の消化推移' }}</span>
+    </div>
+  `,
 });
 
 function makeCase(overrides: Partial<Case> = {}): Case {
@@ -98,6 +105,7 @@ describe("ThroughputPage (velocity-dashboard 4.5)", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it("現在ワークスペースがあるとき消化数を読み込む", async () => {
@@ -207,5 +215,89 @@ describe("ThroughputPage (velocity-dashboard 4.5)", () => {
 
     expect(getThroughput).toHaveBeenLastCalledWith("week", 4);
     expect(wrapper.find('[data-testid="case-outlook-panel"]').exists()).toBe(false);
+  });
+
+  it("表示期間を変えると即時再取得する", async () => {
+    getThroughput
+      .mockResolvedValueOnce(makeSummary())
+      .mockResolvedValueOnce(makeSummary());
+
+    const wrapper = mountPage();
+    await flushPromises();
+    const callsBefore = getThroughput.mock.calls.length;
+    expect(getThroughput).toHaveBeenLastCalledWith("week", 4);
+
+    await wrapper.get("select").setValue("month");
+    await flushPromises();
+
+    expect(getThroughput.mock.calls.length).toBe(callsBefore + 1);
+    expect(getThroughput).toHaveBeenLastCalledWith("month", 4);
+    wrapper.unmount();
+  });
+
+  it("表示件数を変えると debounce 後に再取得する", async () => {
+    vi.useFakeTimers();
+    getThroughput
+      .mockResolvedValueOnce(makeSummary())
+      .mockResolvedValueOnce(makeSummary());
+
+    const wrapper = mountPage();
+    await flushPromises();
+    const callsBefore = getThroughput.mock.calls.length;
+    expect(getThroughput).toHaveBeenLastCalledWith("week", 4);
+
+    await wrapper.get('input[type="number"]').setValue(6);
+    await flushPromises();
+    expect(getThroughput.mock.calls.length).toBe(callsBefore);
+
+    await vi.advanceTimersByTimeAsync(300);
+    await flushPromises();
+
+    expect(getThroughput.mock.calls.length).toBe(callsBefore + 1);
+    expect(getThroughput).toHaveBeenLastCalledWith("week", 6);
+    wrapper.unmount();
+  });
+
+  it("表示ボタンを置かない（条件は即時反映）", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+    expect(wrapper.findAll("button").filter((b) => b.text() === "表示")).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it("目安カードは白基調でタスク／ポイント表記と直近平均キャプションを出す", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const forecast = wrapper.get('[data-testid="forecast-summary"]');
+    expect(forecast.text()).toContain("今後の目安（タスク）");
+    expect(forecast.text()).toContain("今後の目安（ポイント）");
+    expect(forecast.text()).toContain("直近1期間の実績平均");
+    expect(forecast.text()).not.toContain("今後の目安（完了タスク数）");
+    expect(wrapper.text()).not.toContain("消化の推移");
+    wrapper.unmount();
+  });
+
+  it("案件選択時はチャート見出しに案件名を載せる", async () => {
+    getThroughput
+      .mockResolvedValueOnce(makeSummary())
+      .mockResolvedValueOnce(makeSummary({ caseOutlook: makeOutlook() }));
+
+    const wrapper = mountPage();
+    await flushPromises();
+    expect(wrapper.text()).toContain("期間別の消化推移");
+    expect(wrapper.text()).not.toContain("期間別の消化推移 — Alpha案件");
+
+    await wrapper.get('[data-testid="case-filter-trigger"]').trigger("click");
+    await nextTick();
+    await wrapper
+      .findAll('[role="option"]')
+      .find((el) => el.text().includes("Alpha案件"))!
+      .trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("期間別の消化推移 — Alpha案件");
+    expect(wrapper.text()).not.toContain("上段=件数");
+    wrapper.unmount();
   });
 });

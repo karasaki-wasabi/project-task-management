@@ -1,12 +1,13 @@
 <!--
   Throughput dashboard (velocity-dashboard 4.5, design.md Frontend/throughput,
-  mock 1c/1d). Controls (periodType, rangeCount, CaseFilterSelect) +
-  ThroughputTrendChart + forecast summary cards + CaseOutlookPanel when a
-  case is selected. No workspace-empty-state — scoping is URL workspaceId
-  and x-workspace-id (Requirements 4.1-4.3, 5.1-5.2, 6.3, 7.1-7.6).
+  mock 1c/1d). Controls (periodType, rangeCount, CaseFilterSelect) apply
+  immediately — period/case on change, rangeCount after a short debounce.
+  ThroughputTrendChart + forecast summary + CaseOutlookPanel when a case is
+  selected. No workspace-empty-state — scoping is URL workspaceId and
+  x-workspace-id (Requirements 4.1-4.3, 5.1-5.2, 6.3, 7.1-7.6).
 -->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import {
   useApiClient,
   type Case,
@@ -21,6 +22,11 @@ import ThroughputTrendChart from "../../../../components/throughput/ThroughputTr
 const FORECAST_INSUFFICIENT_MESSAGE =
   "実績データ不足のため、今後の目安（完了タスク数・完了ストーリーポイント）は表示できません。2 期間以上の実績が集まると表示されます。";
 
+/** backend ThroughputService.FORECAST_WINDOW と同じ窓幅。 */
+const FORECAST_WINDOW = 4;
+
+const RANGE_COUNT_DEBOUNCE_MS = 300;
+
 const api = useApiClient();
 const { currentId } = useCurrentWorkspace();
 
@@ -29,6 +35,8 @@ const rangeCount = ref(4);
 const selectedCaseId = ref<string | null>(null);
 const cases = ref<Case[]>([]);
 const summary = ref<ThroughputSummary | null>(null);
+
+let rangeCountTimer: ReturnType<typeof setTimeout> | null = null;
 
 const selectedCase = computed(
   () => cases.value.find((item) => item.id === selectedCaseId.value) ?? null,
@@ -46,10 +54,23 @@ const hasForecast = computed(() => {
 
 const periodUnitLabel = computed(() => (periodType.value === "month" ? "月" : "週"));
 
+const forecastAverageCaption = computed(() => {
+  const periodCount = summary.value?.periods.length ?? 0;
+  const windowSize = Math.min(FORECAST_WINDOW, periodCount);
+  return `直近${windowSize}期間の実績平均`;
+});
+
 const endDateLabel = computed(() => {
   const endDate = selectedCase.value?.endDate;
   return endDate ? endDate.slice(0, 10) : undefined;
 });
+
+function clearRangeCountTimer() {
+  if (rangeCountTimer !== null) {
+    clearTimeout(rangeCountTimer);
+    rangeCountTimer = null;
+  }
+}
 
 async function loadCases() {
   cases.value = await api.listCases();
@@ -57,9 +78,12 @@ async function loadCases() {
 
 async function load() {
   if (currentId.value === null) return;
+  const count = Number.isFinite(rangeCount.value) && rangeCount.value >= 1
+    ? Math.floor(rangeCount.value)
+    : 1;
   summary.value = selectedCaseId.value
-    ? await api.getThroughput(periodType.value, rangeCount.value, selectedCaseId.value)
-    : await api.getThroughput(periodType.value, rangeCount.value);
+    ? await api.getThroughput(periodType.value, count, selectedCaseId.value)
+    : await api.getThroughput(periodType.value, count);
 }
 
 async function refresh() {
@@ -71,6 +95,7 @@ watch(
   currentId,
   (id, previousId) => {
     if (id === null) {
+      clearRangeCountTimer();
       summary.value = null;
       cases.value = [];
       selectedCaseId.value = null;
@@ -86,9 +111,29 @@ watch(
   { immediate: true },
 );
 
+watch(periodType, () => {
+  if (currentId.value === null) return;
+  clearRangeCountTimer();
+  void load();
+});
+
 watch(selectedCaseId, () => {
   if (currentId.value === null) return;
+  clearRangeCountTimer();
   void load();
+});
+
+watch(rangeCount, () => {
+  if (currentId.value === null) return;
+  clearRangeCountTimer();
+  rangeCountTimer = setTimeout(() => {
+    rangeCountTimer = null;
+    void load();
+  }, RANGE_COUNT_DEBOUNCE_MS);
+});
+
+onBeforeUnmount(() => {
+  clearRangeCountTimer();
 });
 </script>
 
@@ -96,45 +141,36 @@ watch(selectedCaseId, () => {
   <div class="space-y-6">
     <h1 class="text-xl font-semibold tracking-tight">消化数ダッシュボード</h1>
 
-    <form
+    <div
       class="flex flex-wrap items-end gap-3 rounded-lg bg-white p-4 ring-1 ring-slate-200"
-      @submit.prevent="load"
     >
-      <label class="flex flex-col gap-1 text-sm text-slate-700">
-        期間種別
+      <label class="flex flex-col gap-1">
+        <span class="text-sm leading-5 text-slate-700">表示期間</span>
         <select
           v-model="periodType"
-          class="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="h-10 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="week">週</option>
           <option value="month">月</option>
         </select>
       </label>
-      <label class="flex flex-col gap-1 text-sm text-slate-700">
-        表示件数
+      <label class="flex flex-col gap-1">
+        <span class="text-sm leading-5 text-slate-700">表示件数</span>
         <input
           v-model.number="rangeCount"
           type="number"
           min="1"
-          class="w-24 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="h-10 w-28 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
       </label>
       <CaseFilterSelect v-model="selectedCaseId" :cases="cases" />
-      <button
-        type="submit"
-        class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
-      >
-        表示
-      </button>
-    </form>
+    </div>
 
-    <section
+    <ThroughputTrendChart
       v-if="summary"
-      class="rounded-lg bg-white p-4 ring-1 ring-slate-200"
-    >
-      <h2 class="mb-3 text-sm font-semibold text-slate-900">消化の推移</h2>
-      <ThroughputTrendChart :periods="summary.periods" />
-    </section>
+      :periods="summary.periods"
+      :case-name="selectedCase?.name ?? null"
+    />
 
     <template v-if="summary">
       <div
@@ -142,19 +178,21 @@ watch(selectedCaseId, () => {
         class="grid gap-3 sm:grid-cols-2"
         data-testid="forecast-summary"
       >
-        <div class="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          <p class="text-xs font-medium text-blue-600">今後の目安（完了タスク数）</p>
-          <p class="mt-1 text-lg font-semibold">
+        <div class="rounded-lg bg-white px-4 py-4 shadow-sm ring-1 ring-slate-200">
+          <p class="text-xs font-medium text-slate-500">今後の目安（タスク）</p>
+          <p class="mt-1.5 text-2xl font-semibold tracking-tight text-slate-900">
             {{ summary.forecastNextPeriodCount }}
-            <span class="text-sm font-medium">件/{{ periodUnitLabel }}</span>
+            <span class="text-sm font-medium text-slate-600">件 / {{ periodUnitLabel }}</span>
           </p>
+          <p class="mt-1 text-xs text-slate-400">{{ forecastAverageCaption }}</p>
         </div>
-        <div class="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          <p class="text-xs font-medium text-blue-600">今後の目安（完了ストーリーポイント）</p>
-          <p class="mt-1 text-lg font-semibold">
+        <div class="rounded-lg bg-white px-4 py-4 shadow-sm ring-1 ring-slate-200">
+          <p class="text-xs font-medium text-slate-500">今後の目安（ポイント）</p>
+          <p class="mt-1.5 text-2xl font-semibold tracking-tight text-slate-900">
             {{ summary.forecastNextPeriodPoints }}
-            <span class="text-sm font-medium">pt/{{ periodUnitLabel }}</span>
+            <span class="text-sm font-medium text-slate-600">pt / {{ periodUnitLabel }}</span>
           </p>
+          <p class="mt-1 text-xs text-slate-400">{{ forecastAverageCaption }}</p>
         </div>
       </div>
       <p

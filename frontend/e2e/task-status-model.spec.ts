@@ -338,14 +338,20 @@ test("moving a card to the completed column updates throughput (Requirements 2.1
   // the previous UTC week so the dashboard can reflect it.
   backdateExistingCompletedAt(taskId!, previousWeekMidUtcIso());
 
+  const throughputResponse = page.waitForResponse(
+    (res) =>
+      res.request().method() === "GET" &&
+      /\/api\/throughput/.test(res.url()) &&
+      res.ok(),
+  );
   await page.goto(workspacePagePath(workspace.id, "throughput"));
   await expect(page.getByRole("heading", { name: "消化数ダッシュボード" })).toBeVisible();
-  await page.getByRole("button", { name: "表示", exact: true }).click();
-  const countCells = page.locator("tbody tr td:nth-child(3)");
-  await expect.poll(async () => {
-    const texts = await countCells.allTextContents();
-    return texts.map((t) => Number(t.trim())).reduce((a, b) => a + b, 0);
-  }).toBeGreaterThanOrEqual(1);
+  const body = (await (await throughputResponse).json()) as {
+    periods: Array<{ completedCount: number }>;
+  };
+  const totalCount = body.periods.reduce((sum, period) => sum + period.completedCount, 0);
+  expect(totalCount).toBeGreaterThanOrEqual(1);
+  await expect(page.getByTestId("throughput-trend-chart")).toBeVisible();
 
   expect(member.id).toBeTruthy();
 });

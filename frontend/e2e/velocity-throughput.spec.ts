@@ -65,7 +65,6 @@ test("案件フィルタ切替で見通しパネルが出し分けられ、実�
 
   // Fewer than 2 periods → forecast cards become the insufficient-data notice.
   const rangeInput = page.getByLabel("表示件数");
-  await rangeInput.fill("1");
   const insufficientLoad = page.waitForResponse(
     (res) =>
       res.request().method() === "GET" &&
@@ -74,7 +73,7 @@ test("案件フィルタ切替で見通しパネルが出し分けられ、実�
       !res.url().includes("caseId=") &&
       res.ok(),
   );
-  await page.getByRole("button", { name: "表示", exact: true }).click();
+  await rangeInput.fill("1");
   await insufficientLoad;
 
   await expect(page.getByTestId("throughput-trend-chart")).toBeVisible();

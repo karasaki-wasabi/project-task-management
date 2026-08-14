@@ -45,7 +45,6 @@ async function selectCaseFilter(page: import("@playwright/test").Page, optionLab
 /** Force rangeCount=1 so forecast is insufficient (need ≥2 periods). */
 async function applyInsufficientRange(page: import("@playwright/test").Page) {
   const rangeInput = page.getByLabel("表示件数");
-  await rangeInput.fill("1");
   const load = page.waitForResponse(
     (res) =>
       res.request().method() === "GET" &&
@@ -53,7 +52,7 @@ async function applyInsufficientRange(page: import("@playwright/test").Page) {
       /[?&]rangeCount=1(?:&|$)/.test(res.url()) &&
       res.ok(),
   );
-  await page.getByRole("button", { name: "表示", exact: true }).click();
+  await rangeInput.fill("1");
   await load;
 }
 

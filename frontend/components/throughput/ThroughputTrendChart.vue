@@ -24,13 +24,24 @@ import {
   pointsTickY,
 } from "./ThroughputTrendChart.helpers";
 
-const props = defineProps<{
-  periods: ThroughputPeriod[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    periods: ThroughputPeriod[];
+    /** 案件選択時は見出しに「— 案件名」を付ける（モック 1d）。 */
+    caseName?: string | null;
+  }>(),
+  {
+    caseName: null,
+  },
+);
 
 const hoveredIndex = ref<number | null>(null);
 
 const layout = computed(() => buildChartLayout(props.periods));
+
+const chartTitle = computed(() =>
+  props.caseName ? `期間別の消化推移 — ${props.caseName}` : "期間別の消化推移",
+);
 
 function onEnter(index: number) {
   hoveredIndex.value = index;
@@ -51,19 +62,40 @@ function highlightX(index: number): number | null {
     data-testid="throughput-trend-chart"
     class="rounded-md bg-white p-5 ring-1 ring-slate-200 shadow-sm"
   >
-    <div class="mb-2.5 flex flex-wrap items-baseline justify-between gap-3">
-      <h2 class="text-sm font-semibold text-slate-900">期間別の消化推移</h2>
-      <p class="text-xs text-slate-500">
-        同じ期間が上下で縦に整列。指標ごとに独立した軸なので、2指標を重ねません。
-      </p>
-    </div>
+    <h2 class="mb-2.5 text-sm font-semibold text-slate-900">{{ chartTitle }}</h2>
 
-    <svg
-      :viewBox="`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`"
-      class="block h-auto w-full"
-      role="img"
-      aria-label="期間別の完了タスク数と完了ストーリーポイントの推移"
-    >
+    <!--
+      系列ラベルは SVG 外の HTML にする。viewBox スケールで font-size="12" が
+      見出し(14px)より大きく見えるのを防ぐ。
+    -->
+    <div class="relative">
+      <p
+        class="pointer-events-none absolute z-10 text-xs font-medium leading-none text-slate-500"
+        :style="{
+          left: `${(PLOT_LEFT / CHART_WIDTH) * 100}%`,
+          top: `${(11 / CHART_HEIGHT) * 100}%`,
+          transform: 'translateY(-50%)',
+        }"
+      >
+        完了タスク数（件）
+      </p>
+      <p
+        class="pointer-events-none absolute z-10 text-xs font-medium leading-none text-slate-500"
+        :style="{
+          left: `${(PLOT_LEFT / CHART_WIDTH) * 100}%`,
+          top: `${(161 / CHART_HEIGHT) * 100}%`,
+          transform: 'translateY(-50%)',
+        }"
+      >
+        完了ストーリーポイント（pt）
+      </p>
+
+      <svg
+        :viewBox="`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`"
+        class="block h-auto w-full"
+        role="img"
+        aria-label="期間別の完了タスク数と完了ストーリーポイントの推移"
+      >
       <!-- Hover column bands (full height of both panels) -->
       <g v-if="hoveredIndex !== null && highlightX(hoveredIndex) !== null">
         <line
@@ -89,7 +121,6 @@ function highlightX(index: number): number | null {
       </g>
 
       <!-- Top panel: completed count bars -->
-      <text :x="PLOT_LEFT" y="11" font-size="12" fill="#64748b">完了タスク数（件）</text>
       <line
         v-for="tick in layout.countAxis.values"
         :key="`count-grid-${tick}`"
@@ -137,7 +168,6 @@ function highlightX(index: number): number | null {
       </text>
 
       <!-- Bottom panel: completed points line -->
-      <text :x="PLOT_LEFT" y="161" font-size="12" fill="#64748b">完了ストーリーポイント（pt）</text>
       <line
         v-for="tick in layout.pointsAxis.values"
         :key="`points-grid-${tick}`"
@@ -226,26 +256,7 @@ function highlightX(index: number): number | null {
         @mouseenter="onEnter(point.index)"
         @mouseleave="onLeave"
       />
-    </svg>
-
-    <div
-      class="mt-2.5 flex items-start gap-2 border-t border-slate-100 pt-2.5 text-xs text-slate-500"
-    >
-      <svg
-        class="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400"
-        viewBox="0 0 20 20"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.6"
-        aria-hidden="true"
-      >
-        <circle cx="10" cy="10" r="7.5" />
-        <path d="M10 9v5M10 6.2v.6" stroke-linecap="round" />
       </svg>
-      <span>
-        期間ラベルは下段に1回だけ。ホバーで上下段の同じ期間が同時にハイライトされ、件数と
-        pt を突き合わせられる。
-      </span>
     </div>
   </div>
 </template>

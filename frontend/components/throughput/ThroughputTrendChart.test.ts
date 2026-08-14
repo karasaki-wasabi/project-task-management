@@ -114,4 +114,17 @@ describe("ThroughputTrendChart (velocity-dashboard 4.2, Req 5.1-5.3)", () => {
     expect(wrapper.findAll('[data-testid="count-bar"]')).toHaveLength(0);
     expect(wrapper.findAll('[data-testid="points-dot"]')).toHaveLength(0);
   });
+
+  it("実装説明文を出さず、案件名があるときだけ見出しを切り替える", async () => {
+    const wrapper = mountChart();
+    expect(wrapper.text()).toContain("期間別の消化推移");
+    expect(wrapper.text()).not.toContain("同じ期間が上下で縦に整列");
+    expect(wrapper.text()).not.toContain("期間ラベルは下段に1回だけ");
+    expect(wrapper.text()).not.toContain("上段=件数");
+
+    await wrapper.setProps({ caseName: "決済リニューアル" });
+    await nextTick();
+    expect(wrapper.text()).toContain("期間別の消化推移 — 決済リニューアル");
+    expect(wrapper.text()).not.toContain("上段=件数 / 下段=pt、期間で縦に整列");
+  });
 });

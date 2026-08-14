@@ -108,14 +108,14 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="rootEl" class="relative inline-flex flex-col gap-1">
-    <label class="text-sm text-slate-700" for="case-filter-trigger">
+    <label class="text-sm leading-5 text-slate-700" for="case-filter-trigger">
       案件で絞り込み
     </label>
     <button
       id="case-filter-trigger"
       data-testid="case-filter-trigger"
       type="button"
-      class="flex min-w-[14rem] items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-left text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      class="flex h-10 min-w-[16rem] items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 text-left text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
       :aria-expanded="open"
       aria-haspopup="listbox"
       @click="toggleDropdown"
