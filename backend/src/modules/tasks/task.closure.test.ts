@@ -1,13 +1,26 @@
 // RED→GREEN: TaskClosure single definition (task 1.3; Requirements 3.1, 3.2, 3.3)
-import { describe, expect, it } from "vitest";
+// leafTaskFilter (velocity-dashboard task 1.2; Requirement 3.3)
+import { randomUUID } from "node:crypto";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { DevelopmentStageKind } from "@prisma/client";
+import { db } from "../../shared/db.js";
+import { createUserData } from "../../test/user.fixture.js";
 import {
   closedTaskFilter,
   completedTaskFilter,
+  leafTaskFilter,
   openTaskFilter,
   resolveClosureState,
   type TaskClosureState,
 } from "./task.closure.js";
+
+async function hardDelete(table: string, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.$executeRawUnsafe(
+    `DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`,
+    ...ids,
+  );
+}
 
 const ALL_KINDS: ReadonlyArray<DevelopmentStageKind | null> = [
   null,
@@ -113,5 +126,96 @@ describe("Prisma filter helpers (task 1.3)", () => {
       }),
     );
     expect(openTaskFilter).toEqual({ NOT: closedTaskFilter });
+  });
+
+  it("defines leaf filter as no non-deleted direct children (velocity-dashboard 1.2; Requirement 3.3)", () => {
+    expect(leafTaskFilter).toEqual({
+      childTasks: { none: { deletedAt: null } },
+    });
+  });
+});
+
+describe("leafTaskFilter behavior (velocity-dashboard 1.2; Requirement 3.3)", () => {
+  let workspaceId: string;
+  let userId: string;
+
+  beforeAll(async () => {
+    const user = await db.user.create({ data: createUserData("leaf-filter") });
+    userId = user.id;
+    const workspace = await db.workspace.create({
+      data: { name: `leaf-filter-${randomUUID()}`, createdByUserId: userId },
+    });
+    workspaceId = workspace.id;
+  });
+
+  afterAll(async () => {
+    await hardDelete("workspaces", [workspaceId]);
+    await hardDelete("users", [userId]);
+    await db.$disconnect();
+  });
+
+  it("matches a task whose children are all soft-deleted", async () => {
+    const parent = await db.task.create({
+      data: {
+        title: `leaf-parent-${randomUUID()}`,
+        priority: "low",
+        workspaceId,
+      },
+    });
+    const activeSiblingParent = await db.task.create({
+      data: {
+        title: `non-leaf-parent-${randomUUID()}`,
+        priority: "low",
+        workspaceId,
+      },
+    });
+    const softDeletedChild = await db.task.create({
+      data: {
+        title: `soft-child-${randomUUID()}`,
+        priority: "low",
+        workspaceId,
+        parentTaskId: parent.id,
+      },
+    });
+    const activeChild = await db.task.create({
+      data: {
+        title: `active-child-${randomUUID()}`,
+        priority: "low",
+        workspaceId,
+        parentTaskId: activeSiblingParent.id,
+      },
+    });
+    const trueLeaf = await db.task.create({
+      data: {
+        title: `true-leaf-${randomUUID()}`,
+        priority: "low",
+        workspaceId,
+      },
+    });
+
+    await db.task.delete({ where: { id: softDeletedChild.id } });
+
+    try {
+      const matched = await db.task.findMany({
+        where: {
+          id: { in: [parent.id, activeSiblingParent.id, trueLeaf.id] },
+          AND: [leafTaskFilter],
+        },
+        select: { id: true },
+      });
+      const matchedIds = matched.map((row) => row.id);
+
+      expect(matchedIds).toContain(parent.id);
+      expect(matchedIds).toContain(trueLeaf.id);
+      expect(matchedIds).not.toContain(activeSiblingParent.id);
+    } finally {
+      await hardDelete("tasks", [
+        softDeletedChild.id,
+        activeChild.id,
+        parent.id,
+        activeSiblingParent.id,
+        trueLeaf.id,
+      ]);
+    }
   });
 });

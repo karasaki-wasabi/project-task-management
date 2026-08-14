@@ -21,6 +21,15 @@ export const openTaskFilter: Prisma.TaskWhereInput = {
   NOT: closedTaskFilter,
 };
 
+/**
+ * 直接の子のうち deletedAt が null のものが 0 件のタスク（葉）に一致する。
+ * ソフトデリート拡張はネストしたリレーション条件に自動適用されないため、
+ * deletedAt: null を明示する。子が全員ソフトデリート済みなら葉とみなす。
+ */
+export const leafTaskFilter: Prisma.TaskWhereInput = {
+  childTasks: { none: { deletedAt: null } },
+};
+
 /** 段階の種別からクローズ状態を求める。段階未設定は "open"。 */
 export function resolveClosureState(
   kind: DevelopmentStageKind | null,

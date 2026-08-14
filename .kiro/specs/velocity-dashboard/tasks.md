@@ -9,7 +9,7 @@
   - 完了条件: `prisma migrate reset`後、`SHOW CREATE TABLE tasks`で`story_points`列が存在し、既存の生成列・UNIQUE制約が保持されていることを確認できる
   - _Requirements: 1.2, 1.4_
 
-- [ ] 1.2 (P) 葉タスク判定フィルタの追加
+- [x] 1.2 (P) 葉タスク判定フィルタの追加
   - `task.closure.ts`に`leafTaskFilter`(直接の子のうち`deletedAt`が`null`のものが0件、というPrisma `WhereInput`)を追加する
   - tasks モジュール外（throughput を含む）からは import しない。利用は`taskIntegrityService` / `taskRepository`に閉じる
   - 完了条件: 子が全員ソフトデリート済みのタスクに対しても`leafTaskFilter`が真になることを単体テストで確認できる。`module-boundary.guard.test.ts`の task.closure 漏洩検査が緑のままである
