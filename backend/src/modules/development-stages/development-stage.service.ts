@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
+import type { DbClient } from "../../shared/soft-delete.repository.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { developmentStageRepository } from "./development-stage.repository.js";
 import type { DevelopmentStage } from "./development-stage.types.js";
@@ -40,8 +41,16 @@ export const developmentStagesService = {
     return developmentStageRepository.create(name, insertOrder, workspaceId);
   },
 
-  getById(id: string, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage | null> {
-    return developmentStageRepository.findById(id, workspaceId);
+  getById(
+    id: string,
+    workspaceId: VerifiedWorkspaceId,
+    client?: DbClient,
+  ): Promise<DevelopmentStage | null> {
+    return developmentStageRepository.findById(id, workspaceId, client);
+  },
+
+  async ensureTerminalStages(workspaceId: VerifiedWorkspaceId, client: DbClient): Promise<void> {
+    await developmentStageRepository.createTerminalStages(workspaceId, client);
   },
 
   async rename(id: string, workspaceId: VerifiedWorkspaceId, name: string): Promise<DevelopmentStage> {

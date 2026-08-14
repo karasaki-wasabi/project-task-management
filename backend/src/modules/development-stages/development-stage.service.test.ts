@@ -345,3 +345,106 @@ describe("developmentStagesService kind invariants (task-status-model 2.2, Requi
     expect(reordered[2].kind).toBe("completed");
   });
 });
+
+describe("developmentStagesService getById(client) and ensureTerminalStages (module-boundary-cleanup 2.2)", () => {
+  let terminalWorkspace: VerifiedWorkspaceId;
+
+  beforeAll(async () => {
+    const workspace = await db.workspace.create({
+      data: { name: `stage-svc-terminal-${randomUUID()}`, createdByUserId: userId },
+    });
+    terminalWorkspace = asVerified(workspace.id);
+  });
+
+  afterAll(async () => {
+    await db.$executeRawUnsafe(`DELETE FROM development_stages WHERE workspace_id = ?`, terminalWorkspace);
+    await hardDelete("workspaces", [terminalWorkspace]);
+  });
+
+  it("getById sees uncommitted rows via the TX client and not via the default client (Requirement 3.2)", async () => {
+    await expect(
+      db.$transaction(async (tx) => {
+        const created = await tx.developmentStage.create({
+          data: {
+            name: `tx-get-${randomUUID()}`,
+            order: 50,
+            kind: "normal",
+            workspaceId: terminalWorkspace,
+          },
+        });
+
+        const inside = await developmentStagesService.getById(created.id, terminalWorkspace, tx);
+        expect(inside).toMatchObject({
+          id: created.id,
+          workspaceId: terminalWorkspace,
+          kind: "normal",
+          name: created.name,
+        });
+
+        const outside = await developmentStagesService.getById(created.id, terminalWorkspace);
+        expect(outside).toBeNull();
+
+        throw new Error("rollback-getById-tx-proof");
+      }),
+    ).rejects.toThrow("rollback-getById-tx-proof");
+  });
+
+  it("getById with a TX client still returns null for another workspace (Requirement 1.4)", async () => {
+    await expect(
+      db.$transaction(async (tx) => {
+        const created = await tx.developmentStage.create({
+          data: {
+            name: `tx-scope-${randomUUID()}`,
+            order: 51,
+            kind: "normal",
+            workspaceId: workspaceB,
+          },
+        });
+
+        expect(await developmentStagesService.getById(created.id, terminalWorkspace, tx)).toBeNull();
+        expect(await developmentStagesService.getById(created.id, workspaceB, tx)).toMatchObject({
+          id: created.id,
+        });
+
+        throw new Error("rollback-getById-scope-tx-proof");
+      }),
+    ).rejects.toThrow("rollback-getById-scope-tx-proof");
+  });
+
+  it("ensureTerminalStages creates completed/cancelled with the same initial state as workspace create (Requirement 4.4)", async () => {
+    await expect(
+      db.$transaction(async (tx) => {
+        await developmentStagesService.ensureTerminalStages(terminalWorkspace, tx);
+
+        const stages = await tx.developmentStage.findMany({
+          where: { workspaceId: terminalWorkspace },
+          orderBy: { order: "asc" },
+        });
+        expect(stages.map((s) => ({ name: s.name, kind: s.kind, order: s.order }))).toEqual([
+          { name: "完了", kind: "completed", order: 0 },
+          { name: "中止", kind: "cancelled", order: 1 },
+        ]);
+
+        const completed = stages[0];
+        const cancelled = stages[1];
+        expect(await developmentStagesService.getById(completed.id, terminalWorkspace, tx)).toMatchObject({
+          name: "完了",
+          kind: "completed",
+          order: 0,
+          workspaceId: terminalWorkspace,
+        });
+        expect(await developmentStagesService.getById(cancelled.id, terminalWorkspace, tx)).toMatchObject({
+          name: "中止",
+          kind: "cancelled",
+          order: 1,
+          workspaceId: terminalWorkspace,
+        });
+
+        expect(await developmentStagesService.getById(completed.id, terminalWorkspace)).toBeNull();
+        expect(await developmentStagesService.getById(cancelled.id, terminalWorkspace)).toBeNull();
+
+        throw new Error("rollback-ensureTerminal-tx-proof");
+      }),
+    ).rejects.toThrow("rollback-ensureTerminal-tx-proof");
+  });
+});
