@@ -61,6 +61,27 @@ async function onStatusChange(id: string, status: TaskStatus) {
 
 新しく状態変更・作成・削除のAPI呼び出しをページに追加する際は、このパターン(エラーref + try/catch + `role="alert"`表示)を必ず踏襲する。
 
-## フロントエンド: 未捕捉エラーの自動通報
+## フロントエンド: 未捕捉エラーの自動通報と Error Page
 
-`frontend/plugins/error-reporter.client.ts` が Vueのグローバルエラーハンドラ・`window.onerror`・`unhandledrejection`を購読し、`POST /api/client-errors`へ自動送信する。同一エラーの連続送信は `useErrorReportRateLimit.ts` の純粋関数(時間窓ベース)で抑制する。この通報自体が失敗しても`.catch(() => {})`で握りつぶし、エラー通報の失敗がアプリの動作に影響しないようにする。個別ページで独自のグローバルエラーキャッチを実装しない — このプラグインに一元化する。
+`frontend/plugins/error-reporter.client.ts` が Vueのグローバルエラーハンドラ・`window.onerror`・`unhandledrejection`を購読する。購読箇所は増やさず、このプラグインに一元化する。個別ページで独自のグローバルエラーキャッチを実装しない。
+
+反応は2つに分ける。
+
+- 通報
+  - `POST /api/client-errors` へ自動送信する
+  - 同一エラーの連続送信は `useErrorReportRateLimit.ts` の純粋関数(時間窓ベース)で抑制する
+  - 通報自体が失敗しても握りつぶし、アプリの動作に影響させない
+- Error Page 表示
+  - 通報とは独立して `showError` を呼び、`frontend/error.vue` へ載せる
+  - Vue のレンダリングエラーは常に Error Page へ載せる
+  - `window` の `error` / `unhandledrejection` は、捕捉した値が `Error` インスタンスのときだけ Error Page を出す。それ以外は通報のみ行う
+  - レート制限は通報にだけ適用し、画面表示には適用しない
+
+## フロントエンド: fatal エラーとインラインエラーの役割分担
+
+- fatal エラー
+  - ルーティング由来の `createError` / `showError`(例: 非所属ワークスペースの 404)と、上記プラグインが載せた実行時エラーは、いずれも `frontend/error.vue` で表示する
+  - statusCode 別の文言・導線は `useErrorPageContent` が決める
+  - ページ内の 409 等はここに載せない
+- インラインエラー
+  - 業務ルール違反(409 等)は従来どおり各ページの `try/catch` と `ErrorAlert.vue` 等で表示する
