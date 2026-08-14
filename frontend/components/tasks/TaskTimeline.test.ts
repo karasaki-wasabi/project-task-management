@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import type { ComponentMountingOptions } from "@vue/test-utils";
 import TaskTimeline from "./TaskTimeline.vue";
+import UserAvatar from "../shared/UserAvatar.vue";
 import type {
   Comment,
   TaskTimelineChange,
@@ -66,12 +68,21 @@ function page(items: TaskTimelinePage["items"], nextCursor: string | null = null
   return { items, nextCursor };
 }
 
-function mountTimeline(readOnly = false) {
+function mountTimeline(
+  readOnly = false,
+  extra: ComponentMountingOptions<typeof TaskTimeline>["props"] = {},
+) {
   return mount(TaskTimeline, {
     props: {
       taskId: "task-1",
       currentUserId: "user-current",
       readOnly,
+      ...extra,
+    },
+    global: {
+      components: {
+        UserAvatar,
+      },
     },
   });
 }
@@ -166,85 +177,81 @@ describe("TaskTimeline", () => {
         }),
       ]),
     );
-    const wrapper = mount(TaskTimeline, {
-      props: {
-        taskId: "task-1",
-        currentUserId: "user-current",
-        users: [
-          {
-            id: "user-current",
-            name: "自分太郎",
-            createdAt: "",
-            updatedAt: "",
-          },
-          {
-            id: "user-actor",
-            name: "操作花子",
-            createdAt: "",
-            updatedAt: "",
-          },
-          {
-            id: "user-next",
-            name: "次郎",
-            createdAt: "",
-            updatedAt: "",
-          },
-        ],
-        cases: [
-          { id: "case-1", name: "案件A", createdAt: "", updatedAt: "" },
-          { id: "case-2", name: "案件B", createdAt: "", updatedAt: "" },
-        ],
-        stages: [
-          {
-            id: "stage-1",
-            name: "設計",
-            kind: "normal",
-            order: 1,
-          },
-          {
-            id: "stage-2",
-            name: "実装",
-            kind: "normal",
-            order: 2,
-          },
-        ],
-        tasks: [
-          {
-            id: "task-parent-a",
-            title: "親A",
-            status: "todo",
-            priority: "medium",
-            detail: null,
-            caseId: null,
-            isRequiredForCase: false,
-            parentTaskId: null,
-            assigneeUserId: null,
-            developmentStageId: null,
-            scheduledEndDate: null,
-            completedAt: null,
-            createdAt: "",
-            updatedAt: "",
-            deletedAt: null,
-          },
-          {
-            id: "task-parent-b",
-            title: "親B",
-            status: "todo",
-            priority: "medium",
-            detail: null,
-            caseId: null,
-            isRequiredForCase: false,
-            parentTaskId: null,
-            assigneeUserId: null,
-            developmentStageId: null,
-            scheduledEndDate: null,
-            completedAt: null,
-            createdAt: "",
-            updatedAt: "",
-            deletedAt: null,
-          },
-        ],
-      },
+    const wrapper = mountTimeline(false, {
+      users: [
+        {
+          id: "user-current",
+          name: "自分太郎",
+          createdAt: "",
+          updatedAt: "",
+        },
+        {
+          id: "user-actor",
+          name: "操作花子",
+          createdAt: "",
+          updatedAt: "",
+        },
+        {
+          id: "user-next",
+          name: "次郎",
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      cases: [
+        { id: "case-1", name: "案件A", createdAt: "", updatedAt: "" },
+        { id: "case-2", name: "案件B", createdAt: "", updatedAt: "" },
+      ],
+      stages: [
+        {
+          id: "stage-1",
+          name: "設計",
+          kind: "normal",
+          order: 1,
+        },
+        {
+          id: "stage-2",
+          name: "実装",
+          kind: "normal",
+          order: 2,
+        },
+      ],
+      tasks: [
+        {
+          id: "task-parent-a",
+          title: "親A",
+          status: "todo",
+          priority: "medium",
+          detail: null,
+          caseId: null,
+          isRequiredForCase: false,
+          parentTaskId: null,
+          assigneeUserId: null,
+          developmentStageId: null,
+          scheduledEndDate: null,
+          completedAt: null,
+          createdAt: "",
+          updatedAt: "",
+          deletedAt: null,
+        },
+        {
+          id: "task-parent-b",
+          title: "親B",
+          status: "todo",
+          priority: "medium",
+          detail: null,
+          caseId: null,
+          isRequiredForCase: false,
+          parentTaskId: null,
+          assigneeUserId: null,
+          developmentStageId: null,
+          scheduledEndDate: null,
+          completedAt: null,
+          createdAt: "",
+          updatedAt: "",
+          deletedAt: null,
+        },
+      ],
     });
     await flushPromises();
 
@@ -537,5 +544,62 @@ describe("TaskTimeline", () => {
     expect(getTaskTimeline).toHaveBeenLastCalledWith("task-2", {
       filter: "comments" satisfies TaskTimelineFilter,
     });
+  });
+
+  it("コメント投稿者のイニシャル円を UserAvatar に置き換え、氏名は渡さない", async () => {
+    getTaskTimeline.mockResolvedValue(
+      page([
+        makeComment(),
+        makeComment({
+          id: "comment-other",
+          authorUserId: "user-other",
+          body: "他人のコメント",
+        }),
+      ]),
+    );
+    const wrapper = mountTimeline();
+    await flushPromises();
+
+    const avatars = wrapper.findAllComponents(UserAvatar);
+    expect(avatars).toHaveLength(2);
+    expect(avatars[0]!.props("userId")).toBe("user-current");
+    expect(avatars[1]!.props("userId")).toBe("user-other");
+    for (const avatar of avatars) {
+      expect(avatar.props("size")).toBe(32);
+      expect(avatar.props("name")).toBeUndefined();
+      expect(avatar.attributes("aria-hidden")).toBe("true");
+    }
+    expect(wrapper.find(".bg-blue-50").exists()).toBe(false);
+    expect(wrapper.find(".bg-slate-100.text-slate-600").exists()).toBe(false);
+  });
+
+  it("投稿者が users にいなくても生の authorUserId で UserAvatar を出す", async () => {
+    getTaskTimeline.mockResolvedValue(
+      page([
+        makeComment({
+          id: "comment-unresolved",
+          authorUserId: "deleted-user-id",
+          body: "削除済みユーザーのコメント",
+        }),
+      ]),
+    );
+    const wrapper = mountTimeline(false, { users: [] });
+    await flushPromises();
+
+    const avatar = wrapper.getComponent(UserAvatar);
+    expect(avatar.props("userId")).toBe("deleted-user-id");
+    expect(avatar.props("name")).toBeUndefined();
+    expect(avatar.props("size")).toBe(32);
+    expect(avatar.attributes("aria-hidden")).toBe("true");
+    expect(wrapper.text()).toContain("削除済みユーザーのコメント");
+  });
+
+  it("操作ログの変更文言には UserAvatar を埋め込まない", async () => {
+    getTaskTimeline.mockResolvedValue(page([makeChange()]));
+    const wrapper = mountTimeline();
+    await flushPromises();
+
+    expect(wrapper.findComponent(UserAvatar).exists()).toBe(false);
+    expect(wrapper.text()).toMatch(/タイトルを 変更前 から 変更後 に変更しました/);
   });
 });
