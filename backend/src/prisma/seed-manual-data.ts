@@ -4,6 +4,8 @@
  *
  * シードはマイグレーション後に新規ワークスペースを作るため、当該 WS 向けに
  * 完了種別・中止種別の段階をちょうど 1 つずつ投入する（task-status-model 1.2）。
+ * 消化数ダッシュボード確認用に、過去週の完了タスクとストーリーポイントも入れる
+ * （velocity-dashboard）。
  */
 import { hash } from "@node-rs/argon2";
 import type { PrismaClient } from "@prisma/client";
@@ -32,6 +34,13 @@ export const SEED_TASK_KANBAN_ID = "66666666-6666-4666-8666-666666666603";
 export const SEED_TASK_DONE_ID = "66666666-6666-4666-8666-666666666604";
 export const SEED_TASK_CHILD_SIBLING_ID = "66666666-6666-4666-8666-666666666605";
 export const SEED_TASK_GRANDCHILD_ID = "66666666-6666-4666-8666-666666666606";
+/** 消化数ダッシュボード確認用（過去週の完了・ポイント実績）。 */
+export const SEED_TASK_VELOCITY_W1A_ID = "66666666-6666-4666-8666-666666666611";
+export const SEED_TASK_VELOCITY_W1B_ID = "66666666-6666-4666-8666-666666666612";
+export const SEED_TASK_VELOCITY_W2A_ID = "66666666-6666-4666-8666-666666666613";
+export const SEED_TASK_VELOCITY_W2B_ID = "66666666-6666-4666-8666-666666666614";
+export const SEED_TASK_VELOCITY_W3A_ID = "66666666-6666-4666-8666-666666666615";
+export const SEED_TASK_VELOCITY_W3B_ID = "66666666-6666-4666-8666-666666666616";
 export const SEED_TEMPLATE_ID = "77777777-7777-4777-8777-777777777701";
 export const SEED_HOLIDAY_ID = "88888888-8888-4888-8888-888888888801";
 
@@ -82,6 +91,26 @@ function atUtc(
   date.setUTCDate(date.getUTCDate() - daysBefore);
   date.setUTCHours(hour, minute, 0, 0);
   return date;
+}
+
+/** UTC 月曜始まり。throughput の期間境界と同じ。 */
+function startOfWeekContainingUTC(date: Date): Date {
+  const midnight = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const daysSinceMonday = (midnight.getUTCDay() + 6) % 7;
+  midnight.setUTCDate(midnight.getUTCDate() - daysSinceMonday);
+  return midnight;
+}
+
+/**
+ * 完全に終わった過去週の完了時刻。
+ * weeksAgo=1 は直前の週（進行中の今週は含めない）。dayOffset は月曜からの日数(0–6)。
+ */
+function completedInPastWeek(weeksAgo: number, dayOffset: number, hour = 12): Date {
+  const start = startOfWeekContainingUTC(new Date());
+  const completed = new Date(start);
+  completed.setUTCDate(completed.getUTCDate() - weeksAgo * 7 + dayOffset);
+  completed.setUTCHours(hour, 0, 0, 0);
+  return completed;
 }
 
 export async function seedManualConfirmationData(
@@ -219,6 +248,7 @@ export async function seedManualConfirmationData(
   });
 
   // 詳細ページの親子表示確認用: 親 → 子2件（うち1件はさらに孫を持つ）
+  // 葉に storyPoints、親は合算値（サービス再計算相当をシードで直接入れる）
   await prisma.task.create({
     data: {
       id: SEED_TASK_ROOT_ID,
@@ -231,6 +261,7 @@ export async function seedManualConfirmationData(
       assigneeUserId: SEED_USER_ID,
       developmentStageId: SEED_STAGE_DOING_ID,
       scheduledEndDate: utcDate(year, month, day),
+      storyPoints: 8,
       workspaceId: SEED_WORKSPACE_ID,
     },
   });
@@ -248,6 +279,7 @@ export async function seedManualConfirmationData(
       assigneeUserId: SEED_USER_TANAKA_ID,
       developmentStageId: SEED_STAGE_BACKLOG_ID,
       scheduledEndDate: utcDate(year, month, Math.min(28, day + 1)),
+      storyPoints: 3,
       workspaceId: SEED_WORKSPACE_ID,
     },
   });
@@ -265,6 +297,7 @@ export async function seedManualConfirmationData(
       assigneeUserId: SEED_USER_SUZUKI_ID,
       developmentStageId: SEED_STAGE_DOING_ID,
       scheduledEndDate: utcDate(year, month, Math.min(28, day + 3)),
+      storyPoints: 5,
       workspaceId: SEED_WORKSPACE_ID,
     },
   });
@@ -282,6 +315,7 @@ export async function seedManualConfirmationData(
       assigneeUserId: SEED_USER_SATO_ID,
       developmentStageId: SEED_STAGE_BACKLOG_ID,
       scheduledEndDate: utcDate(year, month, Math.min(28, day + 5)),
+      storyPoints: 3,
       workspaceId: SEED_WORKSPACE_ID,
     },
   });
@@ -369,6 +403,7 @@ export async function seedManualConfirmationData(
   });
 
   // 完了段階上のタスク: status は段階内作業状態のため not_started（4.4 と整合）
+  // completedAt は直前週へ置き、進行中週の実績母数から除外されないようにする
   await prisma.task.create({
     data: {
       id: SEED_TASK_DONE_ID,
@@ -380,9 +415,95 @@ export async function seedManualConfirmationData(
       assigneeUserId: SEED_USER_YAMADA_ID,
       developmentStageId: SEED_STAGE_DONE_ID,
       scheduledEndDate: utcDate(year, month, Math.max(1, day - 2)),
-      completedAt: utcDate(year, month, Math.max(1, day - 1)),
+      storyPoints: 5,
+      completedAt: completedInPastWeek(1, 3),
       workspaceId: SEED_WORKSPACE_ID,
     },
+  });
+
+  // velocity-dashboard: 過去3週分の完了（件数・ポイント・フォーキャスト・案件見通し確認用）
+  // 進行中案件に紐づけ、案件フィルタでも 0 以外が出るようにする
+  await prisma.task.createMany({
+    data: [
+      {
+        id: SEED_TASK_VELOCITY_W1A_ID,
+        title: "消化実績: 前週のレビュー対応",
+        status: "not_started",
+        priority: "medium",
+        caseId: SEED_CASE_ACTIVE_ID,
+        isRequiredForCase: false,
+        assigneeUserId: SEED_USER_TANAKA_ID,
+        developmentStageId: SEED_STAGE_DONE_ID,
+        storyPoints: 3,
+        completedAt: completedInPastWeek(1, 1),
+        workspaceId: SEED_WORKSPACE_ID,
+      },
+      {
+        id: SEED_TASK_VELOCITY_W1B_ID,
+        title: "消化実績: 前週のバグ修正",
+        status: "not_started",
+        priority: "high",
+        caseId: SEED_CASE_ACTIVE_ID,
+        isRequiredForCase: false,
+        assigneeUserId: SEED_USER_SUZUKI_ID,
+        developmentStageId: SEED_STAGE_DONE_ID,
+        storyPoints: 5,
+        completedAt: completedInPastWeek(1, 4),
+        workspaceId: SEED_WORKSPACE_ID,
+      },
+      {
+        id: SEED_TASK_VELOCITY_W2A_ID,
+        title: "消化実績: 2週前のAPI実装",
+        status: "not_started",
+        priority: "high",
+        caseId: SEED_CASE_ACTIVE_ID,
+        isRequiredForCase: true,
+        assigneeUserId: SEED_USER_ID,
+        developmentStageId: SEED_STAGE_DONE_ID,
+        storyPoints: 8,
+        completedAt: completedInPastWeek(2, 2),
+        workspaceId: SEED_WORKSPACE_ID,
+      },
+      {
+        id: SEED_TASK_VELOCITY_W2B_ID,
+        title: "消化実績: 2週前の文言調整",
+        status: "not_started",
+        priority: "low",
+        caseId: SEED_CASE_ACTIVE_ID,
+        isRequiredForCase: false,
+        assigneeUserId: SEED_USER_SATO_ID,
+        developmentStageId: SEED_STAGE_DONE_ID,
+        storyPoints: 2,
+        completedAt: completedInPastWeek(2, 5),
+        workspaceId: SEED_WORKSPACE_ID,
+      },
+      {
+        id: SEED_TASK_VELOCITY_W3A_ID,
+        title: "消化実績: 3週前の設計メモ",
+        status: "not_started",
+        priority: "medium",
+        caseId: SEED_CASE_ACTIVE_ID,
+        isRequiredForCase: false,
+        assigneeUserId: SEED_USER_YAMADA_ID,
+        developmentStageId: SEED_STAGE_DONE_ID,
+        storyPoints: 4,
+        completedAt: completedInPastWeek(3, 1),
+        workspaceId: SEED_WORKSPACE_ID,
+      },
+      {
+        id: SEED_TASK_VELOCITY_W3B_ID,
+        title: "消化実績: 3週前の調査",
+        status: "not_started",
+        priority: "medium",
+        caseId: null,
+        isRequiredForCase: false,
+        assigneeUserId: SEED_USER_ID,
+        developmentStageId: SEED_STAGE_DONE_ID,
+        storyPoints: 6,
+        completedAt: completedInPastWeek(3, 3),
+        workspaceId: SEED_WORKSPACE_ID,
+      },
+    ],
   });
 
   return { workspaceId: SEED_WORKSPACE_ID };

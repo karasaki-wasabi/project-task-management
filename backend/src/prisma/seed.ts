@@ -13,6 +13,8 @@
  * - 追加メンバー（いずれもメール=パスワード）: tanaka / suzuki / sato / yamada @example.com
  * - 現在ワークスペースはクライアント側で自動選択される（通常は手動選択不要）
  *
+ * - 消化数ダッシュボード: 過去3週の完了件数・ポイント、進行中案件の未完了ポイントが入る
+ *
  * 実行例
  * - docker compose run --rm -T backend npx prisma db seed
  */
