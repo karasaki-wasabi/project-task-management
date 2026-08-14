@@ -187,8 +187,10 @@ export function generateUserAvatarPattern(userId: string): UserAvatarPattern;
 | Requirements | 2.1, 3.1, 4.1 |
 
 **Responsibilities & Constraints**
-- 生成ロジックを持たない。`generateUserAvatarPattern(props.userId)`の呼び出し結果をそのまま描画するだけ
+- 生成ロジックを持たない。`generateUserAvatarPattern(props.userId)`の結果をSVGとして描画するだけ(配色・格子の算出はhelpers側)
 - `size`ごとの角丸(`border-radius = size × 0.1875`)・内側1pxハイライト枠(`inset 0 0 0 1px rgba(15,23,42,.10)`)を適用する
+- 角丸で四隅のセルが欠けないよう、viewBoxにグリッド単位の内側余白(`GRID_PAD = 0.35`)を取り、背景色で枠まで塗りつぶす
+- `size`が`gridSize`で割り切れないとき隣接セル間にヘアラインが出るため、`shape-rendering="crispEdges"`と塗りセルのわずかな重ね描き(1.04)で隙間を潰す
 - `name` propの有無でアクセシビリティ属性を切り替える(下記Contracts参照)
 
 **Dependencies**
@@ -223,7 +225,7 @@ export interface UserAvatarProps {
 | Requirements | 2.1 |
 
 **Implementation Notes**
-- Integration: `options: Array<{ value: string; label: string }>`という既存の汎用contractは変更しない。オプション行(`<button role="option">`)の先頭に任意の名前付きスロット`#leading="{ option }"`を追加し、指定されなければ何もレンダリングしない(既存の優先度/ステータス/開発段階の3呼び出しは無変更)。`TaskFieldCard.vue`の担当者ドロップダウン呼び出しのみ`<template #leading="{ option }"><UserAvatar :user-id="option.value" size="20" /></template>`を渡す
+- Integration: `options: Array<{ value: string; label: string }>`という既存の汎用contractは変更しない。オプション行(`<button role="option">`)の先頭に任意の名前付きスロット`#leading="{ option }"`を追加し、指定されなければ何もレンダリングしない(既存の優先度/ステータス/開発段階の3呼び出しは無変更)。`TaskFieldCard.vue`の担当者ドロップダウン呼び出しのみ`<template #leading="{ option }"><UserAvatar :userId="option.value" :size="20" /></template>`を渡す(propsはcamelCase。vue-tscのテンプレート型検査に合わせる)
 - Validation: `FieldOptionList.vue`自体はユーザードメインを一切知らない(`option.value`をuserIdとして解釈するのは呼び出し側の責務)。これにより優先度等の非ユーザーフィールドへの意図しない波及を防ぐ(design review Critical Issue 3への対応)
 - Risks: スロット追加はテンプレートの純粋な拡張であり、既存の`role="listbox"`/`role="option"`/`aria-selected`によるアクセシビリティ構造には影響しない
 

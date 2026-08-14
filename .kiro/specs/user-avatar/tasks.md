@@ -109,4 +109,5 @@ Requirement 5.1〜5.4(ユーザー設定ページ・画像アップロード機�
 - 1.1: 配色の公開入口は `generateUserAvatarPalette(userId)`。4帯 S/L は暖色 70/50、緑〜オリーブ 55/42、青緑〜青 62/46、紫〜ピンク 58/50。差し色は h+32 / S-10 / L+14、背景は同色相 S=30 L=96。
 - 1.2: `generateUserAvatarPattern` はパレット用とは別の同一シード mulberry32（Option A）。1回目パレット、2回目軸、以降トーン。塗り数ガードは独立領域の 34%〜74%、最大12 reroll。
 - 1.3: テストシーム `generateUserAvatarPatternFromRng`。枯渇は 1〜11 回目と 12 回目で異なる範囲外塗り数を使い、12 回目採用を証明する。
+- 2.1: viewBox に `GRID_PAD = 0.35` の内側余白。`shape-rendering="crispEdges"` と塗りセル 1.04 重ねで非整数スケール時のヘアラインを防ぐ。テンプレートの props は camelCase(`:userId` / `:size`)。
 - 4.1: ホスト直 `nuxt typecheck` は `.nuxt` 所有者不一致で失敗しうるため、`docker compose run --rm --no-deps -T frontend npm run typecheck` を正とする。`wrapper.get(...).exists()` は VTU 型エラーになるため `find(...).exists()` を使う。
