@@ -1,4 +1,4 @@
-// user-avatar 1.1 / 1.2 — FNV-1a / mulberry32 / palette / symmetric grid
+// user-avatar 1.1 / 1.2 / 1.3 — FNV-1a / mulberry32 / palette / symmetric grid
 // (Requirements 1.1, 1.2, 1.3, 1.4; design.md UserAvatar.helpers.ts Service Interface).
 import { describe, expect, it } from "vitest";
 import {
@@ -6,9 +6,10 @@ import {
   fnv1aHash,
   generateUserAvatarPalette,
   generateUserAvatarPattern,
+  generateUserAvatarPatternFromRng,
   userAvatarPaletteAt,
 } from "./UserAvatar.helpers";
-import type { UserAvatarAxis, UserAvatarCell } from "./UserAvatar.helpers";
+import type { UserAvatarAxis, UserAvatarCell, UserAvatarPattern } from "./UserAvatar.helpers";
 
 const HSL_RE = /^hsl\((\d+), (\d+)%, (\d+)%\)$/;
 
@@ -169,11 +170,20 @@ function paintedIndependentCount(cells: UserAvatarCell[], axis: UserAvatarAxis):
 
 describe("generateUserAvatarPattern", () => {
   it("returns the same grid, colors, and axis for the same userId", () => {
-    const first = generateUserAvatarPattern("user-abc");
-    const second = generateUserAvatarPattern("user-abc");
-    expect(first).toEqual(second);
-    expect(first.gridSize).toBe(5);
-    expect(AXES).toContain(first.axis);
+    for (const userId of ["user-abc", "user-0", "", "田中"]) {
+      const first = generateUserAvatarPattern(userId);
+      const second = generateUserAvatarPattern(userId);
+      const third = generateUserAvatarPattern(userId);
+      expect(second).toEqual(first);
+      expect(third).toEqual(first);
+      expect(first.gridSize).toBe(5);
+      expect(AXES).toContain(first.axis);
+      expect(second.cells).toEqual(first.cells);
+      expect(second.axis).toBe(first.axis);
+      expect(second.mainColor).toBe(first.mainColor);
+      expect(second.altColor).toBe(first.altColor);
+      expect(second.backgroundColor).toBe(first.backgroundColor);
+    }
   });
 
   it("lists only painted cells with main or alt tones and coords in 0..4", () => {
@@ -240,10 +250,174 @@ describe("generateUserAvatarPattern", () => {
     expect(pattern.mainColor).toMatch(HSL_RE);
   });
 
-  it("does not change the pattern when only a display-name-like string differs from the userId", () => {
-    const byId = generateUserAvatarPattern("user-abc");
-    const byName = generateUserAvatarPattern("田中");
-    expect(byId).not.toEqual(byName);
-    expect(generateUserAvatarPattern("user-abc")).toEqual(byId);
+  it("produces a different pattern when a display-name-like string is passed as userId", () => {
+    expect(generateUserAvatarPattern.length).toBe(1);
+    const userId = "user-abc";
+    const displayName = "田中 太郎";
+    const byUserId = generateUserAvatarPattern(userId);
+    const byDisplayName = generateUserAvatarPattern(displayName);
+    expect(byDisplayName).not.toEqual(byUserId);
+    expect(generateUserAvatarPattern(userId)).toEqual(byUserId);
+    const withIgnoredName = (generateUserAvatarPattern as (...a: unknown[]) => UserAvatarPattern)(
+      userId,
+      "表示名",
+    );
+    expect(withIgnoredName).toEqual(byUserId);
+  });
+
+  it("selects leftRight, topBottom, and point for some userIds", () => {
+    const found = new Map<UserAvatarAxis, string>();
+    for (let i = 0; i < 500 && found.size < AXES.length; i += 1) {
+      const userId = `user-${i}`;
+      const axis = generateUserAvatarPattern(userId).axis;
+      if (!found.has(axis)) found.set(axis, userId);
+    }
+    expect([...found.keys()].sort()).toEqual([...AXES].sort());
+  });
+
+  it("chooses the point-symmetry center independently and pairs cells at 180 degrees", () => {
+    const pointPatterns: UserAvatarPattern[] = [];
+    for (let i = 0; i < 400 && pointPatterns.length < 40; i += 1) {
+      const pattern = generateUserAvatarPattern(`point-probe-${i}`);
+      if (pattern.axis === "point") pointPatterns.push(pattern);
+    }
+    expect(pointPatterns.length).toBeGreaterThan(0);
+
+    let paintedCenter = false;
+    let blankCenter = false;
+    for (const pattern of pointPatterns) {
+      const map = paintedMap(pattern.cells);
+      for (let y = 0; y <= GRID_LAST; y += 1) {
+        for (let x = 0; x <= GRID_LAST; x += 1) {
+          expect(map.get(cellKey(GRID_LAST - x, GRID_LAST - y))).toBe(map.get(cellKey(x, y)));
+        }
+      }
+      const centerTone = map.get(cellKey(2, 2));
+      if (centerTone !== undefined) {
+        paintedCenter = true;
+        expect(pattern.cells.some((cell) => cell.x === 2 && cell.y === 2 && cell.tone === centerTone)).toBe(
+          true,
+        );
+      } else {
+        blankCenter = true;
+        expect(pattern.cells.some((cell) => cell.x === 2 && cell.y === 2)).toBe(false);
+      }
+    }
+    expect(paintedCenter).toBe(true);
+    expect(blankCenter).toBe(true);
+  });
+
+  it("almost never collides on palette index + axis + cells across 1000 dummy userIds", () => {
+    const keys = new Set<string>();
+    for (let i = 0; i < 1000; i += 1) {
+      const userId = `dummy-user-${i}`;
+      const pattern = generateUserAvatarPattern(userId);
+      const paletteIndex = generateUserAvatarPalette(userId).index;
+      keys.add(`${paletteIndex}|${pattern.axis}|${JSON.stringify(pattern.cells)}`);
+    }
+    expect(keys.size).toBeGreaterThanOrEqual(995);
+  });
+});
+
+const MAX_FILL_ATTEMPTS = 12;
+const BLANK_ROLL = 0;
+const MAIN_ROLL = 0.5;
+const AXIS_ROLL: Record<UserAvatarAxis, number> = {
+  leftRight: 0,
+  topBottom: 0.4,
+  point: 0.8,
+};
+
+type ScriptedRng = (() => number) & { unused(): number };
+
+function scriptedNext(values: number[]): ScriptedRng {
+  let index = 0;
+  const next = (() => {
+    if (index >= values.length) {
+      throw new Error(`unexpected extra next() call at index ${index}`);
+    }
+    const value = values[index];
+    index += 1;
+    return value;
+  }) as ScriptedRng;
+  next.unused = () => values.length - index;
+  return next;
+}
+
+function toneDraws(regionSize: number, paintedCount: number): number[] {
+  return Array.from({ length: regionSize }, (_, i) => (i < paintedCount ? MAIN_ROLL : BLANK_ROLL));
+}
+
+function rngSequence(axis: UserAvatarAxis, paintedPerAttempt: number[]): number[] {
+  const regionSize = independentRegionSize(axis);
+  const values = [0, AXIS_ROLL[axis]];
+  for (const painted of paintedPerAttempt) {
+    values.push(...toneDraws(regionSize, painted));
+  }
+  return values;
+}
+
+function fillCountWouldBeInRange(count: number, regionSize: number): boolean {
+  return count >= MIN_FILL_RATIO * regionSize && count <= MAX_FILL_RATIO * regionSize;
+}
+
+describe("generateUserAvatarPatternFromRng (fill-guard seam)", () => {
+  it("rerolls an out-of-range fill until the independent region is within 34%..74%", () => {
+    const cases: Array<{ axis: UserAvatarAxis; outOfRange: number; inRange: number }> = [
+      { axis: "leftRight", outOfRange: 0, inRange: 8 },
+      { axis: "topBottom", outOfRange: 15, inRange: 6 },
+      { axis: "point", outOfRange: 13, inRange: 5 },
+    ];
+    for (const { axis, outOfRange, inRange } of cases) {
+      const regionSize = independentRegionSize(axis);
+      const pattern = generateUserAvatarPatternFromRng(
+        scriptedNext(rngSequence(axis, [outOfRange, inRange])),
+      );
+      expect(pattern.axis).toBe(axis);
+      const painted = paintedIndependentCount(pattern.cells, axis);
+      expect(painted).toBe(inRange);
+      expect(painted).toBeGreaterThanOrEqual(MIN_FILL_RATIO * regionSize);
+      expect(painted).toBeLessThanOrEqual(MAX_FILL_RATIO * regionSize);
+    }
+  });
+
+  it("keeps the 12th fill when every attempt is out of range", () => {
+    const cases: Array<{ axis: UserAvatarAxis; early: number; last: number }> = [
+      { axis: "leftRight", early: 0, last: 15 },
+      { axis: "topBottom", early: 15, last: 0 },
+      { axis: "point", early: 2, last: 13 },
+    ];
+    for (const { axis, early, last } of cases) {
+      const regionSize = independentRegionSize(axis);
+      const attempts = [
+        ...Array.from({ length: MAX_FILL_ATTEMPTS - 1 }, () => early),
+        last,
+      ];
+      const next = scriptedNext(rngSequence(axis, attempts));
+      const pattern = generateUserAvatarPatternFromRng(next);
+      expect(pattern.axis).toBe(axis);
+      expect(paintedIndependentCount(pattern.cells, axis)).toBe(last);
+      expect(fillCountWouldBeInRange(early, regionSize)).toBe(false);
+      expect(fillCountWouldBeInRange(last, regionSize)).toBe(false);
+      expect(next.unused()).toBe(0);
+    }
+  });
+
+  it("paints the point-symmetry center independently without copying another cell", () => {
+    const regionSize = independentRegionSize("point");
+    // Center (2,2) is the last independent cell in scan order. Blank every
+    // other independent cell so a copied center would stay blank.
+    const centerOnlyDraws = Array.from({ length: regionSize }, (_, i) =>
+      i === regionSize - 1 ? MAIN_ROLL : BLANK_ROLL,
+    );
+    const values = [0, AXIS_ROLL.point];
+    for (let attempt = 0; attempt < MAX_FILL_ATTEMPTS; attempt += 1) {
+      values.push(...centerOnlyDraws);
+    }
+    const next = scriptedNext(values);
+    const pattern = generateUserAvatarPatternFromRng(next);
+    expect(pattern.axis).toBe("point");
+    expect(next.unused()).toBe(0);
+    expect(pattern.cells).toEqual([{ x: 2, y: 2, tone: "main" }]);
   });
 });

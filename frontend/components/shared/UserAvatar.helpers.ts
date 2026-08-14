@@ -1,4 +1,4 @@
-// user-avatar 1.1 / 1.2 — userId から決定的に配色・グリッドを導出する純粋関数
+// user-avatar 1.1 / 1.2 / 1.3 — userId から決定的に配色・グリッドを導出する純粋関数
 // (Requirements 1.1, 1.2, 1.3, 1.4; design.md UserAvatar.helpers.ts Service Interface).
 // Vue 非依存。
 
@@ -95,7 +95,16 @@ export function generateUserAvatarPalette(userId: string): UserAvatarPalette {
 export function generateUserAvatarPattern(userId: string): UserAvatarPattern {
   // Option A: パレット用とは別の同一シード RNG。1回目の抽選は generateUserAvatarPalette と同じ
   // インデックス、2回目が対称軸、以降が独立領域のトーン（範囲外なら同一列から最大12試行）。
-  const next = createMulberry32(fnv1aHash(userId));
+  return generateUserAvatarPatternFromRng(createMulberry32(fnv1aHash(userId)));
+}
+
+/**
+ * Test seam for the 12-attempt fill-count guard.
+ * Same algorithm as generateUserAvatarPattern after seeding; inject next() so
+ * exhaustion (all 12 attempts out of range) can be forced. Default
+ * generateUserAvatarPattern behavior is unchanged (it still seeds from userId).
+ */
+export function generateUserAvatarPatternFromRng(next: () => number): UserAvatarPattern {
   const palette = userAvatarPaletteAt(Math.floor(next() * USER_AVATAR_HUE_COUNT));
   const axis = AXES[Math.floor(next() * AXES.length)] ?? AXES[0];
   const regionSize = axis === "point" ? 13 : 15;
