@@ -82,7 +82,7 @@
   - _Requirements: 1.1, 1.4, 3.1, 3.2, 4.4, 4.6_
 
 - [ ] 5. 検証と規約
-- [ ] 5.1 モジュール境界・閉路のガードテストを追加する
+- [x] 5.1 モジュール境界・閉路のガードテストを追加する
   - 他モジュール repository 直 import、モジュール間の service 閉路、tasks 外からの task.closure import、stages→task.service import を検出して失敗させる
   - 閉路検査はモジュール間のみ（同一モジュール内の service 同士は対象外）
   - import 禁止の ESLint ルールは導入しない
