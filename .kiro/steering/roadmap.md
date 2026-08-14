@@ -67,7 +67,7 @@
 - [x] workspace-resource-scope -- 案件・タスク等をワークスペース配下へ移行し、所属外アクセスを拒否する。Dependencies: workspace-membership
 - [x] task-status-model -- 開発段階に種別（通常/完了/中止）を持たせ、完了判定と `completedAt` 打刻をステータスから段階到達へ移す。ステータスは段階内の作業状態へ再定義する。Dependencies: none（ワークスペース系とは独立。操作ログが記録するステータス語彙を確定させるため task-detail より先行させる）
 - [x] task-field-rename -- `memo`→`detail`、`scheduledDate`→`scheduledEndDate` の API／DB／文言揃え。将来の開始予定日は `scheduledStartDate` と命名予約（カラム追加はしない）。完了済み仕様文書は更新しない。Dependencies: none（task-detail より先行）
-- [ ] task-detail -- モーダルは簡易表示のまま、詳細画面でコメント・操作ログ・CRUD を提供する。Dependencies: workspace-resource-scope, task-status-model, task-field-rename
+- [x] task-detail -- モーダルは簡易表示のまま、詳細画面でコメント・操作ログ・CRUD を提供する。Dependencies: workspace-resource-scope, task-status-model, task-field-rename
 - [ ] velocity-dashboard -- ストーリーポイントと消化ペース／案件見通しのダッシュボード。Dependencies: workspace-resource-scope, task-detail, task-status-model
 
 ## Phase: Frontend workspace URL
@@ -75,4 +75,5 @@
 ワークスペース導入後も画面 URL がフラットなままなので、業務画面を `/workspaces/:workspaceId/...` に移し、URL を現在ワークスペースの正本にする。旧フラット URL と非所属 ID は 404。API パス変更はしない。
 
 - [x] workspace-url-routing -- 業務画面 URL のワークスペース配下化、`/` の last-used／一覧分岐、Switcher の同一画面種付け替え、URL 一覧の確定。Dependencies: workspace-membership, workspace-resource-scope
+- [x] error-page -- 共通エラーページ(`error.vue`)。404/403/401/500 と汎用 4xx/5xx の文言・導線、実行時 fatal の Error Page 接続。Dependencies: workspace-url-routing（非所属・不明な workspaceId の既存 404 経路を利用。401/403 の新規発生源は持たない）
 
