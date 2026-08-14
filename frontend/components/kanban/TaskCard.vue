@@ -17,7 +17,7 @@
     level rather than this component.
 
   Visual layout: title top-left + priority badge top-right on the same row;
-  optional progress; status (optional) + assignee initial bottom-right.
+  optional progress; status (optional) + UserAvatar bottom-right.
 
   Clicking (or Enter/Space when focused) opens the task detail/edit/delete
   popup — the card just emits `activate`. Pointer down/up (not native
@@ -36,6 +36,7 @@ import {
 
 interface TaskCardProps {
   task: Task;
+  assigneeId?: string;
   assigneeName?: string;
   progress?: TaskProgress;
   /** True when the card is rendered inside a completed/cancelled stage column. */
@@ -59,7 +60,6 @@ const progressPercent = computed(() =>
 const excludedNote = computed(() =>
   props.progress ? formatExcludedCancelledNote(props.progress.excludedCancelled) : null,
 );
-const assigneeInitial = computed(() => props.assigneeName?.charAt(0) ?? "");
 
 const clickMoveThreshold = 6;
 let pointerDownPos: { x: number; y: number } | null = null;
@@ -116,13 +116,13 @@ function onPointerUp(event: PointerEvent) {
 
     <div data-testid="task-card-footer" class="mt-2 flex items-center justify-between gap-2">
       <StatusBadge v-if="showStatus" :status="task.status" />
-      <span
-        v-if="assigneeName"
-        class="assignee ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-700"
-        :title="assigneeName"
-      >
-        {{ assigneeInitial }}
-      </span>
+      <UserAvatar
+        v-if="assigneeId && assigneeName"
+        class="ml-auto shrink-0"
+        :userId="assigneeId"
+        :name="assigneeName"
+        :size="24"
+      />
     </div>
   </div>
 </template>

@@ -163,7 +163,8 @@ describe("error-reporter.client (task 2.2)", () => {
       expect(typeof install).toBe("function");
 
       const vueApp = { config: { errorHandler: undefined as ((error: unknown) => void) | undefined } };
-      install({ vueApp, runWithContext });
+      // Partial NuxtApp stub: only the fields the plugin reads in this test.
+      install({ vueApp, runWithContext } as never);
 
       expect(typeof vueApp.config.errorHandler).toBe("function");
       const eventNames = addEventListener.mock.calls.map((call) => call[0]);

@@ -10,8 +10,16 @@ import type { PrismaClient } from "@prisma/client";
 import { clearAllTables } from "./clear-tables.js";
 
 export const SEED_USER_ID = "11111111-1111-4111-8111-111111111111";
+export const SEED_USER_TANAKA_ID = "11111111-1111-4111-8111-111111111112";
+export const SEED_USER_SUZUKI_ID = "11111111-1111-4111-8111-111111111113";
+export const SEED_USER_SATO_ID = "11111111-1111-4111-8111-111111111114";
+export const SEED_USER_YAMADA_ID = "11111111-1111-4111-8111-111111111115";
 export const SEED_WORKSPACE_ID = "22222222-2222-4222-8222-222222222222";
 export const SEED_MEMBER_ID = "33333333-3333-4333-8333-333333333333";
+export const SEED_MEMBER_TANAKA_ID = "33333333-3333-4333-8333-333333333334";
+export const SEED_MEMBER_SUZUKI_ID = "33333333-3333-4333-8333-333333333335";
+export const SEED_MEMBER_SATO_ID = "33333333-3333-4333-8333-333333333336";
+export const SEED_MEMBER_YAMADA_ID = "33333333-3333-4333-8333-333333333337";
 export const SEED_STAGE_BACKLOG_ID = "44444444-4444-4444-8444-444444444401";
 export const SEED_STAGE_DOING_ID = "44444444-4444-4444-8444-444444444402";
 export const SEED_STAGE_DONE_ID = "44444444-4444-4444-8444-444444444403";
@@ -29,6 +37,34 @@ export const SEED_HOLIDAY_ID = "88888888-8888-4888-8888-888888888801";
 
 export const SEED_LOGIN_EMAIL = "root@example.com";
 export const SEED_LOGIN_PASSWORD = "root@example.com";
+
+/** 開発用ワークスペースに所属する追加メンバー（ログインはメール=パスワード）。 */
+export const SEED_EXTRA_MEMBERS = [
+  {
+    userId: SEED_USER_TANAKA_ID,
+    memberId: SEED_MEMBER_TANAKA_ID,
+    email: "tanaka@example.com",
+    name: "田中 太郎",
+  },
+  {
+    userId: SEED_USER_SUZUKI_ID,
+    memberId: SEED_MEMBER_SUZUKI_ID,
+    email: "suzuki@example.com",
+    name: "鈴木 花子",
+  },
+  {
+    userId: SEED_USER_SATO_ID,
+    memberId: SEED_MEMBER_SATO_ID,
+    email: "sato@example.com",
+    name: "佐藤 次郎",
+  },
+  {
+    userId: SEED_USER_YAMADA_ID,
+    memberId: SEED_MEMBER_YAMADA_ID,
+    email: "yamada@example.com",
+    name: "山田 美咲",
+  },
+] as const;
 
 function utcDate(year: number, monthIndex: number, day: number): Date {
   return new Date(Date.UTC(year, monthIndex, day));
@@ -68,6 +104,17 @@ export async function seedManualConfirmationData(
     },
   });
 
+  for (const member of SEED_EXTRA_MEMBERS) {
+    await prisma.user.create({
+      data: {
+        id: member.userId,
+        email: member.email,
+        name: member.name,
+        passwordHash: await hash(member.email),
+      },
+    });
+  }
+
   await prisma.workspace.create({
     data: {
       id: SEED_WORKSPACE_ID,
@@ -83,6 +130,14 @@ export async function seedManualConfirmationData(
       workspaceId: SEED_WORKSPACE_ID,
       userId: SEED_USER_ID,
     },
+  });
+
+  await prisma.workspaceMember.createMany({
+    data: SEED_EXTRA_MEMBERS.map((member) => ({
+      id: member.memberId,
+      workspaceId: SEED_WORKSPACE_ID,
+      userId: member.userId,
+    })),
   });
 
   await prisma.developmentStage.createMany({
@@ -190,7 +245,7 @@ export async function seedManualConfirmationData(
       caseId: SEED_CASE_ACTIVE_ID,
       isRequiredForCase: false,
       parentTaskId: SEED_TASK_ROOT_ID,
-      assigneeUserId: SEED_USER_ID,
+      assigneeUserId: SEED_USER_TANAKA_ID,
       developmentStageId: SEED_STAGE_BACKLOG_ID,
       scheduledEndDate: utcDate(year, month, Math.min(28, day + 1)),
       workspaceId: SEED_WORKSPACE_ID,
@@ -207,7 +262,7 @@ export async function seedManualConfirmationData(
       caseId: SEED_CASE_ACTIVE_ID,
       isRequiredForCase: false,
       parentTaskId: SEED_TASK_ROOT_ID,
-      assigneeUserId: SEED_USER_ID,
+      assigneeUserId: SEED_USER_SUZUKI_ID,
       developmentStageId: SEED_STAGE_DOING_ID,
       scheduledEndDate: utcDate(year, month, Math.min(28, day + 3)),
       workspaceId: SEED_WORKSPACE_ID,
@@ -224,7 +279,7 @@ export async function seedManualConfirmationData(
       caseId: SEED_CASE_ACTIVE_ID,
       isRequiredForCase: false,
       parentTaskId: SEED_TASK_CHILD_ID,
-      assigneeUserId: SEED_USER_ID,
+      assigneeUserId: SEED_USER_SATO_ID,
       developmentStageId: SEED_STAGE_BACKLOG_ID,
       scheduledEndDate: utcDate(year, month, Math.min(28, day + 5)),
       workspaceId: SEED_WORKSPACE_ID,
@@ -322,7 +377,7 @@ export async function seedManualConfirmationData(
       priority: "medium",
       caseId: SEED_CASE_DONE_ID,
       isRequiredForCase: true,
-      assigneeUserId: SEED_USER_ID,
+      assigneeUserId: SEED_USER_YAMADA_ID,
       developmentStageId: SEED_STAGE_DONE_ID,
       scheduledEndDate: utcDate(year, month, Math.max(1, day - 2)),
       completedAt: utcDate(year, month, Math.max(1, day - 1)),

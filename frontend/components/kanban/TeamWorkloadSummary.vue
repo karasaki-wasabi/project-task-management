@@ -28,6 +28,7 @@
   produce false alarms on routine team-size distributions.
 -->
 <script setup lang="ts">
+import { computed, ref } from "vue";
 import { isOverloaded, splitVisibleWorkload, type WorkloadCount } from "./TeamWorkloadSummary.helpers";
 
 // design.md: "既定値はコンポーネント内で定義し" — the default visible chip
@@ -83,6 +84,7 @@ function selectAssignee(userId: string) {
       "
       @click="selectAssignee(entry.user.id)"
     >
+      <UserAvatar :userId="entry.user.id" :size="20" />
       <span class="font-medium">{{ entry.user.name }}</span>
       <Badge :tone="isOverloaded(entry.count) ? 'danger' : 'neutral'" :label="String(entry.count)" />
     </button>
@@ -107,6 +109,7 @@ function selectAssignee(userId: string) {
         "
         @click="selectAssignee(entry.user.id)"
       >
+        <UserAvatar :userId="entry.user.id" :size="20" />
         <span class="font-medium">{{ entry.user.name }}</span>
         <Badge :tone="isOverloaded(entry.count) ? 'danger' : 'neutral'" :label="String(entry.count)" />
       </button>

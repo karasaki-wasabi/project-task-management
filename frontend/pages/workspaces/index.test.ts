@@ -10,6 +10,7 @@ import {
   type Workspace,
   type WorkspaceUserSummary,
 } from "../../composables/useApiClient";
+import UserAvatar from "../../components/shared/UserAvatar.vue";
 import WorkspacesPage from "./index.vue";
 
 const refresh = vi.fn();
@@ -162,6 +163,7 @@ function mountPage() {
         ErrorAlert: ErrorAlertStub,
         Modal: ModalStub,
       },
+      components: { UserAvatar },
     },
   });
 }
@@ -559,5 +561,48 @@ describe("WorkspacesPage creator-only delete (task 6.6)", () => {
     expect(deleteWorkspace).not.toHaveBeenCalled();
     expect(wrapper.find('[data-testid="workspace-delete-modal"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(false);
+  });
+});
+
+describe("WorkspacesPage member UserAvatar (user-avatar 3.5)", () => {
+  beforeEach(() => {
+    refresh.mockReset();
+    select.mockReset();
+    listWorkspaceMembers.mockReset();
+    searchAddableWorkspaceUsers.mockReset();
+    addWorkspaceMember.mockReset();
+    deleteWorkspace.mockReset();
+    const ws = makeWorkspace();
+    currentId.value = ws.id;
+    workspaces.value = [ws];
+    authUser.value = makeUser();
+    refresh.mockResolvedValue(undefined);
+    listWorkspaceMembers.mockResolvedValue([
+      makeMember(),
+      makeMember({ userId: "u-2", name: "佐藤花子", email: "sato@example.com" }),
+    ]);
+    searchAddableWorkspaceUsers.mockResolvedValue([]);
+    addWorkspaceMember.mockResolvedValue(makeMember());
+    deleteWorkspace.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("メンバー行の氏名横に UserAvatar（20px、name なし）を併記する（Req 2.1）", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const nameCells = wrapper.findAll('[data-testid="member-name"]');
+    expect(nameCells).toHaveLength(2);
+    expect(nameCells.map((n) => n.text())).toEqual(["山田太郎", "佐藤花子"]);
+
+    const avatars = nameCells.map((cell) => cell.getComponent(UserAvatar));
+    expect(avatars.map((a) => a.props("userId"))).toEqual(["u-1", "u-2"]);
+    for (const avatar of avatars) {
+      expect(avatar.props("size")).toBe(20);
+      expect(avatar.props("name")).toBeUndefined();
+    }
   });
 });

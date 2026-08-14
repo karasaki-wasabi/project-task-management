@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TaskTimelineChange } from "../../composables/useApiClient";
 import {
-  avatarInitial,
   changeMessageSegments,
   formatTimelineDate,
   formatTimelineTime,
@@ -58,9 +57,9 @@ describe("groupTimelineByDate", () => {
 });
 
 describe("avatarInitial", () => {
-  it("表示名の先頭1文字を返す", () => {
-    expect(avatarInitial("佐藤 健")).toBe("佐");
-    expect(avatarInitial("  ")).toBe("");
+  it("コメント投稿者アバター置き換え後は公開しない", async () => {
+    const helpers = await import("./TaskTimeline.helpers");
+    expect(helpers).not.toHaveProperty("avatarInitial");
   });
 });
 

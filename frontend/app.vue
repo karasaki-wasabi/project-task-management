@@ -30,7 +30,10 @@
         <div class="ml-auto flex items-center gap-3 text-sm">
           <!-- WorkspaceSwitcher sits between nav and display-name/logout (案B). -->
           <WorkspaceSwitcher />
-          <span class="max-w-32 truncate text-slate-600 sm:max-w-none">{{ user?.name }}</span>
+          <div class="flex items-center gap-2">
+            <UserAvatar v-if="user" :userId="user.id" :size="28" />
+            <span class="max-w-32 truncate text-slate-600 sm:max-w-none">{{ user?.name }}</span>
+          </div>
           <span class="h-5 border-l border-slate-200"></span>
           <button
             type="button"

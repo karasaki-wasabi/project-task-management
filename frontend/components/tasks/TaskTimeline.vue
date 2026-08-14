@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import CommentComposer from "../comments/CommentComposer.vue";
+import UserAvatar from "../shared/UserAvatar.vue";
 import {
   useApiClient,
   type Case,
@@ -13,7 +14,6 @@ import {
   type User,
 } from "../../composables/useApiClient";
 import {
-  avatarInitial,
   changeMessageSegments,
   formatTimelineTime,
   groupTimelineByDate,
@@ -298,17 +298,11 @@ onMounted(() => {
                 v-if="entry.type === 'comment'"
                 class="flex items-start gap-2.5 py-1.5"
               >
-                <div
-                  aria-hidden="true"
-                  class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
-                  :class="
-                    entry.authorUserId === currentUserId
-                      ? 'bg-blue-50 text-primary-700'
-                      : 'bg-slate-100 text-slate-600'
-                  "
-                >
-                  {{ avatarInitial(authorLabel(entry.authorUserId)) }}
-                </div>
+                <UserAvatar
+                  class="shrink-0"
+                  :userId="entry.authorUserId"
+                  :size="32"
+                />
                 <div
                   v-if="editingCommentId === entry.id"
                   class="min-w-0 flex-1"

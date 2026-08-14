@@ -4,7 +4,7 @@
 
 タスク・案件 CRUD が一区切りしたタイミングで、公開自己登録と Cookie セッションによる本格認証を入れ、続けて「ワークスペース」を可視境界として導入する。案件（Case）・タスクはワークスペース配下に属し、招待（当面はユーザー検索での追加）されたメンバーだけが読み書きできる。
 
-認証方式は HttpOnly Cookie セッション（Approach A）。細かい RBAC・招待リンク・メール送信・JWT／MCP トークンは後続とする。認証とワークスペースが揃った後に、タスク詳細（コメント・操作ログ）へ進み、その後に消化ペース可視化（velocity-dashboard）へ進む。
+認証方式は HttpOnly Cookie セッション（Approach A）。細かい RBAC・招待リンク・メール送信・JWT／MCP トークンは後続とする。認証とワークスペースが揃った後に、タスク詳細（コメント・操作ログ）へ進む。ユーザー名の視覚的識別（user-avatar）はタスク詳細・カンバン・メンバー一覧へ差し込むフロント専用仕様で、velocity-dashboard とは独立に進める。消化ペース可視化（velocity-dashboard）はタスク詳細の後続とする。
 
 タスク詳細の検討過程で、ステータスと開発段階に軸が混在しており、タスク全体の完了をシステムが判定できない（＝消化数を自動集計できない）ことが判明した。完了判定を開発段階の種別へ移す task-status-model を切り出し、操作ログがステータス語彙を永続化し始める前に先行させる。
 
@@ -33,7 +33,7 @@
   - 公開自己登録、ログイン／ログアウト、Cookie セッション、要ログイン API／画面ガード
   - ワークスペースの作成・所属・メンバー追加（ユーザー検索）
   - 案件・タスク等のワークスペーススコープ化
-  - 後続: タスク詳細画面（コメント・操作ログ・CRUD）、velocity-dashboard
+  - 後続: タスク詳細画面（コメント・操作ログ・CRUD）、user-avatar、velocity-dashboard
 - Out
   - 画面・操作単位の細かい RBAC
   - 招待リンク、メール送信、OAuth／外部 IdP
@@ -68,6 +68,7 @@
 - [x] task-status-model -- 開発段階に種別（通常/完了/中止）を持たせ、完了判定と `completedAt` 打刻をステータスから段階到達へ移す。ステータスは段階内の作業状態へ再定義する。Dependencies: none（ワークスペース系とは独立。操作ログが記録するステータス語彙を確定させるため task-detail より先行させる）
 - [x] task-field-rename -- `memo`→`detail`、`scheduledDate`→`scheduledEndDate` の API／DB／文言揃え。将来の開始予定日は `scheduledStartDate` と命名予約（カラム追加はしない）。完了済み仕様文書は更新しない。Dependencies: none（task-detail より先行）
 - [x] task-detail -- モーダルは簡易表示のまま、詳細画面でコメント・操作ログ・CRUD を提供する。Dependencies: workspace-resource-scope, task-status-model, task-field-rename
+- [x] user-avatar -- `userId` から決定的に生成する identicon を、担当者・コメント投稿者・メンバー一覧・ヘッダー等のユーザー名表示へ一貫して出す。画像アップロードは対象外。Dependencies: user-auth, workspace-membership, task-detail
 - [ ] velocity-dashboard -- ストーリーポイントと消化ペース／案件見通しのダッシュボード。Dependencies: workspace-resource-scope, task-detail, task-status-model
 
 ## Phase: Frontend workspace URL

@@ -86,11 +86,6 @@ export function groupTimelineByDate<T extends { occurredAt: string }>(
   return groups;
 }
 
-export function avatarInitial(name: string): string {
-  const trimmed = name.trim();
-  return [...trimmed][0] ?? "";
-}
-
 function formatSlashDateValue(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   return match ? `${match[1]}/${match[2]}/${match[3]}` : value;

@@ -170,7 +170,7 @@ describe("TaskDetailPage", () => {
     expect(wrapper.find('[data-testid="comment-composer"]').exists()).toBe(false);
     expect(wrapper.text()).not.toContain("タスク一覧へ");
     expect(wrapper.get("h1").text()).toBe("詳細ページを作る");
-    expect(wrapper.get('button[aria-label="タイトルを編集"]').exists()).toBe(true);
+    expect(wrapper.find('button[aria-label="タイトルを編集"]').exists()).toBe(true);
     expect(wrapper.get('[data-testid="timeline"]').attributes("data-user-id")).toBe("user-1");
     expect(wrapper.get('[data-testid="field-card"]').element.compareDocumentPosition(
       wrapper.get('[data-testid="timeline"]').element,

@@ -11,6 +11,7 @@ import DatePicker from "../shared/DatePicker.vue";
 import PriorityBadge from "../shared/PriorityBadge.vue";
 import StageBadge from "../shared/StageBadge.vue";
 import StatusBadge from "../shared/StatusBadge.vue";
+import UserAvatar from "../shared/UserAvatar.vue";
 import FieldOptionList from "./FieldOptionList.vue";
 import InlineEditableField from "./InlineEditableField.vue";
 import ParentTaskCombobox from "./ParentTaskCombobox.vue";
@@ -254,7 +255,14 @@ function toggleRequired(value: unknown, setDraftValue: (next: unknown) => void) 
             <template #default>
               <div class="flex items-center gap-3">
                 <span class="w-[88px] shrink-0 text-xs font-medium text-slate-500">担当者</span>
-                <span class="text-sm font-medium text-slate-800">{{ assigneeName }}</span>
+                <span class="flex items-center gap-2 text-sm font-medium text-slate-800">
+                  <UserAvatar
+                    v-if="task.assigneeUserId"
+                    :userId="task.assigneeUserId"
+                    :size="24"
+                  />
+                  {{ assigneeName }}
+                </span>
               </div>
             </template>
             <template #picker="{ draftValue, saveValue }">
@@ -281,7 +289,11 @@ function toggleRequired(value: unknown, setDraftValue: (next: unknown) => void) 
                   :modelValue="textValue(draftValue)"
                   ariaLabel="担当者を選択"
                   @select="saveValue"
-                />
+                >
+                  <template #leading="{ option }">
+                    <UserAvatar :userId="option.value" :size="20" />
+                  </template>
+                </FieldOptionList>
                 <button
                   type="button"
                   class="w-full rounded-md px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50"
@@ -501,7 +513,14 @@ function toggleRequired(value: unknown, setDraftValue: (next: unknown) => void) 
             >
               {{ child.title }}
             </NuxtLink>
-            <span class="ml-auto shrink-0 text-xs text-slate-400">{{ userName(child.assigneeUserId) }}</span>
+            <span class="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-slate-400">
+              <UserAvatar
+                v-if="child.assigneeUserId"
+                :userId="child.assigneeUserId"
+                :size="24"
+              />
+              {{ userName(child.assigneeUserId) }}
+            </span>
           </li>
         </ul>
       </div>

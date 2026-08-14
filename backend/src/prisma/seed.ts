@@ -10,6 +10,7 @@
  * 投入後のログイン
  * - メール: root@example.com
  * - パスワード: root@example.com
+ * - 追加メンバー（いずれもメール=パスワード）: tanaka / suzuki / sato / yamada @example.com
  * - 現在ワークスペースはクライアント側で自動選択される（通常は手動選択不要）
  *
  * 実行例
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
   console.log(`  email: ${SEED_LOGIN_EMAIL}`);
   console.log(`  password: ${SEED_LOGIN_PASSWORD}`);
   console.log(`  workspace: 開発用ワークスペース (${SEED_WORKSPACE_ID})`);
+  console.log("  extra members: tanaka / suzuki / sato / yamada @example.com (password = email)");
 }
 
 main()
