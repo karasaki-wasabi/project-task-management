@@ -27,6 +27,7 @@ const emit = defineEmits<{
       :class="option.value === modelValue ? 'bg-primary-50 text-primary-800' : ''"
       @click="emit('select', option.value)"
     >
+      <slot name="leading" :option="option" />
       <span>{{ option.label }}</span>
       <span
         v-if="option.value === modelValue"
