@@ -25,6 +25,7 @@ export interface Task {
   sourceTemplateId?: string | null;
   developmentStageId?: string | null;
   scheduledEndDate?: string | null;
+  storyPoints?: number | null;
   completedAt?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -40,6 +41,7 @@ export interface CreateTaskInput {
   assigneeUserId?: string;
   parentTaskId?: string;
   scheduledEndDate?: string;
+  storyPoints?: number;
 }
 
 export interface UpdateTaskInput {
@@ -51,6 +53,7 @@ export interface UpdateTaskInput {
   assigneeUserId?: string | null;
   parentTaskId?: string | null;
   scheduledEndDate?: string | null;
+  storyPoints?: number | null;
 }
 
 export interface TaskListFilter {
@@ -231,11 +234,22 @@ export interface ThroughputPeriod {
   periodStart: string;
   periodEnd: string;
   completedCount: number;
+  completedPoints: number;
+}
+
+export interface CaseOutlook {
+  openTaskCount: number;
+  openPoints: number;
+  requiredPeriods: number | null;
+  remainingPeriods: number | null;
+  marginPoints: number | null;
 }
 
 export interface ThroughputSummary {
   periods: ThroughputPeriod[];
   forecastNextPeriodCount: number | null;
+  forecastNextPeriodPoints: number | null;
+  caseOutlook?: CaseOutlook;
 }
 
 export interface DevelopmentStage {
@@ -288,6 +302,7 @@ const WORKSPACE_SCOPED_PATH_PREFIXES = [
   "/api/recurring-templates",
   "/api/holidays",
   "/api/development-stages",
+  "/api/throughput",
 ] as const;
 
 function isWorkspaceScopedPath(path: string): boolean {
@@ -449,8 +464,10 @@ export function useApiClient() {
     deleteRecurringTemplate: (id: string) => request<void>(`/api/recurring-templates/${id}`, { method: "DELETE" }),
 
     // Throughput (design.md "Backend/throughput" API Contract)
-    getThroughput: (periodType: PeriodType, rangeCount: number) =>
-      request<ThroughputSummary>("/api/throughput", { query: { periodType, rangeCount } }),
+    getThroughput: (periodType: PeriodType, rangeCount: number, caseId?: string) =>
+      request<ThroughputSummary>("/api/throughput", {
+        query: { periodType, rangeCount, ...(caseId !== undefined ? { caseId } : {}) },
+      }),
 
     // Development Stages (design.md "Backend/development-stages" API Contract)
     listDevelopmentStages: () => request<DevelopmentStage[]>("/api/development-stages"),

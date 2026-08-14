@@ -195,3 +195,103 @@ describe("TasksPage assignee candidates (task 8.1, Req 4.1)", () => {
     expect(node.attributes("data-stages-count")).toBe("2");
   });
 });
+
+describe("TasksPage story points create form (velocity-dashboard 5.1, Req 1.1-1.4)", () => {
+  beforeEach(() => {
+    listTasks.mockReset();
+    createTask.mockReset();
+    updateTaskStatus.mockReset();
+    splitTask.mockReset();
+    listUsers.mockReset();
+    listWorkspaceMembers.mockReset();
+    listDevelopmentStages.mockReset();
+    currentId.value = "ws-1";
+    route.query = {};
+    vi.stubGlobal("useRoute", () => route);
+    listTasks.mockResolvedValue([makeTask()]);
+    createTask.mockResolvedValue(makeTask({ id: "t2", storyPoints: 5 }));
+    listDevelopmentStages.mockResolvedValue([]);
+    listWorkspaceMembers.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function createForm(wrapper: ReturnType<typeof mountPage>) {
+    return wrapper.get("form");
+  }
+
+  function storyPointsInput(wrapper: ReturnType<typeof mountPage>) {
+    const form = createForm(wrapper);
+    const byTestId = form.find('[data-testid="story-points-input"]');
+    if (byTestId.exists()) return byTestId;
+    const labeled = form.findAll("label").find((l) => /ポイント/.test(l.text()));
+    if (labeled) {
+      const input = labeled.find('input[type="number"]');
+      if (input.exists()) return input;
+    }
+    return form.find('input[type="number"][min="1"]');
+  }
+
+  it("shows an optional story points field labeled ポイント in the create form", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const form = createForm(wrapper);
+    expect(form.text()).toMatch(/ポイント/);
+    const input = storyPointsInput(wrapper);
+    expect(input.exists()).toBe(true);
+    expect(input.attributes("type")).toBe("number");
+    expect(input.attributes("min")).toBe("1");
+    expect(input.attributes("required")).toBeUndefined();
+  });
+
+  it("passes storyPoints to createTask when a value >= 1 is entered", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.get('input[placeholder="タスク名"]').setValue("ポイント付きタスク");
+    await storyPointsInput(wrapper).setValue("5");
+    await createForm(wrapper).trigger("submit.prevent");
+    await flushPromises();
+
+    expect(createTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "ポイント付きタスク",
+        storyPoints: 5,
+      }),
+    );
+  });
+
+  it("omits storyPoints from createTask when the field is left empty", async () => {
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.get('input[placeholder="タスク名"]').setValue("ポイントなしタスク");
+    await createForm(wrapper).trigger("submit.prevent");
+    await flushPromises();
+
+    expect(createTask).toHaveBeenCalledTimes(1);
+    const payload = createTask.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload).toMatchObject({ title: "ポイントなしタスク" });
+    expect(payload).not.toHaveProperty("storyPoints");
+  });
+
+  it("does not add a story points field to the split dialog", async () => {
+    listTasks.mockResolvedValue([makeTask({ id: "t1", title: "親タスク" })]);
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const taskNode = wrapper.findComponent({ name: "TaskNode" });
+    await taskNode.vm.$emit("split", makeTask({ id: "t1", title: "親タスク" }));
+    await flushPromises();
+
+    const splitHeading = wrapper.findAll("h2").find((h) => h.text().includes("を分割"));
+    expect(splitHeading).toBeTruthy();
+    const splitSection = splitHeading!.element.parentElement!;
+    expect(splitSection.textContent ?? "").not.toMatch(/ポイント/);
+    expect(splitSection.querySelector('input[type="number"]')).toBeNull();
+    expect(splitSection.querySelector('[data-testid="story-points-input"]')).toBeNull();
+  });
+});

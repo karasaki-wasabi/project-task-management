@@ -12,6 +12,7 @@ import { createLogger } from "./shared/logger.js";
 import { setBusinessEventLoggerForTests } from "./shared/business-event-logger.js";
 import { db } from "./shared/db.js";
 import { WORKSPACE_HEADER_NAME } from "./shared/workspace-scope.js";
+import { withCsrfToken, withSessionCookie } from "./test/auth.fixture.js";
 
 const WORKSPACE_SCOPED_PREFIXES = [
   "/api/cases",
@@ -19,6 +20,7 @@ const WORKSPACE_SCOPED_PREFIXES = [
   "/api/recurring-templates",
   "/api/holidays",
   "/api/development-stages",
+  "/api/throughput",
 ] as const;
 
 function needsWorkspaceHeader(url: string): boolean {
@@ -217,6 +219,123 @@ describe("app.ts route registration (task 10.3)", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toHaveProperty("error");
     await app.close();
+  });
+
+  // Task 3.5: requireWorkspaceMember on /api/throughput (does not use
+  // withAuthenticatedInject auto-header — proves missing / foreign workspace).
+  describe("GET /api/throughput workspace scope (task 3.5)", () => {
+    const env = {
+      DATABASE_URL: "mysql://user:pass@localhost:3306/db",
+      SESSION_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      CORS_ORIGIN: "http://localhost:3001",
+      COOKIE_SECURE: false,
+      LOG_LEVEL: "error" as const,
+      PORT: 3000,
+    };
+
+    function sessionCookie(response: { headers: Record<string, string | string[] | undefined> }): string {
+      const setCookie = response.headers["set-cookie"];
+      const session = (Array.isArray(setCookie) ? setCookie : [setCookie]).find((cookie) =>
+        cookie?.startsWith("session="),
+      );
+      if (!session) throw new Error("session cookie was not set");
+      return session.split(";")[0];
+    }
+
+    it("returns 400 when authenticated GET omits x-workspace-id", async () => {
+      const app = buildApp(env);
+      const register = await app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: {
+          email: `throughput-scope-400-${randomUUID()}@example.test`,
+          name: "消化数スコープ400",
+          password: "password-123",
+        },
+      });
+      expect(register.statusCode).toBe(201);
+      const cookie = sessionCookie(register);
+      const userId = register.json().id as string;
+
+      const response = await app.inject(
+        withSessionCookie(
+          { method: "GET", url: "/api/throughput?periodType=week&rangeCount=1" },
+          cookie,
+        ),
+      );
+      expect(response.statusCode).toBe(400);
+
+      await db.$executeRawUnsafe(`DELETE FROM users WHERE id = ?`, userId);
+      await app.close();
+    });
+
+    it("returns 403 when authenticated GET uses a non-member workspace", async () => {
+      const app = buildApp(env);
+      const memberReg = await app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: {
+          email: `throughput-scope-member-${randomUUID()}@example.test`,
+          name: "消化数スコープメンバー",
+          password: "password-123",
+        },
+      });
+      const outsiderReg = await app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: {
+          email: `throughput-scope-outsider-${randomUUID()}@example.test`,
+          name: "消化数スコープ部外者",
+          password: "password-123",
+        },
+      });
+      expect(memberReg.statusCode).toBe(201);
+      expect(outsiderReg.statusCode).toBe(201);
+      const memberCookie = sessionCookie(memberReg);
+      const outsiderCookie = sessionCookie(outsiderReg);
+      const memberId = memberReg.json().id as string;
+      const outsiderId = outsiderReg.json().id as string;
+
+      const csrf = await app.inject({
+        method: "GET",
+        url: "/api/auth/csrf",
+        headers: { cookie: memberCookie },
+      });
+      const memberSession = sessionCookie(csrf);
+      const created = await app.inject(
+        withCsrfToken(
+          withSessionCookie(
+            {
+              method: "POST",
+              url: "/api/workspaces",
+              payload: { name: `throughput-scope-${randomUUID()}` },
+            },
+            memberSession,
+          ),
+          csrf.json().token as string,
+        ),
+      );
+      expect(created.statusCode).toBe(201);
+      const workspaceId = created.json().id as string;
+
+      const response = await app.inject(
+        withSessionCookie(
+          {
+            method: "GET",
+            url: "/api/throughput?periodType=week&rangeCount=1",
+            headers: { [WORKSPACE_HEADER_NAME]: workspaceId },
+          },
+          outsiderCookie,
+        ),
+      );
+      expect(response.statusCode).toBe(403);
+
+      await db.$executeRawUnsafe(`DELETE FROM development_stages WHERE workspace_id = ?`, workspaceId);
+      await db.$executeRawUnsafe(`DELETE FROM workspace_members WHERE workspace_id = ?`, workspaceId);
+      await db.$executeRawUnsafe(`DELETE FROM workspaces WHERE id = ?`, workspaceId);
+      await db.$executeRawUnsafe(`DELETE FROM users WHERE id IN (?, ?)`, memberId, outsiderId);
+      await app.close();
+    });
   });
 
   it("POST /api/client-errors is registered and reachable", async () => {

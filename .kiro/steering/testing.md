@@ -32,7 +32,7 @@
 
 | 種別 | 干渉リスク | 既定の対策 |
 |------|------------|------------|
-| Backend Vitest | 中（残留・グローバル集計・失敗時cleanup漏れ） | `fileParallelism: false`、一意名、`hardDelete`、専用日付帯 |
+| Backend Vitest | 中（残留・共有DB集計・失敗時cleanup漏れ） | `fileParallelism: false`、一意名、`hardDelete`、専用日付帯 |
 | Frontend Vitest | 低（DB非使用） | 特になし |
 | Playwright E2E | 高（実行間でデータ蓄積） | `globalSetup` で TRUNCATE、`workers: 1`、WS単位のfixture |
 
@@ -51,10 +51,10 @@ Backend と E2E を同時に同じ DB へ向けないこと。E2E の globalSetu
    - recurrence / cases 関連のテストで原因不明の失敗が出た場合は `npx vitest run --no-file-parallelism` で再実行して切り分ける
    - `backend/vitest.config.ts` では既定で `fileParallelism: false`
 
-3. ワークスペース非依存のグローバル集計
-   - 例: throughput の `countCompleted` は全WS横断の COUNT で、soft-delete行も集計対象
+3. 共有DB上の集計テスト（ワークスペーススコープ後も干渉しうる）
+   - `GET /api/throughput` と `taskIntegrityService` の完了集計は現在ワークスペース必須だが、論理削除済み完了行も件数・ポイントに含める
    - 絶対件数をアサートするテストは、専用の歴史日付帯を決め、`beforeEach` でその帯の行を物理DELETEしてから始める（`throughput.service.test.ts` 参照）
-   - 新規にグローバル集計テストを書くときも、共有DB前提の絶対値アサートを避け、日付帯パージか差分アサートにする
+   - ワークスペース外は除外されるが、同一WS・同一日付帯に他テストの残留があると壊れる。共有DB前提の絶対値アサートは日付帯パージか差分アサートにする
 
 ## テストデータの作法（Backend 統合）
 
@@ -126,4 +126,4 @@ E2E_BASE_URL=http://localhost:3401 npm --prefix frontend run test:e2e -- auth.sp
 
 - サービス層のユニットテストではモックを最小限にし、実DBに対して検証する（このプロジェクトの一貫した選択）
 - 機能の「ビルドが通る」「ユニットテストが通る」は完了の十分条件ではない。フロント/バックエンド結合が絡むタスクは実ブラウザ検証（[[local-dev-pitfalls]]）を、複数モジュールにまたがる振る舞いは実HTTP経路での統合テストを併用する
-- 新しいテストを足すときは、上表の干渉リスクに当てはまる前提（共有DB・グローバル集計・キャップ付きUI）がないか先に確認する
+- 新しいテストを足すときは、上表の干渉リスクに当てはまる前提（共有DB・スコープ付き集計の絶対値アサート・キャップ付きUI）がないか先に確認する

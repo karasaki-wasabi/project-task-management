@@ -487,4 +487,71 @@ describe("TaskFieldCard", () => {
     expect(picker.find('[role="option"]').exists()).toBe(true);
     expect(picker.findComponent(UserAvatar).exists()).toBe(false);
   });
+
+  // velocity-dashboard 5.3 / mock 1h-c: leaf editable picker, parent read-only sum
+  it("葉タスクはストーリーポイント行をクリックすると編集ピッカーが開き保存できる", async () => {
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mountCard(makeTask({ storyPoints: 5 }), onUpdate, true, {
+      childTasks: [],
+    });
+
+    expect(wrapper.text()).toContain("ストーリーポイント");
+    expect(wrapper.text()).toContain("5");
+    expect(wrapper.find('[data-testid="story-points-parent-badge"]').exists()).toBe(false);
+
+    await wrapper.get('button[aria-label="ストーリーポイントを編集"]').trigger("click");
+    const picker = wrapper.get('[data-testid="inline-editable-picker"]');
+    expect(picker.find('input[data-testid="story-points-input"]').exists()).toBe(true);
+    expect(picker.text()).toContain("1 以上の整数");
+
+    await picker.get('input[data-testid="story-points-input"]').setValue("8");
+    await picker.get('[data-testid="story-points-picker-form"]').trigger("submit");
+    await flushPromises();
+
+    expect(onUpdate).toHaveBeenCalledWith("storyPoints", 8);
+  });
+
+  it("葉タスクで未設定のストーリーポイントはプレースホルダを表示する", () => {
+    const wrapper = mountCard(makeTask({ storyPoints: null }), undefined, true, {
+      childTasks: [],
+    });
+
+    expect(wrapper.get('[data-testid="story-points-value"]').text()).toBe("—");
+  });
+
+  it("葉タスクで空入力を保存すると storyPoints に null を渡す", async () => {
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mountCard(makeTask({ storyPoints: 3 }), onUpdate, true, {
+      childTasks: [],
+    });
+
+    await wrapper.get('button[aria-label="ストーリーポイントを編集"]').trigger("click");
+    const picker = wrapper.get('[data-testid="inline-editable-picker"]');
+    await picker.get('input[data-testid="story-points-input"]').setValue("");
+    await picker.get('[data-testid="story-points-picker-form"]').trigger("submit");
+    await flushPromises();
+
+    expect(onUpdate).toHaveBeenCalledWith("storyPoints", null);
+  });
+
+  it("親タスクのストーリーポイント行は読み取り専用でピッカーを開かない", async () => {
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mountCard(makeTask({ storyPoints: 13 }), onUpdate, true, {
+      childTasks: [childTask],
+    });
+
+    const field = wrapper.get('[data-testid="story-points-field"]');
+    expect(field.text()).toContain("13");
+    expect(wrapper.get('[data-testid="story-points-parent-badge"]').text()).toBe(
+      "子の合計(自動計算)",
+    );
+    expect(wrapper.find('button[aria-label="ストーリーポイントを編集"]').exists()).toBe(false);
+    expect(field.attributes("title")).toBe("子タスクの合計のため直接編集できません");
+
+    await field.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="inline-editable-picker"]').exists()).toBe(false);
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
 });

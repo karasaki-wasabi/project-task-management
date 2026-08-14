@@ -69,7 +69,7 @@
 - [x] task-field-rename -- `memo`→`detail`、`scheduledDate`→`scheduledEndDate` の API／DB／文言揃え。将来の開始予定日は `scheduledStartDate` と命名予約（カラム追加はしない）。完了済み仕様文書は更新しない。Dependencies: none（task-detail より先行）
 - [x] task-detail -- モーダルは簡易表示のまま、詳細画面でコメント・操作ログ・CRUD を提供する。Dependencies: workspace-resource-scope, task-status-model, task-field-rename
 - [x] user-avatar -- `userId` から決定的に生成する identicon を、担当者・コメント投稿者・メンバー一覧・ヘッダー等のユーザー名表示へ一貫して出す。画像アップロードは対象外。Dependencies: user-auth, workspace-membership, task-detail
-- [ ] velocity-dashboard -- ストーリーポイントと消化ペース／案件見通しのダッシュボード。Dependencies: workspace-resource-scope, task-detail, task-status-model
+- [x] velocity-dashboard -- ストーリーポイントと消化ペース／案件見通しのダッシュボード。Dependencies: workspace-resource-scope, task-detail, task-status-model, module-boundary-cleanup
 
 ## Phase: Frontend workspace URL
 
@@ -82,5 +82,5 @@
 
 クロスモジュールの repository／Prisma 直呼びを、通常の service および読み取り／整合専用公開面へ寄せた（Approach A）。画面・対外 API 契約は変えていない。
 
-- [x] module-boundary-cleanup -- クロスモジュールの repository／Prisma 直呼びを、通常の service および読み取り／整合専用公開面（`caseReadService`／`taskIntegrityService`、必要なら `client?: DbClient`）へ寄せ、整合・集計・初期投入の所有を明示する。Dependencies: none（既存モジュール実装に対する修復。velocity-dashboard とは独立に進められる）
+- [x] module-boundary-cleanup -- クロスモジュールの repository／Prisma 直呼びを、通常の service および読み取り／整合専用公開面（`caseReadService`／`taskIntegrityService`、必要なら `client?: DbClient`）へ寄せ、整合・集計・初期投入の所有を明示する。Dependencies: none（既存モジュール実装に対する修復。完了後は velocity-dashboard の集計公開面の前提になる）
 

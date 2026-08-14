@@ -32,16 +32,21 @@
   rather than only updating on save.
 
   Saving splits into two API calls: `PATCH /api/tasks/:id` (title/priority/
-  detail/assignee/caseId/isRequiredForCase — task-delivery-management task 3.3,
-  case-management-ux task 7) always runs, and `PATCH /api/tasks/:id/
-  development-stage` only runs when the stage field actually changed (that
-  endpoint is otherwise unrelated to this edit and has its own
-  assignee-preserving semantics we don't want to invoke needlessly).
+  detail/assignee/caseId/isRequiredForCase/storyPoints — task-delivery-management
+  task 3.3, case-management-ux task 7, velocity-dashboard task 5.2) always runs,
+  and `PATCH /api/tasks/:id/development-stage` only runs when the stage field
+  actually changed (that endpoint is otherwise unrelated to this edit and has
+  its own assignee-preserving semantics we don't want to invoke needlessly).
   `assigneeUserId` is never passed to the stage-update call — the general
   update already applied it. `caseId`/`isRequiredForCase` follow the same
   single-generic-update pattern as the rest of that call (case-management-ux
   design.md TaskDetailModal — 案件セクション追加 explicitly avoids a
   separate call here, unlike the stage field).
+
+  velocity-dashboard 5.2 / mock 1h-b: edit form story points — leaf tasks get
+  an editable number input; tasks with children show the server-derived sum
+  as read-only with「子の合計(自動計算)」. Child presence is detected via
+  `listTasks()` (`parentTaskId === taskId`); Task itself has no childCount.
 
   Delete requires an inline confirm step (`confirmingDelete`) rather than
   `window.confirm`, consistent with this app avoiding native browser
@@ -85,6 +90,8 @@ const assigneeUserId = ref("");
 const developmentStageId = ref("");
 const caseId = ref("");
 const isRequiredForCase = ref(false);
+const storyPoints = ref("");
+const hasChildren = ref(false);
 
 const assigneeName = computed(() => props.users.find((u) => u.id === task.value?.assigneeUserId)?.name);
 const caseName = computed(() => props.cases.find((c) => c.id === task.value?.caseId)?.name ?? "—");
@@ -106,6 +113,12 @@ function resetForm(loaded: Task) {
   developmentStageId.value = loaded.developmentStageId ?? "";
   caseId.value = loaded.caseId ?? "";
   isRequiredForCase.value = loaded.isRequiredForCase;
+  storyPoints.value = loaded.storyPoints != null ? String(loaded.storyPoints) : "";
+}
+
+function parseStoryPointsInput(raw: string): number | null {
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : null;
 }
 
 // Requirement 4.6: clearing the case selection resets the required toggle's
@@ -122,11 +135,13 @@ watch(
     confirmingDelete.value = false;
     mode.value = "view";
     task.value = null;
+    hasChildren.value = false;
     if (!id) return;
     loading.value = true;
     try {
-      const loaded = await api.getTask(id);
+      const [loaded, boardTasks] = await Promise.all([api.getTask(id), api.listTasks()]);
       task.value = loaded;
+      hasChildren.value = boardTasks.some((entry) => entry.parentTaskId === id);
       resetForm(loaded);
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
@@ -160,6 +175,8 @@ async function save() {
       assigneeUserId: assigneeUserId.value || null,
       caseId: caseId.value || null,
       isRequiredForCase: isRequiredForCase.value,
+      // Parents reject direct storyPoints writes (Req 1.5 / 2.5); omit the field.
+      ...(hasChildren.value ? {} : { storyPoints: parseStoryPointsInput(storyPoints.value) }),
     });
     if (developmentStageId.value !== (task.value.developmentStageId ?? "")) {
       updated = await api.updateTaskDevelopmentStage(props.taskId, developmentStageId.value || null);
@@ -282,6 +299,33 @@ async function confirmDelete() {
               <option value="">未設定</option>
               <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
             </select>
+          </div>
+
+          <!-- velocity-dashboard 5.2 / mock 1h-b: leaf editable, parent readonly sum -->
+          <div v-if="!hasChildren" class="flex flex-col gap-1">
+            <label class="text-xs font-medium text-slate-500" for="task-detail-story-points">ストーリーポイント</label>
+            <input
+              id="task-detail-story-points"
+              v-model="storyPoints"
+              data-testid="story-points-input"
+              type="number"
+              min="1"
+              step="1"
+              placeholder="任意"
+              class="w-24 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div v-else class="flex flex-col gap-1">
+            <span class="text-xs font-medium text-slate-500">ストーリーポイント</span>
+            <div class="flex flex-wrap items-center gap-2">
+              <div
+                data-testid="story-points-readonly"
+                class="flex min-w-24 items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-500"
+              >
+                {{ task.storyPoints ?? "—" }}
+              </div>
+              <span class="text-xs text-slate-500">子の合計(自動計算)</span>
+            </div>
           </div>
         </div>
 

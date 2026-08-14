@@ -30,6 +30,7 @@ const newTitle = ref("");
 const newPriority = ref<Priority>("medium");
 const newDetail = ref("");
 const newAssigneeUserId = ref("");
+const newStoryPoints = ref("");
 const newIsRequiredForCase = ref(false);
 const users = ref<User[]>([]);
 
@@ -56,6 +57,10 @@ async function load() {
 }
 
 async function createTask() {
+  const parsedPoints = Number(newStoryPoints.value);
+  const storyPoints =
+    Number.isInteger(parsedPoints) && parsedPoints >= 1 ? parsedPoints : undefined;
+
   await api.createTask({
     title: newTitle.value,
     priority: newPriority.value,
@@ -68,9 +73,12 @@ async function createTask() {
     isRequiredForCase: caseId.value ? newIsRequiredForCase.value : undefined,
     // Requirement 7.1: assign to one pre-registered user at creation time.
     assigneeUserId: newAssigneeUserId.value || undefined,
+    // velocity-dashboard Req 1.1-1.4: optional leaf story points (new tasks are always leaves).
+    ...(storyPoints !== undefined ? { storyPoints } : {}),
   });
   newTitle.value = "";
   newDetail.value = "";
+  newStoryPoints.value = "";
   newIsRequiredForCase.value = false;
   await load();
 }
@@ -174,6 +182,18 @@ watch(
         <option value="">担当者未設定</option>
         <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
       </select>
+      <label class="flex items-center gap-1.5 text-sm text-slate-700">
+        ポイント
+        <input
+          v-model="newStoryPoints"
+          data-testid="story-points-input"
+          type="number"
+          min="1"
+          step="1"
+          placeholder="任意"
+          class="w-20 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </label>
       <label v-if="caseId" class="flex items-center gap-1.5 text-sm text-slate-700">
         <input v-model="newIsRequiredForCase" type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
         必須タスク

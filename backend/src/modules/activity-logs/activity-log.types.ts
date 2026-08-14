@@ -18,7 +18,8 @@ export type FieldName =
   | "isRequiredForCase"
   | "developmentStage"
   | "parentTask"
-  | "scheduledEndDate";
+  | "scheduledEndDate"
+  | "storyPoints";
 
 export type RecordActorInput =
   | { type: "user"; userId: string }

@@ -1,6 +1,6 @@
 // Cross-cutting workspace-scope authorization (workspace-resource-scope
 // task 9.1; Requirements 3.1, 3.2, 3.3, 3.4; design.md Testing Strategy
-// Integration Tests). One file that walks all five scoped domains and
+// Integration Tests). Walks scoped collection domains and
 // asserts missing header → 400, non-member → 403, and other-workspace
 // get/update/delete → 404 (guard / scope leakage detection).
 import { randomUUID } from "node:crypto";
@@ -30,6 +30,7 @@ const SCOPED_COLLECTION_PATHS = [
   "/api/recurring-templates",
   "/api/holidays",
   "/api/development-stages",
+  "/api/throughput",
 ] as const;
 
 function sessionCookie(response: { headers: Record<string, string | string[] | undefined> }): string {

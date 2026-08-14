@@ -246,3 +246,113 @@ describe("taskRepository.countIncompleteChildren (task-status-model 3.1)", () =>
     await hardDelete("development_stages", [cancelledStage.id]);
   });
 });
+
+describe("taskRepository.hasChildren / recalculateAncestorStoryPoints (velocity-dashboard 2.2)", () => {
+  it("hasChildren is true for live children and false when only soft-deleted children remain", async () => {
+    const parent = await taskRepository.create({
+      title: "has-children parent",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    const child = await taskRepository.create({
+      title: "has-children child",
+      priority: "low",
+      parentTaskId: parent.id,
+      workspaceId: workspaceA,
+    });
+
+    try {
+      expect(await taskRepository.hasChildren(parent.id, workspaceA)).toBe(true);
+
+      await taskRepository.delete(child.id, workspaceA);
+
+      expect(await taskRepository.hasChildren(parent.id, workspaceA)).toBe(false);
+      expect(await taskRepository.hasChildren(parent.id, workspaceB)).toBe(false);
+    } finally {
+      await hardDelete("tasks", [child.id, parent.id]);
+    }
+  });
+
+  it("recalculates storyPoints up a 3+ level tree and sets null when children are gone", async () => {
+    const root = await taskRepository.create({
+      title: "sp root",
+      priority: "medium",
+      workspaceId: workspaceA,
+      storyPoints: 99,
+    });
+    const mid = await taskRepository.create({
+      title: "sp mid",
+      priority: "medium",
+      parentTaskId: root.id,
+      workspaceId: workspaceA,
+      storyPoints: 88,
+    });
+    const leafA = await taskRepository.create({
+      title: "sp leaf a",
+      priority: "low",
+      parentTaskId: mid.id,
+      workspaceId: workspaceA,
+      storyPoints: 3,
+    });
+    const leafB = await taskRepository.create({
+      title: "sp leaf b",
+      priority: "low",
+      parentTaskId: mid.id,
+      workspaceId: workspaceA,
+    });
+
+    try {
+      await db.$transaction(async (tx) => {
+        await taskRepository.recalculateAncestorStoryPoints(mid.id, workspaceA, tx);
+      });
+
+      expect((await taskRepository.findById(mid.id, workspaceA))?.storyPoints).toBe(3);
+      expect((await taskRepository.findById(root.id, workspaceA))?.storyPoints).toBe(3);
+
+      await taskRepository.update(leafB.id, workspaceA, { storyPoints: 5 });
+      await db.$transaction(async (tx) => {
+        await taskRepository.recalculateAncestorStoryPoints(mid.id, workspaceA, tx);
+      });
+
+      expect((await taskRepository.findById(mid.id, workspaceA))?.storyPoints).toBe(8);
+      expect((await taskRepository.findById(root.id, workspaceA))?.storyPoints).toBe(8);
+
+      await taskRepository.delete(leafA.id, workspaceA);
+      await taskRepository.delete(leafB.id, workspaceA);
+      await db.$transaction(async (tx) => {
+        await taskRepository.recalculateAncestorStoryPoints(mid.id, workspaceA, tx);
+      });
+
+      expect((await taskRepository.findById(mid.id, workspaceA))?.storyPoints).toBeNull();
+      // root still has mid as a child whose points are unset → 0 (not null)
+      expect((await taskRepository.findById(root.id, workspaceA))?.storyPoints).toBe(0);
+    } finally {
+      await hardDelete("tasks", [leafA.id, leafB.id, mid.id, root.id]);
+    }
+  });
+
+  it("sets parent storyPoints to 0 when children exist but all are unset", async () => {
+    const parent = await taskRepository.create({
+      title: "unset-children parent",
+      priority: "medium",
+      workspaceId: workspaceA,
+      storyPoints: 7,
+    });
+    const child = await taskRepository.create({
+      title: "unset child",
+      priority: "low",
+      parentTaskId: parent.id,
+      workspaceId: workspaceA,
+    });
+
+    try {
+      await db.$transaction(async (tx) => {
+        await taskRepository.recalculateAncestorStoryPoints(parent.id, workspaceA, tx);
+      });
+
+      expect((await taskRepository.findById(parent.id, workspaceA))?.storyPoints).toBe(0);
+    } finally {
+      await hardDelete("tasks", [child.id, parent.id]);
+    }
+  });
+});

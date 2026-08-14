@@ -26,7 +26,7 @@
 **Location**: `backend/src/shared/`
 **Purpose**: 全モジュール共通のインフラ(ログ基盤`logger.ts`/`business-event-logger.ts`、DBクライアント`db.ts`、`HttpError`、ソフトデリートのPrisma拡張、`Result`型、ワークスペース文脈`workspace-scope.ts`の定数・`VerifiedWorkspaceId`・`withWorkspaceScope`)。モジュール固有のロジックはここに置かない。ドメイン固有でない日付のみの解釈・整形（`date-only.ts`）は例外としてここに置く
 
-ワークスペース所属ガード(`requireWorkspaceMember`)は`backend/src/workspace-scope.guard.ts`に置き、`app.ts`が対象パスへ配線する。対象プレフィックスは`/api/cases`・`/api/tasks`・`/api/recurring-templates`・`/api/holidays`・`/api/development-stages`の5つ。`/api/throughput`はAPIスコープ対象外（画面 URL のみワークスペース付き。API スコープ化は後続）。
+ワークスペース所属ガード(`requireWorkspaceMember`)は`backend/src/workspace-scope.guard.ts`に置き、`app.ts`が対象パスへ配線する。対象プレフィックスは`/api/cases`・`/api/tasks`・`/api/recurring-templates`・`/api/holidays`・`/api/development-stages`・`/api/throughput`の6つ。バックエンドの配列と`frontend/composables/useApiClient.ts`の同名リスト、および`app.routes.test.ts`・`validation.integration.test.ts`の重複定義は同期必須（いずれかを変えたら他も揃える）。
 
 ### バックエンド機能横断テスト
 **Location**: `backend/src/*.test.ts`(`src/`直下)
@@ -44,7 +44,7 @@
 **Location**: `frontend/components/<domain>/`, `frontend/composables/`, `frontend/utils/workspacePath.ts`
 **Purpose**: 複数ページで再利用するUI部品(例: `components/tasks/TaskNode.vue`の再帰階層表示、`components/users/AssigneeFilter.vue`)とロジック(`useApiClient.ts`がバックエンドAPIへの唯一のHTTP境界、`useErrorReportRateLimit.ts`のような純粋関数の抽出)。`nuxt.config.ts`で`components: [{ path: "~/components", pathPrefix: false }]`を設定しているため、サブディレクトリのコンポーネントもディレクトリ名プレフィックスなしで`<ComponentName>`のまま参照できる([[local-dev-pitfalls]]参照)
 
-認証状態は `composables/useAuth.ts` が共有する。`useApiClient.ts` は `credentials: 'include'` と CSRF ヘッダ付与を担い、ページから直接 Cookie／CSRF を扱わない。対象5プレフィックスのAPI呼び出しには現在ワークスペースIDを`x-workspace-id`として付与する（`/api/throughput`は付与しない）。scoped API が所属拒否（403）を返したときは一覧を再取得し、失っていれば `relocateAfterWorkspaceLost` する。
+認証状態は `composables/useAuth.ts` が共有する。`useApiClient.ts` は `credentials: 'include'` と CSRF ヘッダ付与を担い、ページから直接 Cookie／CSRF を扱わない。上記6プレフィックスのAPI呼び出しには現在ワークスペースIDを`x-workspace-id`として付与する。scoped API が所属拒否（403）を返したときは一覧を再取得し、失っていれば `relocateAfterWorkspaceLost` する。
 
 現在ワークスペース文脈は `composables/useCurrentWorkspace.ts` が共有する（Nuxt `useState` + `localStorage`キー`currentWorkspaceId`）。scoped 画面では URL の `workspaceId` が正本で、`localStorage` は `/` 分岐と管理画面向けの last-used 専用。`refresh()`は last-used が所属内のときだけ `currentId` に載せ、無効／未設定なら `null` のまま（先頭自動選択はしない）。ページから `localStorage` キーを直接操作しない。パス組み立ては `utils/workspacePath.ts`（`buildNavLinks` 含む）。
 

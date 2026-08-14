@@ -8,6 +8,8 @@ import StageBadge from "../shared/StageBadge.vue";
 import TaskDetailModal from "./TaskDetailModal.vue";
 
 const getTask = vi.fn();
+const listTasks = vi.fn();
+const updateTask = vi.fn();
 
 vi.mock("../../composables/useApiClient", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../composables/useApiClient")>();
@@ -15,6 +17,8 @@ vi.mock("../../composables/useApiClient", async (importOriginal) => {
     ...actual,
     useApiClient: () => ({
       getTask,
+      listTasks,
+      updateTask,
     }),
   };
 });
@@ -112,8 +116,9 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   };
 }
 
-async function mountDetail(task: Task) {
+async function mountDetail(task: Task, boardTasks: Task[] = [task]) {
   getTask.mockResolvedValue(task);
+  listTasks.mockResolvedValue(boardTasks);
   const wrapper = mount(TaskDetailModal, {
     props: {
       taskId: task.id,
@@ -139,6 +144,12 @@ async function mountDetail(task: Task) {
   return wrapper;
 }
 
+async function enterEditMode(wrapper: Awaited<ReturnType<typeof mountDetail>>) {
+  const editButton = wrapper.findAll("button").find((button) => button.text() === "編集");
+  expect(editButton).toBeDefined();
+  await editButton!.trigger("click");
+}
+
 function stageIndexInBadges(wrapper: Awaited<ReturnType<typeof mountDetail>>): number {
   const row = wrapper.get('[data-testid="task-detail-badges"]');
   const stageEl = row.findComponent(StageBadge).element;
@@ -148,6 +159,9 @@ function stageIndexInBadges(wrapper: Awaited<ReturnType<typeof mountDetail>>): n
 describe("TaskDetailModal (task-status-model 5.3)", () => {
   beforeEach(() => {
     getTask.mockReset();
+    listTasks.mockReset();
+    updateTask.mockReset();
+    listTasks.mockResolvedValue([]);
     vi.stubGlobal("useRoute", () => ({ params: { workspaceId: "w1" } }));
   });
 
@@ -234,5 +248,87 @@ describe("TaskDetailModal (task-status-model 5.3)", () => {
     expect(wrapper.findAll("button").some((button) => button.text() === "削除")).toBe(false);
     expect(wrapper.find("#task-detail-title").exists()).toBe(false);
     expect(wrapper.find('a[href="/workspaces/w1/tasks/t1"]').exists()).toBe(true);
+  });
+});
+
+describe("TaskDetailModal story points (velocity-dashboard 5.2)", () => {
+  beforeEach(() => {
+    getTask.mockReset();
+    listTasks.mockReset();
+    updateTask.mockReset();
+    listTasks.mockResolvedValue([]);
+    vi.stubGlobal("useRoute", () => ({ params: { workspaceId: "w1" } }));
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows an editable story points input for a leaf task in edit mode", async () => {
+    const leaf = makeTask({ id: "leaf", storyPoints: 5 });
+    const wrapper = await mountDetail(leaf, [leaf]);
+    await enterEditMode(wrapper);
+
+    const input = wrapper.get('[data-testid="story-points-input"]');
+    expect(input.attributes("type")).toBe("number");
+    expect((input.element as HTMLInputElement).disabled).toBe(false);
+    expect((input.element as HTMLInputElement).readOnly).toBe(false);
+    expect((input.element as HTMLInputElement).value).toBe("5");
+    expect(wrapper.text()).not.toContain("子の合計(自動計算)");
+  });
+
+  it("shows readonly child-sum display instead of an input when the task has children", async () => {
+    const parent = makeTask({ id: "parent", storyPoints: 13 });
+    const child = makeTask({ id: "child", parentTaskId: "parent", storyPoints: 8 });
+    const wrapper = await mountDetail(parent, [parent, child]);
+    await enterEditMode(wrapper);
+
+    expect(wrapper.find('[data-testid="story-points-input"]').exists()).toBe(false);
+    const readonly = wrapper.get('[data-testid="story-points-readonly"]');
+    expect(readonly.text()).toContain("13");
+    expect(wrapper.text()).toContain("子の合計(自動計算)");
+  });
+
+  it("includes storyPoints in updateTask when saving a leaf task", async () => {
+    const leaf = makeTask({ id: "leaf", storyPoints: 3 });
+    updateTask.mockResolvedValue({ ...leaf, storyPoints: 8 });
+    const wrapper = await mountDetail(leaf, [leaf]);
+    await enterEditMode(wrapper);
+
+    await wrapper.get('[data-testid="story-points-input"]').setValue("8");
+    await wrapper.get("#task-detail-form").trigger("submit");
+    await flushPromises();
+
+    expect(updateTask).toHaveBeenCalledWith(
+      "leaf",
+      expect.objectContaining({ storyPoints: 8 }),
+    );
+  });
+
+  it("omits storyPoints from updateTask when saving a parent task but still sends other editable fields", async () => {
+    const parent = makeTask({ id: "parent", title: "親タスク", storyPoints: 13, priority: "medium" });
+    const child = makeTask({ id: "child", parentTaskId: "parent", storyPoints: 8 });
+    updateTask.mockResolvedValue({ ...parent, title: "親を更新", priority: "high" });
+    const wrapper = await mountDetail(parent, [parent, child]);
+    await enterEditMode(wrapper);
+
+    await wrapper.get("#task-detail-title").setValue("親を更新");
+    await wrapper.get("#task-detail-priority").setValue("high");
+    await wrapper.get("#task-detail-form").trigger("submit");
+    await flushPromises();
+
+    expect(updateTask).toHaveBeenCalledTimes(1);
+    const [, payload] = updateTask.mock.calls[0] as [string, Record<string, unknown>];
+    expect(payload).not.toHaveProperty("storyPoints");
+    expect(payload).toEqual(
+      expect.objectContaining({
+        title: "親を更新",
+        priority: "high",
+        detail: null,
+        assigneeUserId: "u1",
+        caseId: "c1",
+        isRequiredForCase: false,
+      }),
+    );
   });
 });

@@ -46,6 +46,7 @@ describe("recurrence schema shape (task 1.1)", () => {
       sourceAnchor: "sourceAnchor",
       detail: "detail",
       scheduledEndDate: "scheduledEndDate",
+      storyPoints: "storyPoints",
     });
     expect(taskFields).not.toHaveProperty("memo");
     expect(taskFields).not.toHaveProperty("scheduledDate");
@@ -68,6 +69,7 @@ describe("recurrence schema shape (task 1.1)", () => {
     expect(schema).toMatch(/templateCaseDateActiveKey\s+Unsupported\(/);
     expect(schema).toMatch(/@map\("template_case_date_active_key"\)/);
     expect(schema).toMatch(/scheduledEndDate\s+DateTime\?\s+@map\("scheduled_end_date"\)/);
+    expect(schema).toMatch(/storyPoints\s+Int\?\s+@map\("story_points"\)/);
     expect(schema).toMatch(/defaultDetail\s+String\?\s+@db\.Text\s+@map\("default_detail"\)/);
     expect(schema).toMatch(/scheduled_end_date/);
     expect(schema).not.toMatch(/@map\("scheduled_date"\)/);
@@ -127,6 +129,7 @@ describe("task-detail persistence schema (task 1)", () => {
       developmentStage: "developmentStage",
       parentTask: "parentTask",
       scheduledEndDate: "scheduledEndDate",
+      storyPoints: "storyPoints",
     });
   });
 
@@ -1013,8 +1016,12 @@ describe("task-field-rename schema (task 1.1)", () => {
     expect(sql).toMatch(/STORED GENERATED COLUMN/);
     expect(sql).toMatch(/`detail` TEXT NULL/);
     expect(sql).toMatch(/`scheduled_end_date` DATE NULL/);
+    expect(sql).toMatch(/`story_points`/);
     expect(sql).toMatch(/`default_detail` TEXT NULL/);
     expect(sql).toMatch(/DATE_FORMAT\(`scheduled_end_date`/);
+    expect(sql).toMatch(
+      /`field_name` ENUM\([^)]*'storyPoints'[^)]*\)/,
+    );
     expect(sql).not.toMatch(/`memo` TEXT/);
     expect(sql).not.toMatch(/`scheduled_date`/);
     expect(sql).not.toMatch(/`default_memo`/);
@@ -1025,7 +1032,12 @@ describe("task-field-rename schema (task 1.1)", () => {
     const taskColumns = await prisma.$queryRaw<Array<{ Field: string }>>`SHOW COLUMNS FROM tasks`;
     const taskColumnNames = taskColumns.map((column) => column.Field);
     expect(taskColumnNames).toEqual(
-      expect.arrayContaining(["detail", "scheduled_end_date", "template_case_date_active_key"]),
+      expect.arrayContaining([
+        "detail",
+        "scheduled_end_date",
+        "story_points",
+        "template_case_date_active_key",
+      ]),
     );
     expect(taskColumnNames).not.toContain("memo");
     expect(taskColumnNames).not.toContain("scheduled_date");
@@ -1048,7 +1060,10 @@ describe("task-field-rename schema (task 1.1)", () => {
       ) ??
       "";
     expect(createSql).toMatch(/`scheduled_end_date`/);
+    expect(createSql).toMatch(/`story_points`/);
     expect(createSql).toMatch(/date_format\(`scheduled_end_date`/i);
+    expect(createSql).toMatch(/GENERATED ALWAYS AS/i);
+    expect(createSql).toMatch(/template_case_date_active_key/);
     expect(createSql).not.toMatch(/date_format\(`scheduled_date`/i);
   });
 });

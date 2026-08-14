@@ -80,6 +80,7 @@ enum FieldName {
   developmentStage
   parentTask
   scheduledEndDate
+  storyPoints
 }
 
 model User {
@@ -172,6 +173,7 @@ model Task {
   sourceAnchor             CaseRelativeAnchor?  @map("source_anchor")
   developmentStageId       String?              @map("development_stage_id")
   scheduledEndDate         DateTime?            @map("scheduled_end_date") @db.Date
+  storyPoints              Int?                 @map("story_points")
   completedAt              DateTime?            @map("completed_at")
   workspaceId              String               @map("workspace_id")
   createdAt                DateTime             @default(now()) @map("created_at")

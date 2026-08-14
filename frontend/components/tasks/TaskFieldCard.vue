@@ -77,6 +77,7 @@ const stage = computed(
   () => props.stages.find((entry) => entry.id === props.task.developmentStageId) ?? null,
 );
 const closed = computed(() => isTaskClosed(props.task, props.stages));
+const hasChildren = computed(() => props.childTasks.length > 0);
 const overdue = computed(
   () =>
     !closed.value &&
@@ -114,6 +115,27 @@ function saveHandler(field: string) {
 function nullableSaveHandler(field: string) {
   return (value: unknown) =>
     props.onUpdate(field, typeof value === "string" && value.length > 0 ? value : null);
+}
+
+function storyPointsDraft(value: unknown): string {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 1) {
+    return String(value);
+  }
+  if (typeof value === "string") return value;
+  return "";
+}
+
+async function saveStoryPoints(value: unknown) {
+  const raw = storyPointsDraft(value);
+  if (raw.trim().length > 0) {
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      throw new Error("1以上の整数を入力してください");
+    }
+    await props.onUpdate("storyPoints", parsed);
+    return;
+  }
+  await props.onUpdate("storyPoints", null);
 }
 
 function selectValue(event: Event): string {
@@ -246,6 +268,84 @@ function toggleRequired(value: unknown, setDraftValue: (next: unknown) => void) 
                 ariaLabel="開発段階を選択"
                 @select="saveValue"
               />
+            </template>
+          </InlineEditableField>
+
+          <!-- velocity-dashboard 5.3 / mock 1h-c: leaf editable, parent readonly sum -->
+          <div
+            v-if="hasChildren"
+            data-testid="story-points-field"
+            class="flex min-h-9 items-center gap-3 px-2 py-1.5"
+            title="子タスクの合計のため直接編集できません"
+          >
+            <span class="w-[88px] shrink-0 text-xs font-medium text-slate-500">ストーリーポイント</span>
+            <span class="flex items-center gap-2 text-sm font-medium text-slate-800">
+              <span data-testid="story-points-value">{{ task.storyPoints ?? "—" }}</span>
+              <span
+                data-testid="story-points-parent-badge"
+                class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"
+              >
+                子の合計(自動計算)
+              </span>
+            </span>
+          </div>
+          <InlineEditableField
+            v-else
+            label="ストーリーポイント"
+            :modelValue="task.storyPoints != null ? String(task.storyPoints) : ''"
+            :editable="editable"
+            :onSave="saveStoryPoints"
+          >
+            <template #default>
+              <div class="flex items-center gap-3">
+                <span class="w-[88px] shrink-0 text-xs font-medium text-slate-500">ストーリーポイント</span>
+                <span
+                  data-testid="story-points-value"
+                  class="text-sm"
+                  :class="task.storyPoints != null ? 'font-medium text-slate-800' : 'text-slate-400'"
+                >
+                  {{ task.storyPoints ?? "—" }}
+                </span>
+              </div>
+            </template>
+            <template #picker="{ draftValue, setDraftValue, save, cancel, saving }">
+              <form data-testid="story-points-picker-form" class="space-y-3" @submit.prevent="save">
+                <div class="space-y-1">
+                  <label class="text-xs font-medium text-slate-500" for="task-field-story-points">
+                    ストーリーポイント
+                  </label>
+                  <input
+                    id="task-field-story-points"
+                    data-testid="story-points-input"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="任意"
+                    :value="storyPointsDraft(draftValue)"
+                    :disabled="saving"
+                    class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    @input="setDraftValue(inputValue($event))"
+                  >
+                  <p class="text-xs text-slate-400">1 以上の整数</p>
+                </div>
+                <div class="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    :disabled="saving"
+                    class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    @click="cancel"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="submit"
+                    :disabled="saving"
+                    class="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {{ saving ? "送信中..." : "更新" }}
+                  </button>
+                </div>
+              </form>
             </template>
           </InlineEditableField>
       </div>

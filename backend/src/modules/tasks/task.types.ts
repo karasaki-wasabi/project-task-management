@@ -21,6 +21,8 @@ export interface CreateTaskInput {
   isRequiredForCase?: boolean;
   assigneeUserId?: string;
   parentTaskId?: string;
+  /** Leaf-task estimate; optional. Range enforced at the route layer (1+ int). */
+  storyPoints?: number;
   // RecurrenceService-only source metadata. scheduledEndDate is also accepted
   // by the public create route so task duplication can finish in one request.
   sourceTemplateId?: string;
@@ -54,6 +56,8 @@ export interface UpdateTaskInput {
   assigneeUserId?: string | null;
   parentTaskId?: string | null;
   scheduledEndDate?: Date | null;
+  /** Leaf-task estimate; optional. `null` clears. Range enforced at the route layer. */
+  storyPoints?: number | null;
 }
 
 export interface GetTaskOptions {
