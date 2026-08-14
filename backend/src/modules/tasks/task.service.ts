@@ -282,6 +282,14 @@ export const tasksService = {
           },
           writeClient as SoftDeleteTx,
         );
+        // velocity-dashboard 2.3: create with parent → recalc from that parent (2.1, 2.3).
+        if (created.parentTaskId != null) {
+          await taskRepository.recalculateAncestorStoryPoints(
+            created.parentTaskId,
+            input.workspaceId,
+            writeClient,
+          );
+        }
         return created;
       });
       return ok(task);
@@ -508,6 +516,21 @@ export const tasksService = {
       data.parentTaskId = input.parentTaskId;
     }
 
+    // velocity-dashboard 2.3: reject direct storyPoints on parents (1.5, 2.5).
+    if (input.storyPoints !== undefined) {
+      const hasChildren = await taskRepository.hasChildren(taskId, workspaceId);
+      if (hasChildren) {
+        return err({
+          type: "validation_error",
+          message: "storyPoints cannot be set directly on a parent task",
+        });
+      }
+      data.storyPoints = input.storyPoints;
+    }
+
+    const parentTaskIdChanging = input.parentTaskId !== undefined;
+    const storyPointsChanging = input.storyPoints !== undefined;
+
     try {
       const task = await runActivityWrite(db, async (writeClient) => {
         const updated = await taskRepository.update(taskId, workspaceId, data, writeClient);
@@ -531,9 +554,39 @@ export const tasksService = {
               beforeValue: current.scheduledEndDate,
               afterValue: updated.scheduledEndDate,
             },
+            {
+              field: "storyPoints",
+              beforeValue: current.storyPoints,
+              afterValue: updated.storyPoints,
+            },
           ],
           writeClient,
         );
+
+        // velocity-dashboard 2.3: recalc triggers (ancestor auto-updates are not logged).
+        if (storyPointsChanging && updated.parentTaskId != null) {
+          await taskRepository.recalculateAncestorStoryPoints(
+            updated.parentTaskId,
+            workspaceId,
+            writeClient,
+          );
+        }
+        if (parentTaskIdChanging) {
+          if (current.parentTaskId != null) {
+            await taskRepository.recalculateAncestorStoryPoints(
+              current.parentTaskId,
+              workspaceId,
+              writeClient,
+            );
+          }
+          if (updated.parentTaskId != null) {
+            await taskRepository.recalculateAncestorStoryPoints(
+              updated.parentTaskId,
+              workspaceId,
+              writeClient,
+            );
+          }
+        }
         return updated;
       });
       return ok(task);
@@ -598,6 +651,8 @@ export const tasksService = {
           },
           writeClient as SoftDeleteTx,
         );
+        // velocity-dashboard 2.3: addChild → recalc from parent (2.1, 2.3).
+        await taskRepository.recalculateAncestorStoryPoints(parentTaskId, workspaceId, writeClient);
         return created;
       });
       return ok(child);
@@ -673,6 +728,8 @@ export const tasksService = {
             writeClient as SoftDeleteTx,
           );
         }
+        // velocity-dashboard 2.3: splitTask → recalc from split source (2.1, 2.3).
+        await taskRepository.recalculateAncestorStoryPoints(taskId, workspaceId, writeClient);
         return createdParts;
       });
       return ok(created);
@@ -693,6 +750,7 @@ export const tasksService = {
   ): Promise<Result<void, TaskError>> {
     const writable = await getWritableTask(taskId, workspaceId, client);
     if (!writable.ok) return writable;
+    const parentTaskId = writable.value.parentTaskId;
 
     try {
       await runActivityWrite(client, async (writeClient) => {
@@ -705,6 +763,10 @@ export const tasksService = {
           },
           writeClient as SoftDeleteTx,
         );
+        // velocity-dashboard 2.3: delete → recalc deleted task's parent if any (2.1).
+        if (parentTaskId != null) {
+          await taskRepository.recalculateAncestorStoryPoints(parentTaskId, workspaceId, writeClient);
+        }
       });
     } catch (error) {
       if (isRecordNotFoundError(error)) {

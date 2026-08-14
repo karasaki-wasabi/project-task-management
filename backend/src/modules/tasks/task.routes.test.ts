@@ -367,6 +367,121 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       await hardDelete("tasks", [id]);
       expect(response.statusCode).toBe(200);
     });
+
+    it("PATCH /api/tasks/:id returns 400 when storyPoints is set on a parent (1.5, 2.5)", async () => {
+      const parent = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/tasks",
+            payload: { title: "parent points reject", priority: "medium" },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(parent.statusCode).toBe(201);
+      const parentId = parent.json().id as string;
+
+      const child = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/tasks",
+            payload: {
+              title: "child of parent",
+              priority: "low",
+              parentTaskId: parentId,
+              storyPoints: 2,
+            },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(child.statusCode).toBe(201);
+      const childId = child.json().id as string;
+
+      const response = await app.inject(
+        withWorkspace(
+          {
+            method: "PATCH",
+            url: `/api/tasks/${parentId}`,
+            payload: { storyPoints: 9 },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+
+      expect(response.statusCode).toBe(400);
+      await hardDelete("tasks", [childId, parentId]);
+    });
+
+    it("PATCH leaf storyPoints records timeline field_changed (2.2)", async () => {
+      const created = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/tasks",
+            payload: { title: "leaf timeline points", priority: "low" },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(created.statusCode).toBe(201);
+      const { id } = created.json();
+
+      const patched = await app.inject(
+        withWorkspace(
+          {
+            method: "PATCH",
+            url: `/api/tasks/${id}`,
+            payload: { storyPoints: 5 },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(patched.statusCode).toBe(200);
+      expect(patched.json().storyPoints).toBe(5);
+
+      const timeline = await app.inject(
+        withWorkspace(
+          {
+            method: "GET",
+            url: `/api/tasks/${id}/timeline?filter=changes`,
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(timeline.statusCode).toBe(200);
+      const entries = timeline.json().items as Array<{
+        operationType: string;
+        fieldName: string | null;
+        beforeValue: string | null;
+        afterValue: string | null;
+      }>;
+      expect(
+        entries.some(
+          (e) =>
+            e.operationType === "field_changed" &&
+            e.fieldName === "storyPoints" &&
+            e.beforeValue === null &&
+            e.afterValue === "5",
+        ),
+      ).toBe(true);
+
+      await hardDelete("tasks", [id]);
+    });
   });
 
   it("PATCH /api/tasks/:id/status updates status, returns 404 for unknown id", async () => {

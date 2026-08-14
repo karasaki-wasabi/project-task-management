@@ -1749,3 +1749,271 @@ describe("tasksService module boundary (module-boundary-cleanup task 3)", () => 
     );
   });
 });
+
+describe("tasksService storyPoints (velocity-dashboard 2.3; Requirements 1.5, 2.1–2.5)", () => {
+  it("rejects update storyPoints when the task has children (1.5, 2.5)", async () => {
+    const parent = await tasksService.create({
+      title: "parent-with-child",
+      priority: "medium",
+      workspaceId: workspaceA,
+      storyPoints: 5,
+    });
+    expect(parent.ok).toBe(true);
+    if (!parent.ok) return;
+
+    const child = await tasksService.addChild(parent.value.id, workspaceA, {
+      title: "child",
+      priority: "low",
+      workspaceId: workspaceA,
+      storyPoints: 3,
+    });
+    expect(child.ok).toBe(true);
+    if (!child.ok) return;
+
+    const rejected = await tasksService.update(parent.value.id, workspaceA, { storyPoints: 9 });
+    expect(rejected.ok).toBe(false);
+    if (rejected.ok) return;
+    expect(rejected.error.type).toBe("validation_error");
+
+    await hardDeleteTasks([child.value.id, parent.value.id]);
+  });
+
+  it("persists leaf storyPoints on update and records field_changed timeline (2.2)", async () => {
+    const leaf = await tasksService.create({
+      title: "leaf-points",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    expect(leaf.ok).toBe(true);
+    if (!leaf.ok) return;
+
+    const updated = await tasksService.update(leaf.value.id, workspaceA, { storyPoints: 8 });
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    expect(updated.value.storyPoints).toBe(8);
+
+    const log = await db.activityLog.findFirst({
+      where: {
+        taskId: leaf.value.id,
+        operationType: "field_changed",
+        fieldName: "storyPoints",
+      },
+    });
+    expect(log).toMatchObject({ beforeValue: null, afterValue: "8" });
+
+    await hardDeleteTasks([leaf.value.id]);
+  });
+
+  it("recalculates parent on create with parentTaskId (2.1, 2.3)", async () => {
+    const parent = await tasksService.create({
+      title: "create-parent",
+      priority: "medium",
+      workspaceId: workspaceA,
+      storyPoints: 99,
+    });
+    expect(parent.ok).toBe(true);
+    if (!parent.ok) return;
+
+    const child = await tasksService.create({
+      title: "create-child",
+      priority: "low",
+      workspaceId: workspaceA,
+      parentTaskId: parent.value.id,
+      storyPoints: 4,
+    });
+    expect(child.ok).toBe(true);
+    if (!child.ok) return;
+
+    const refreshed = await tasksService.getById(parent.value.id, workspaceA);
+    expect(refreshed.ok).toBe(true);
+    if (!refreshed.ok) return;
+    expect(refreshed.value.storyPoints).toBe(4);
+
+    const parentPointLogs = await db.activityLog.findMany({
+      where: {
+        taskId: parent.value.id,
+        operationType: "field_changed",
+        fieldName: "storyPoints",
+      },
+    });
+    expect(parentPointLogs).toHaveLength(0);
+
+    await hardDeleteTasks([child.value.id, parent.value.id]);
+  });
+
+  it("recalculates parent on addChild (2.1, 2.3)", async () => {
+    const parent = await tasksService.create({
+      title: "addchild-parent",
+      priority: "medium",
+      workspaceId: workspaceA,
+      storyPoints: 50,
+    });
+    expect(parent.ok).toBe(true);
+    if (!parent.ok) return;
+
+    const child = await tasksService.addChild(parent.value.id, workspaceA, {
+      title: "addchild-child",
+      priority: "low",
+      workspaceId: workspaceA,
+      storyPoints: 7,
+    });
+    expect(child.ok).toBe(true);
+    if (!child.ok) return;
+
+    const refreshed = await tasksService.getById(parent.value.id, workspaceA);
+    expect(refreshed.ok).toBe(true);
+    if (!refreshed.ok) return;
+    expect(refreshed.value.storyPoints).toBe(7);
+
+    await hardDeleteTasks([child.value.id, parent.value.id]);
+  });
+
+  it("recalculates split source on splitTask (2.1, 2.3)", async () => {
+    const original = await tasksService.create({
+      title: "split-source",
+      priority: "high",
+      workspaceId: workspaceA,
+      storyPoints: 12,
+    });
+    expect(original.ok).toBe(true);
+    if (!original.ok) return;
+
+    const parts = await tasksService.splitTask(original.value.id, workspaceA, [
+      { title: "part-a", priority: "medium", workspaceId: workspaceA, storyPoints: 2 },
+      { title: "part-b", priority: "medium", workspaceId: workspaceA, storyPoints: 5 },
+    ]);
+    expect(parts.ok).toBe(true);
+    if (!parts.ok) return;
+
+    const refreshed = await tasksService.getById(original.value.id, workspaceA);
+    expect(refreshed.ok).toBe(true);
+    if (!refreshed.ok) return;
+    expect(refreshed.value.storyPoints).toBe(7);
+
+    await hardDeleteTasks([...parts.value.map((p) => p.id), original.value.id]);
+  });
+
+  it("recalculates current parent when leaf storyPoints change (2.2, 2.4)", async () => {
+    const root = await tasksService.create({
+      title: "recalc-root",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    expect(root.ok).toBe(true);
+    if (!root.ok) return;
+
+    const mid = await tasksService.create({
+      title: "recalc-mid",
+      priority: "medium",
+      workspaceId: workspaceA,
+      parentTaskId: root.value.id,
+    });
+    expect(mid.ok).toBe(true);
+    if (!mid.ok) return;
+
+    const leaf = await tasksService.create({
+      title: "recalc-leaf",
+      priority: "low",
+      workspaceId: workspaceA,
+      parentTaskId: mid.value.id,
+      storyPoints: 3,
+    });
+    expect(leaf.ok).toBe(true);
+    if (!leaf.ok) return;
+
+    const updated = await tasksService.update(leaf.value.id, workspaceA, { storyPoints: 10 });
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+
+    const midAfter = await tasksService.getById(mid.value.id, workspaceA);
+    const rootAfter = await tasksService.getById(root.value.id, workspaceA);
+    expect(midAfter.ok && midAfter.value.storyPoints).toBe(10);
+    expect(rootAfter.ok && rootAfter.value.storyPoints).toBe(10);
+
+    const ancestorLogs = await db.activityLog.findMany({
+      where: {
+        taskId: { in: [mid.value.id, root.value.id] },
+        operationType: "field_changed",
+        fieldName: "storyPoints",
+      },
+    });
+    expect(ancestorLogs).toHaveLength(0);
+
+    await hardDeleteTasks([leaf.value.id, mid.value.id, root.value.id]);
+  });
+
+  it("recalculates old and new parents when parentTaskId changes (2.1)", async () => {
+    const oldParent = await tasksService.create({
+      title: "old-parent",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    const newParent = await tasksService.create({
+      title: "new-parent",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    expect(oldParent.ok && newParent.ok).toBe(true);
+    if (!oldParent.ok || !newParent.ok) return;
+
+    const child = await tasksService.create({
+      title: "moving-child",
+      priority: "low",
+      workspaceId: workspaceA,
+      parentTaskId: oldParent.value.id,
+      storyPoints: 6,
+    });
+    expect(child.ok).toBe(true);
+    if (!child.ok) return;
+
+    const moved = await tasksService.update(child.value.id, workspaceA, {
+      parentTaskId: newParent.value.id,
+    });
+    expect(moved.ok).toBe(true);
+    if (!moved.ok) return;
+
+    const oldAfter = await tasksService.getById(oldParent.value.id, workspaceA);
+    const newAfter = await tasksService.getById(newParent.value.id, workspaceA);
+    expect(oldAfter.ok && oldAfter.value.storyPoints).toBeNull();
+    expect(newAfter.ok && newAfter.value.storyPoints).toBe(6);
+
+    await hardDeleteTasks([child.value.id, oldParent.value.id, newParent.value.id]);
+  });
+
+  it("recalculates parent on delete (2.1)", async () => {
+    const parent = await tasksService.create({
+      title: "delete-parent",
+      priority: "medium",
+      workspaceId: workspaceA,
+    });
+    expect(parent.ok).toBe(true);
+    if (!parent.ok) return;
+
+    const keep = await tasksService.create({
+      title: "keep-child",
+      priority: "low",
+      workspaceId: workspaceA,
+      parentTaskId: parent.value.id,
+      storyPoints: 2,
+    });
+    const drop = await tasksService.create({
+      title: "drop-child",
+      priority: "low",
+      workspaceId: workspaceA,
+      parentTaskId: parent.value.id,
+      storyPoints: 5,
+    });
+    expect(keep.ok && drop.ok).toBe(true);
+    if (!keep.ok || !drop.ok) return;
+
+    const deleted = await tasksService.delete(drop.value.id, workspaceA);
+    expect(deleted.ok).toBe(true);
+
+    const refreshed = await tasksService.getById(parent.value.id, workspaceA);
+    expect(refreshed.ok).toBe(true);
+    if (!refreshed.ok) return;
+    expect(refreshed.value.storyPoints).toBe(2);
+
+    await hardDeleteTasks([drop.value.id, keep.value.id, parent.value.id]);
+  });
+});
