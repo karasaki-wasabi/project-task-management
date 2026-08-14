@@ -78,3 +78,9 @@
 - [x] workspace-url-routing -- 業務画面 URL のワークスペース配下化、`/` の last-used／一覧分岐、Switcher の同一画面種付け替え、URL 一覧の確定。Dependencies: workspace-membership, workspace-resource-scope
 - [x] error-page -- 共通エラーページ(`error.vue`)。404/403/401/500 と汎用 4xx/5xx の文言・導線、実行時 fatal の Error Page 接続。Dependencies: workspace-url-routing（非所属・不明な workspaceId の既存 404 経路を利用。401/403 の新規発生源は持たない）
 
+## Phase: Backend module boundaries
+
+`structure.md` では他モジュール依存は公開した手続き経由のみとしているが、repository 直呼びや他ドメイン Prisma 直触りが残っている。既存の `DbClient` 伝播を延長して厳格一掃し、読み取り／整合専用面で循環依存を避けながら境界を修復する（Approach A）。画面・対外 API 契約は変えない。
+
+- [ ] module-boundary-cleanup -- クロスモジュールの repository／Prisma 直呼びを、通常の service および読み取り／整合専用公開面（`caseReadService`／`taskIntegrityService`、必要なら `client?: DbClient`）へ寄せ、整合・集計・初期投入の所有を明示する。Dependencies: none（既存モジュール実装に対する修復。velocity-dashboard とは独立に進められる）
+
