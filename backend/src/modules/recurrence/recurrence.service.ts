@@ -16,7 +16,7 @@ import { db } from "../../shared/db.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
-import { formatDateOnly, parseDateOnly } from "../holidays/holiday.repository.js";
+import { formatDateOnly, parseDateOnly } from "../../shared/date-only.js";
 import { holidaysService } from "../holidays/holiday.service.js";
 import { tasksService } from "../tasks/task.service.js";
 import { isUniqueConstraintViolation, recurrenceRepository } from "./recurrence.repository.js";
