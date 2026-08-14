@@ -1,6 +1,9 @@
 // developmentStagesService workspace scope (workspace-resource-scope task 6.1;
 // Requirements 1.1, 1.2, 3.1, 3.2, 3.3) plus prior DevelopmentStagesService coverage.
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
@@ -446,5 +449,35 @@ describe("developmentStagesService getById(client) and ensureTerminalStages (mod
         throw new Error("rollback-ensureTerminal-tx-proof");
       }),
     ).rejects.toThrow("rollback-ensureTerminal-tx-proof");
+  });
+});
+
+describe("developmentStagesService module boundary (module-boundary-cleanup task 4.2)", () => {
+  it("orchestrates delete via taskIntegrityService.clearDevelopmentStage then repository delete (Requirements 1.1, 1.4, 2.1, 3.1, 3.3, 4.3, 4.6)", () => {
+    const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "development-stage.service.ts");
+    const source = readFileSync(sourcePath, "utf8");
+    const importLines = source
+      .split("\n")
+      .filter((line) => /^\s*import\b/.test(line))
+      .join("\n");
+    const codeWithoutComments = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+
+    expect(importLines).toMatch(/task-integrity\.service/);
+    expect(importLines).toMatch(/taskIntegrityService/);
+    expect(importLines).not.toMatch(/task\.service/);
+    expect(importLines).not.toMatch(/\btasksService\b/);
+    expect(codeWithoutComments).toMatch(/taskIntegrityService\.clearDevelopmentStage/);
+    expect(codeWithoutComments).not.toMatch(/\btasksService\b/);
+
+    const deleteFn = codeWithoutComments.match(/async delete\([\s\S]*?\n  \},/);
+    expect(deleteFn?.[0]).toBeDefined();
+    const deleteBody = deleteFn?.[0] ?? "";
+    const clearIdx = deleteBody.indexOf("taskIntegrityService.clearDevelopmentStage");
+    const repoDeleteIdx = deleteBody.indexOf("developmentStageRepository.delete");
+    expect(clearIdx).toBeGreaterThan(-1);
+    expect(repoDeleteIdx).toBeGreaterThan(clearIdx);
+    expect(deleteBody).toMatch(/\$transaction/);
   });
 });

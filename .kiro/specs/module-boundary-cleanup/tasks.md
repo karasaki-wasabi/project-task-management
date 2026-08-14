@@ -51,7 +51,7 @@
   - _Boundary: caseService, caseRepository_
   - _Requirements: 1.1, 1.3, 1.4, 3.1, 3.3, 4.1, 4.2, 4.6_
 
-- [ ] 4.2 (P) 開発段階削除を整合専用面経由にし、段階側のタスク永続化直触りをやめる
+- [x] 4.2 (P) 開発段階削除を整合専用面経由にし、段階側のタスク永続化直触りをやめる
   - 削除は同一書き込み単位で clear の後に段階削除する
   - tasksService は import しない
   - 観測可能: 段階削除の既存テストが緑で、段階 repository に task 更新が残らず、段階サービスが task.service を import しない

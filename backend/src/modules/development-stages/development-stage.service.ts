@@ -8,9 +8,11 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
+import { db } from "../../shared/db.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
+import { taskIntegrityService } from "../tasks/task-integrity.service.js";
 import { developmentStageRepository } from "./development-stage.repository.js";
 import type { DevelopmentStage } from "./development-stage.types.js";
 
@@ -92,7 +94,10 @@ export const developmentStagesService = {
       throw badRequest("terminal development stages cannot be deleted");
     }
     try {
-      await developmentStageRepository.delete(id, workspaceId);
+      await db.$transaction(async (tx) => {
+        await taskIntegrityService.clearDevelopmentStage(id, tx);
+        await developmentStageRepository.delete(id, workspaceId, tx);
+      });
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         throw notFound(`Development stage not found: ${id}`);

@@ -80,14 +80,11 @@ export const developmentStageRepository = {
     });
   },
 
-  // design.md Data Models "Consistency & Integrity": deleting a development
-  // stage detaches (does not cascade-delete) linked Task records by nulling
-  // their developmentStageId, matching the `deliveries` deletion pattern.
-  delete(id: string, workspaceId: VerifiedWorkspaceId): Promise<PrismaDevelopmentStage> {
-    return db.$transaction(async (tx) => {
-      await tx.task.updateMany({ where: { developmentStageId: id }, data: { developmentStageId: null } });
-      return tx.developmentStage.delete({ where: withWorkspaceScope({ id }, workspaceId) });
-    });
+  // Stage row only. Linked-task clear is owned by taskIntegrityService and
+  // orchestrated by developmentStagesService in the same write unit
+  // (design.md developmentStagesService.delete).
+  delete(id: string, workspaceId: VerifiedWorkspaceId, client: DbClient = db): Promise<PrismaDevelopmentStage> {
+    return client.developmentStage.delete({ where: withWorkspaceScope({ id }, workspaceId) });
   },
 
   async list(workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage[]> {
