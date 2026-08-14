@@ -80,7 +80,7 @@
 
 ## Phase: Backend module boundaries
 
-`structure.md` では他モジュール依存は公開した手続き経由のみとしているが、repository 直呼びや他ドメイン Prisma 直触りが残っている。既存の `DbClient` 伝播を延長して厳格一掃し、読み取り／整合専用面で循環依存を避けながら境界を修復する（Approach A）。画面・対外 API 契約は変えない。
+クロスモジュールの repository／Prisma 直呼びを、通常の service および読み取り／整合専用公開面へ寄せた（Approach A）。画面・対外 API 契約は変えていない。
 
-- [ ] module-boundary-cleanup -- クロスモジュールの repository／Prisma 直呼びを、通常の service および読み取り／整合専用公開面（`caseReadService`／`taskIntegrityService`、必要なら `client?: DbClient`）へ寄せ、整合・集計・初期投入の所有を明示する。Dependencies: none（既存モジュール実装に対する修復。velocity-dashboard とは独立に進められる）
+- [x] module-boundary-cleanup -- クロスモジュールの repository／Prisma 直呼びを、通常の service および読み取り／整合専用公開面（`caseReadService`／`taskIntegrityService`、必要なら `client?: DbClient`）へ寄せ、整合・集計・初期投入の所有を明示する。Dependencies: none（既存モジュール実装に対する修復。velocity-dashboard とは独立に進められる）
 

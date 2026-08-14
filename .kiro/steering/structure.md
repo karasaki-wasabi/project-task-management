@@ -24,13 +24,13 @@
 
 ### バックエンド共有コード
 **Location**: `backend/src/shared/`
-**Purpose**: 全モジュール共通のインフラ(ログ基盤`logger.ts`/`business-event-logger.ts`、DBクライアント`db.ts`、`HttpError`、ソフトデリートのPrisma拡張、`Result`型、ワークスペース文脈`workspace-scope.ts`の定数・`VerifiedWorkspaceId`・`withWorkspaceScope`)。モジュール固有のロジックはここに置かない
+**Purpose**: 全モジュール共通のインフラ(ログ基盤`logger.ts`/`business-event-logger.ts`、DBクライアント`db.ts`、`HttpError`、ソフトデリートのPrisma拡張、`Result`型、ワークスペース文脈`workspace-scope.ts`の定数・`VerifiedWorkspaceId`・`withWorkspaceScope`)。モジュール固有のロジックはここに置かない。ドメイン固有でない日付のみの解釈・整形（`date-only.ts`）は例外としてここに置く
 
 ワークスペース所属ガード(`requireWorkspaceMember`)は`backend/src/workspace-scope.guard.ts`に置き、`app.ts`が対象パスへ配線する。対象プレフィックスは`/api/cases`・`/api/tasks`・`/api/recurring-templates`・`/api/holidays`・`/api/development-stages`の5つ。`/api/throughput`はAPIスコープ対象外（画面 URL のみワークスペース付き。API スコープ化は後続）。
 
 ### バックエンド機能横断テスト
 **Location**: `backend/src/*.test.ts`(`src/`直下)
-**Purpose**: 単一モジュールに閉じない検証(例: `app.routes.test.ts`は全モジュールのルート登録確認、`validation.integration.test.ts`は複数モジュールをまたぐ実HTTP経路での統合検証)。モジュール固有のテストは各`modules/<domain>/`配下にコロケーションする
+**Purpose**: 単一モジュールに閉じない検証(例: `app.routes.test.ts`は全モジュールのルート登録確認、`validation.integration.test.ts`は複数モジュールをまたぐ実HTTP経路での統合検証、`module-boundary.guard.test.ts`は他モジュール repository 直 import とモジュール間 service 閉路の検査)。モジュール固有のテストは各`modules/<domain>/`配下にコロケーションする
 
 ### フロントエンドページ
 **Location**:

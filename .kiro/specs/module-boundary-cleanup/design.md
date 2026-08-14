@@ -92,7 +92,6 @@ flowchart TB
     TaskSvc --> TaskClosure
     TaskSvc --> CaseRead
     TaskSvc --> StageSvc
-    TaskSvc --> TaskIntegrity
     TaskIntegrity --> TaskRepo
     TaskIntegrity --> TaskClosure
   end
@@ -269,7 +268,8 @@ sequenceDiagram
 | Requirements | 1.1, 1.4, 2.1, 2.2, 3.2 |
 
 **Responsibilities & Constraints**
-- `caseRepository` のみに依存。`caseService`・`recurrenceService`・他モジュール service を import しない
+- `findInWorkspace` は `caseRepository` に委譲する。`requireById` は渡した `client` の `case.findUnique({ where: { id } })` で参照し、workspace 条件を付けない
+- `caseService`・`recurrenceService`・他モジュール service を import しない
 - ドメイン判定ロジック（日付妥当性・テンプレ適用）は持たない
 
 **Contracts**: Service
