@@ -122,7 +122,8 @@ defineExpose({ resync });
         v-for="task in draggableTasks"
         :key="task.id"
         :task="task"
-        :assignee-name="assigneeNameFor(task)"
+        :assigneeId="task.assigneeUserId ?? undefined"
+        :assigneeName="assigneeNameFor(task)"
         @activate="emit('card-activate', task.id)"
       />
     </VueDraggable>

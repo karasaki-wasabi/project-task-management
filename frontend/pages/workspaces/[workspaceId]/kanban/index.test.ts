@@ -116,6 +116,7 @@ const TaskCardStub = defineComponent({
   name: "TaskCard",
   props: {
     task: { type: Object, required: true },
+    assigneeId: { type: String, default: undefined },
     assigneeName: { type: String, default: undefined },
     progress: { type: Object, default: undefined },
   },
