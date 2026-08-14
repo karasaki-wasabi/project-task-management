@@ -65,6 +65,7 @@ export const taskRepository = {
         isRequiredForCase: input.caseId ? (input.isRequiredForCase ?? false) : false,
         assigneeUserId: input.assigneeUserId,
         parentTaskId: input.parentTaskId,
+        storyPoints: input.storyPoints,
         // RecurrenceService-only (see task.types.ts CreateTaskInput comment).
         sourceTemplateId: input.sourceTemplateId,
         sourceAnchor: input.sourceAnchor,
@@ -153,6 +154,53 @@ export const taskRepository = {
   // Open = not on a completed/cancelled stage (task-status-model 3.1 / 5.1).
   countIncompleteChildren(parentTaskId: string): Promise<number> {
     return db.task.count({ where: { parentTaskId, ...openTaskFilter } });
+  },
+
+  // velocity-dashboard 2.2: top-level count so soft-delete extension auto-excludes
+  // deleted children (Requirements 1.5). Distinct from leafTaskFilter aggregation.
+  async hasChildren(
+    taskId: string,
+    workspaceId: VerifiedWorkspaceId,
+    client: DbClient = db,
+  ): Promise<boolean> {
+    const count = await client.task.count({
+      where: withWorkspaceScope({ parentTaskId: taskId }, workspaceId),
+    });
+    return count > 0;
+  },
+
+  // velocity-dashboard 2.2: walk parentTaskId to root, level-by-level
+  // (Requirements 2.1–2.4). Zero children → null; children all unset → 0.
+  async recalculateAncestorStoryPoints(
+    startTaskId: string,
+    workspaceId: VerifiedWorkspaceId,
+    client: DbClient,
+  ): Promise<void> {
+    let currentId: string | null = startTaskId;
+    while (currentId !== null) {
+      const current = await client.task.findFirst({
+        where: withWorkspaceScope({ id: currentId }, workspaceId),
+        select: { parentTaskId: true },
+      });
+      if (current === null) break;
+
+      const children = await client.task.findMany({
+        where: withWorkspaceScope({ parentTaskId: currentId }, workspaceId),
+        select: { storyPoints: true },
+      });
+
+      const storyPoints =
+        children.length === 0
+          ? null
+          : children.reduce((sum, child) => sum + (child.storyPoints ?? 0), 0);
+
+      await client.task.update({
+        where: withWorkspaceScope({ id: currentId, deletedAt: null }, workspaceId),
+        data: { storyPoints },
+      });
+
+      currentId = current.parentTaskId;
+    }
   },
 
   // module-boundary-cleanup 2.3: integrity persistence (ID-only updateMany,
@@ -270,6 +318,7 @@ export const taskRepository = {
             isRequiredForCase: input.caseId ? (input.isRequiredForCase ?? false) : false,
             assigneeUserId: input.assigneeUserId,
             parentTaskId: input.parentTaskId,
+            storyPoints: input.storyPoints,
             workspaceId: input.workspaceId,
           },
         }),

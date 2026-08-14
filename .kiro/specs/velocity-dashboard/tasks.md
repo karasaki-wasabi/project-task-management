@@ -35,7 +35,7 @@
   - _Boundary: task.types.ts, task.routes.ts_
   - _Depends: 1.1_
 
-- [ ] 2.2 (P) 葉/親判定と祖先再計算の永続化ロジック追加
+- [x] 2.2 (P) 葉/親判定と祖先再計算の永続化ロジック追加
   - `task.repository.ts`に`hasChildren(taskId, workspaceId, client?)`を追加する(トップレベルクエリでソフトデリート済み子を自動除外)
   - `task.repository.ts`に`recalculateAncestorStoryPoints(startTaskId, workspaceId, client)`を追加する。`startTaskId`から`parentTaskId`を辿ってルートまで、各タスクの`storyPoints`を直接の子の合計(子が0件なら`null`、子はあるが全員未設定なら`0`)に更新する
   - 完了条件: 3階層以上のタスクツリーで、末端の子のポイントを変更すると祖先チェーン全体の`storyPoints`が単体テストで正しく再計算される。子を0件に戻すと当該タスクの`storyPoints`が`null`に戻る
