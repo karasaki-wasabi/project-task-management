@@ -10,7 +10,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
-import { openTaskFilter } from "./task.closure.js";
+import { leafTaskFilter, openTaskFilter } from "./task.closure.js";
 import type {
   CreateTaskInput,
   GetTaskOptions,
@@ -203,6 +203,58 @@ export const taskRepository = {
         deletedAt: undefined,
       },
     });
+  },
+
+  async countCompletedWithPointsInPeriodIncludingDeleted(
+    periodStart: Date,
+    periodEnd: Date,
+    workspaceId: VerifiedWorkspaceId,
+    caseId?: string,
+  ): Promise<{ count: number; points: number }> {
+    const baseWhere = withWorkspaceScope(
+      {
+        completedAt: { gte: periodStart, lte: periodEnd },
+        deletedAt: undefined,
+        ...(caseId !== undefined ? { caseId } : {}),
+      },
+      workspaceId,
+    );
+
+    const [count, pointsAgg] = await Promise.all([
+      db.task.count({ where: baseWhere }),
+      db.task.aggregate({
+        where: { ...baseWhere, ...leafTaskFilter },
+        _sum: { storyPoints: true },
+      }),
+    ]);
+
+    return { count, points: pointsAgg._sum.storyPoints ?? 0 };
+  },
+
+  async countOpenTasksWithPoints(
+    workspaceId: VerifiedWorkspaceId,
+    caseId: string,
+  ): Promise<{ count: number; points: number }> {
+    // deletedAt: null を明示する。soft-delete 拡張は count には効くが
+    // aggregate には効かないため、件数とポイントの母数を揃える。
+    const baseWhere = withWorkspaceScope(
+      {
+        caseId,
+        deletedAt: null,
+        ...openTaskFilter,
+      },
+      workspaceId,
+    );
+
+    const [count, pointsAgg] = await Promise.all([
+      db.task.count({ where: baseWhere }),
+      db.task.aggregate({
+        where: { ...baseWhere, ...leafTaskFilter },
+        _sum: { storyPoints: true },
+      }),
+    ]);
+
+    return { count, points: pointsAgg._sum.storyPoints ?? 0 };
   },
 
   async createMany(inputs: CreateTaskInput[], client: DbClient = db): Promise<Task[]> {

@@ -1,6 +1,6 @@
 # Implementation Plan: velocity-dashboard
 
-- [ ] 1. Foundation: データモデルと共有プリミティブ
+- [x] 1. Foundation: データモデルと共有プリミティブ
 - [x] 1.1 `Task.storyPoints`列と操作ログ用`FieldName`の追加
   - `schema.prisma`の`Task`モデルに`storyPoints Int? @map("story_points")`を追加する
   - `schema.prisma`の`FieldName` enumに`storyPoints`を追加する（既存値と同じ camelCase。DB 列名の`story_points`とは別）
@@ -16,7 +16,7 @@
   - _Requirements: 3.3_
   - _Boundary: task.closure.ts_
 
-- [ ] 1.3 (P) taskIntegrityService の集計公開面を拡張する
+- [x] 1.3 (P) taskIntegrityService の集計公開面を拡張する
   - `countCompletedWithPointsInPeriodIncludingDeleted(periodStart, periodEnd, workspaceId, caseId?)`を追加し、`{ count, points }`を返す。既存の引数なし`countCompletedInPeriodIncludingDeleted`は残す（throughput の切り替えは 3.1）
   - `count`は論理削除済みを含む全完了タスク（親を含む）。`points`は論理削除込みの子が0件の完了タスクの`storyPoints`合計（未設定は0）
   - `countOpenTasksWithPoints(workspaceId, caseId)`を追加する。未完了件数は`openTaskFilter`を全タスクに、未完了ポイントは集計用の葉のみ

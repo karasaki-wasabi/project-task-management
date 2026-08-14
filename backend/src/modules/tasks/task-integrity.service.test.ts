@@ -481,3 +481,290 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     ).rejects.toThrow("rollback-list-tx-proof");
   });
 });
+
+describe("taskIntegrityService aggregation (velocity-dashboard 1.3)", () => {
+  const periodStart = new Date("2025-06-01T00:00:00.000Z");
+  const periodEnd = new Date("2025-06-07T23:59:59.999Z");
+  const inPeriod = new Date("2025-06-03T12:00:00.000Z");
+
+  it("countCompletedWithPoints includes parents in count but only leaves in points (Requirement 3.3, 3.5)", async () => {
+    const parent = await db.task.create({
+      data: {
+        title: `agg-parent-${randomUUID()}`,
+        priority: "low",
+        completedAt: inPeriod,
+        storyPoints: 8,
+        workspaceId: workspaceA,
+      },
+    });
+    const leafChild = await db.task.create({
+      data: {
+        title: `agg-leaf-${randomUUID()}`,
+        priority: "low",
+        completedAt: inPeriod,
+        storyPoints: 5,
+        parentTaskId: parent.id,
+        workspaceId: workspaceA,
+      },
+    });
+    const leafUnset = await db.task.create({
+      data: {
+        title: `agg-unset-${randomUUID()}`,
+        priority: "low",
+        completedAt: inPeriod,
+        storyPoints: null,
+        workspaceId: workspaceA,
+      },
+    });
+
+    try {
+      const result = await taskIntegrityService.countCompletedWithPointsInPeriodIncludingDeleted(
+        periodStart,
+        periodEnd,
+        workspaceA,
+      );
+      // parent + leafChild + leafUnset
+      expect(result.count).toBe(3);
+      // leafChild(5) + leafUnset(0); parent excluded (has active child)
+      expect(result.points).toBe(5);
+    } finally {
+      await hardDelete("tasks", [leafChild.id, leafUnset.id, parent.id]);
+    }
+  });
+
+  it("countCompletedWithPoints scopes by workspace and optional caseId (Requirement 3.1, 4.2)", async () => {
+    const caseA = await db.case.create({
+      data: {
+        name: `agg-case-a-${randomUUID()}`,
+        endDate: new Date("2036-06-01"),
+        workspaceId: workspaceA,
+      },
+    });
+    const caseB = await db.case.create({
+      data: {
+        name: `agg-case-b-${randomUUID()}`,
+        endDate: new Date("2036-06-02"),
+        workspaceId: workspaceB,
+      },
+    });
+    const inCaseA = await db.task.create({
+      data: {
+        title: "in case A",
+        priority: "low",
+        completedAt: inPeriod,
+        storyPoints: 3,
+        caseId: caseA.id,
+        workspaceId: workspaceA,
+      },
+    });
+    const otherCaseInA = await db.task.create({
+      data: {
+        title: "other case in A",
+        priority: "low",
+        completedAt: inPeriod,
+        storyPoints: 7,
+        workspaceId: workspaceA,
+      },
+    });
+    const otherWs = await db.task.create({
+      data: {
+        title: "other workspace",
+        priority: "low",
+        completedAt: inPeriod,
+        storyPoints: 99,
+        caseId: caseB.id,
+        workspaceId: workspaceB,
+      },
+    });
+
+    try {
+      const wholeWs = await taskIntegrityService.countCompletedWithPointsInPeriodIncludingDeleted(
+        periodStart,
+        periodEnd,
+        workspaceA,
+      );
+      expect(wholeWs).toEqual({ count: 2, points: 10 });
+
+      const filtered = await taskIntegrityService.countCompletedWithPointsInPeriodIncludingDeleted(
+        periodStart,
+        periodEnd,
+        workspaceA,
+        caseA.id,
+      );
+      expect(filtered).toEqual({ count: 1, points: 3 });
+
+      const otherOnly = await taskIntegrityService.countCompletedWithPointsInPeriodIncludingDeleted(
+        periodStart,
+        periodEnd,
+        workspaceB,
+      );
+      expect(otherOnly).toEqual({ count: 1, points: 99 });
+    } finally {
+      await hardDelete("tasks", [inCaseA.id, otherCaseInA.id, otherWs.id]);
+      await hardDelete("cases", [caseA.id, caseB.id]);
+    }
+  });
+
+  it("countCompletedWithPoints keeps soft-deleted completed in count and points (Requirement 3.2)", async () => {
+    const leaf = await db.task.create({
+      data: {
+        title: `agg-soft-${randomUUID()}`,
+        priority: "low",
+        completedAt: inPeriod,
+        storyPoints: 4,
+        workspaceId: workspaceA,
+      },
+    });
+
+    try {
+      await db.task.delete({ where: { id: leaf.id } });
+
+      const result = await taskIntegrityService.countCompletedWithPointsInPeriodIncludingDeleted(
+        periodStart,
+        periodEnd,
+        workspaceA,
+      );
+      expect(result).toEqual({ count: 1, points: 4 });
+    } finally {
+      await hardDelete("tasks", [leaf.id]);
+    }
+  });
+
+  it("countOpenTasksWithPoints counts all open tasks but sums leaf points only (Requirement 7.1)", async () => {
+    const caseRow = await db.case.create({
+      data: {
+        name: `open-agg-${randomUUID()}`,
+        endDate: new Date("2036-07-01"),
+        workspaceId: workspaceA,
+      },
+    });
+    const [completedStage, cancelledStage] = await Promise.all([
+      db.developmentStage.create({
+        data: {
+          name: `open-agg-done-${randomUUID()}`,
+          order: 910,
+          kind: "completed",
+          workspaceId: workspaceA,
+        },
+      }),
+      db.developmentStage.create({
+        data: {
+          name: `open-agg-cancel-${randomUUID()}`,
+          order: 911,
+          kind: "cancelled",
+          workspaceId: workspaceA,
+        },
+      }),
+    ]);
+
+    const openParent = await db.task.create({
+      data: {
+        title: "open parent",
+        priority: "low",
+        caseId: caseRow.id,
+        storyPoints: 10,
+        workspaceId: workspaceA,
+      },
+    });
+    const openLeaf = await db.task.create({
+      data: {
+        title: "open leaf child",
+        priority: "low",
+        caseId: caseRow.id,
+        parentTaskId: openParent.id,
+        storyPoints: 3,
+        workspaceId: workspaceA,
+      },
+    });
+    const openSiblingLeaf = await db.task.create({
+      data: {
+        title: "open sibling leaf",
+        priority: "low",
+        caseId: caseRow.id,
+        storyPoints: 2,
+        workspaceId: workspaceA,
+      },
+    });
+    const completedLeaf = await db.task.create({
+      data: {
+        title: "completed leaf",
+        priority: "low",
+        caseId: caseRow.id,
+        storyPoints: 50,
+        developmentStageId: completedStage.id,
+        workspaceId: workspaceA,
+      },
+    });
+    const cancelledLeaf = await db.task.create({
+      data: {
+        title: "cancelled leaf",
+        priority: "low",
+        caseId: caseRow.id,
+        storyPoints: 40,
+        developmentStageId: cancelledStage.id,
+        workspaceId: workspaceA,
+      },
+    });
+
+    try {
+      const result = await taskIntegrityService.countOpenTasksWithPoints(workspaceA, caseRow.id);
+      // openParent + openLeaf + openSiblingLeaf (completed/cancelled excluded)
+      expect(result.count).toBe(3);
+      // openLeaf(3) + openSiblingLeaf(2); openParent excluded (has active child)
+      expect(result.points).toBe(5);
+    } finally {
+      await hardDelete("tasks", [
+        openLeaf.id,
+        openSiblingLeaf.id,
+        completedLeaf.id,
+        cancelledLeaf.id,
+        openParent.id,
+      ]);
+      await hardDelete("development_stages", [completedStage.id, cancelledStage.id]);
+      await hardDelete("cases", [caseRow.id]);
+    }
+  });
+
+  it("countOpenTasksWithPoints excludes soft-deleted open tasks (Requirement 7.1)", async () => {
+    const caseRow = await db.case.create({
+      data: {
+        name: `open-soft-${randomUUID()}`,
+        endDate: new Date("2036-07-02"),
+        workspaceId: workspaceA,
+      },
+    });
+    const active = await db.task.create({
+      data: {
+        title: "active open",
+        priority: "low",
+        caseId: caseRow.id,
+        storyPoints: 1,
+        workspaceId: workspaceA,
+      },
+    });
+    const softDeleted = await db.task.create({
+      data: {
+        title: "soft open",
+        priority: "low",
+        caseId: caseRow.id,
+        storyPoints: 9,
+        workspaceId: workspaceA,
+      },
+    });
+
+    try {
+      await db.task.delete({ where: { id: softDeleted.id } });
+
+      const result = await taskIntegrityService.countOpenTasksWithPoints(workspaceA, caseRow.id);
+      expect(result).toEqual({ count: 1, points: 1 });
+    } finally {
+      await hardDelete("tasks", [active.id, softDeleted.id]);
+      await hardDelete("cases", [caseRow.id]);
+    }
+  });
+
+  it("keeps legacy countCompletedInPeriodIncludingDeleted without workspace args", async () => {
+    expect(typeof taskIntegrityService.countCompletedInPeriodIncludingDeleted).toBe("function");
+    expect(taskIntegrityService.countCompletedInPeriodIncludingDeleted.length).toBe(2);
+  });
+});

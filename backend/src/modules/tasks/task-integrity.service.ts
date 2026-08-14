@@ -52,4 +52,25 @@ export const taskIntegrityService = {
   countCompletedInPeriodIncludingDeleted(periodStart: Date, periodEnd: Date): Promise<number> {
     return taskRepository.countCompletedInPeriodIncludingDeleted(periodStart, periodEnd);
   },
+
+  countCompletedWithPointsInPeriodIncludingDeleted(
+    periodStart: Date,
+    periodEnd: Date,
+    workspaceId: VerifiedWorkspaceId,
+    caseId?: string,
+  ): Promise<{ count: number; points: number }> {
+    return taskRepository.countCompletedWithPointsInPeriodIncludingDeleted(
+      periodStart,
+      periodEnd,
+      workspaceId,
+      caseId,
+    );
+  },
+
+  countOpenTasksWithPoints(
+    workspaceId: VerifiedWorkspaceId,
+    caseId: string,
+  ): Promise<{ count: number; points: number }> {
+    return taskRepository.countOpenTasksWithPoints(workspaceId, caseId);
+  },
 };
