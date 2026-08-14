@@ -203,7 +203,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(response.statusCode).toBe(400);
   });
 
-  describe("storyPoints validation (velocity-dashboard 2.1; Requirements 1.1–1.4)", () => {
+  describe("storyPoints (velocity-dashboard 6.1; Requirements 1.1–1.5, 2.1–2.5)", () => {
     it.each([0, -1, 1.5])(
       "POST /api/tasks returns 400 for invalid storyPoints=%s",
       async (storyPoints) => {
@@ -258,10 +258,9 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
         ),
       );
 
-      if (response.statusCode === 201) {
-        await hardDelete("tasks", [response.json().id]);
-      }
       expect(response.statusCode).toBe(201);
+      expect(response.json().storyPoints).toBe(5);
+      await hardDelete("tasks", [response.json().id]);
     });
 
     it.each([0, -1, 1.5])(
@@ -364,8 +363,9 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
         ),
       );
 
-      await hardDelete("tasks", [id]);
       expect(response.statusCode).toBe(200);
+      expect(response.json().storyPoints).toBe(3);
+      await hardDelete("tasks", [id]);
     });
 
     it("PATCH /api/tasks/:id returns 400 when storyPoints is set on a parent (1.5, 2.5)", async () => {
@@ -481,6 +481,189 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       ).toBe(true);
 
       await hardDelete("tasks", [id]);
+    });
+
+    it("propagates leaf storyPoints up a 3+ level tree via POST/PATCH (2.1, 2.2, 2.4)", async () => {
+      const root = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/tasks",
+            payload: { title: "http-recalc-root", priority: "medium", storyPoints: 99 },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(root.statusCode).toBe(201);
+      const rootId = root.json().id as string;
+
+      const mid = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/tasks",
+            payload: {
+              title: "http-recalc-mid",
+              priority: "medium",
+              parentTaskId: rootId,
+            },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(mid.statusCode).toBe(201);
+      const midId = mid.json().id as string;
+
+      const leaf = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/tasks",
+            payload: {
+              title: "http-recalc-leaf",
+              priority: "low",
+              parentTaskId: midId,
+              storyPoints: 3,
+            },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(leaf.statusCode).toBe(201);
+      const leafId = leaf.json().id as string;
+
+      const midAfterCreate = await app.inject(
+        withWorkspace(
+          { method: "GET", url: `/api/tasks/${midId}` },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      const rootAfterCreate = await app.inject(
+        withWorkspace(
+          { method: "GET", url: `/api/tasks/${rootId}` },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(midAfterCreate.statusCode).toBe(200);
+      expect(rootAfterCreate.statusCode).toBe(200);
+      expect(midAfterCreate.json().storyPoints).toBe(3);
+      expect(rootAfterCreate.json().storyPoints).toBe(3);
+
+      const patched = await app.inject(
+        withWorkspace(
+          {
+            method: "PATCH",
+            url: `/api/tasks/${leafId}`,
+            payload: { storyPoints: 10 },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(patched.statusCode).toBe(200);
+      expect(patched.json().storyPoints).toBe(10);
+
+      const midAfterPatch = await app.inject(
+        withWorkspace(
+          { method: "GET", url: `/api/tasks/${midId}` },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      const rootAfterPatch = await app.inject(
+        withWorkspace(
+          { method: "GET", url: `/api/tasks/${rootId}` },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(midAfterPatch.json().storyPoints).toBe(10);
+      expect(rootAfterPatch.json().storyPoints).toBe(10);
+
+      await hardDelete("tasks", [leafId, midId, rootId]);
+    });
+
+    it("resets parent storyPoints to null when the last child is deleted (2.1)", async () => {
+      const parent = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/tasks",
+            payload: { title: "http-null-parent", priority: "medium", storyPoints: 7 },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(parent.statusCode).toBe(201);
+      const parentId = parent.json().id as string;
+
+      const child = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/tasks",
+            payload: {
+              title: "http-null-child",
+              priority: "low",
+              parentTaskId: parentId,
+              storyPoints: 4,
+            },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(child.statusCode).toBe(201);
+      const childId = child.json().id as string;
+
+      const parentWithChild = await app.inject(
+        withWorkspace(
+          { method: "GET", url: `/api/tasks/${parentId}` },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(parentWithChild.json().storyPoints).toBe(4);
+
+      const deleted = await app.inject(
+        withWorkspace(
+          { method: "DELETE", url: `/api/tasks/${childId}` },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(deleted.statusCode).toBe(204);
+
+      const parentAfterDelete = await app.inject(
+        withWorkspace(
+          { method: "GET", url: `/api/tasks/${parentId}` },
+          memberCsrf.cookie,
+          undefined,
+          workspaceA,
+        ),
+      );
+      expect(parentAfterDelete.statusCode).toBe(200);
+      expect(parentAfterDelete.json().storyPoints).toBeNull();
+
+      await hardDelete("tasks", [childId, parentId]);
     });
   });
 
