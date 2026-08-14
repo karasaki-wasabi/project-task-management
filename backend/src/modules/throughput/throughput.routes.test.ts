@@ -193,4 +193,77 @@ describe("throughputRoutes caseId / caseOutlook (velocity-dashboard task 3.4)", 
       await db.workspace.delete({ where: { id: otherWorkspace.id } }).catch(() => undefined);
     }
   });
+
+  it("filters completed periods to the given caseId (Requirements 4.1, 4.2)", async () => {
+    const caseA = await db.case.create({
+      data: {
+        name: `route-filter-a-${randomUUID()}`,
+        endDate: new Date("2030-06-01T00:00:00.000Z"),
+        workspaceId,
+      },
+    });
+    const caseB = await db.case.create({
+      data: {
+        name: `route-filter-b-${randomUUID()}`,
+        endDate: new Date("2030-06-01T00:00:00.000Z"),
+        workspaceId,
+      },
+    });
+    createdCaseIds.push(caseA.id, caseB.id);
+
+    // Most recent fully-elapsed Monday-started week relative to real now
+    // (routes pass Date.now() into the service).
+    const today = new Date();
+    const midnight = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    const daysSinceMonday = (midnight.getUTCDay() + 6) % 7;
+    midnight.setUTCDate(midnight.getUTCDate() - daysSinceMonday);
+    const lastWeekStamp = new Date(midnight.getTime() - 3 * 24 * 60 * 60 * 1000);
+
+    const inA = await db.task.create({
+      data: {
+        title: `in-a-${randomUUID()}`,
+        priority: "low",
+        status: "ready_for_handoff",
+        completedAt: lastWeekStamp,
+        workspaceId,
+        caseId: caseA.id,
+        storyPoints: 5,
+      },
+    });
+    const inB = await db.task.create({
+      data: {
+        title: `in-b-${randomUUID()}`,
+        priority: "low",
+        status: "ready_for_handoff",
+        completedAt: lastWeekStamp,
+        workspaceId,
+        caseId: caseB.id,
+        storyPoints: 10,
+      },
+    });
+    createdTaskIds.push(inA.id, inB.id);
+
+    const app = await buildTestApp();
+    const filtered = await app.inject({
+      method: "GET",
+      url: `/api/throughput?periodType=week&rangeCount=1&caseId=${caseA.id}`,
+    });
+    expect(filtered.statusCode).toBe(200);
+    const filteredBody = filtered.json();
+    expect(filteredBody.periods[0].completedCount).toBe(1);
+    expect(filteredBody.periods[0].completedPoints).toBe(5);
+    expect(filteredBody).toHaveProperty("caseOutlook");
+
+    const whole = await app.inject({
+      method: "GET",
+      url: "/api/throughput?periodType=week&rangeCount=1",
+    });
+    expect(whole.statusCode).toBe(200);
+    const wholeBody = whole.json();
+    expect(wholeBody.periods[0].completedCount).toBe(2);
+    expect(wholeBody.periods[0].completedPoints).toBe(15);
+    expect(wholeBody).not.toHaveProperty("caseOutlook");
+
+    await app.close();
+  });
 });

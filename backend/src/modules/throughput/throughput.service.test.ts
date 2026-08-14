@@ -350,6 +350,75 @@ describe("throughputService (task 7.1)", () => {
     await cleanup();
   });
 
+  it("keeps soft-deleted completions in both count and points (Requirements 3.2, 3.5)", async () => {
+    const taskId = await completedTask(new Date("2024-01-03T09:00:00.000Z"), { storyPoints: 7 });
+    await db.task.delete({ where: { id: taskId } });
+
+    const summary = await getSummary("week", 1);
+    expect(summary.periods[0].completedCount).toBe(1);
+    expect(summary.periods[0].completedPoints).toBe(7);
+
+    await cleanup();
+  });
+
+  it("counts parent completions but sums leaf points only — no parent/child double count (Requirements 3.3, 3.5)", async () => {
+    const parent = await db.task.create({
+      data: {
+        title: `parent-${randomUUID()}`,
+        priority: "low",
+        status: "ready_for_handoff",
+        completedAt: new Date("2024-01-03T09:00:00.000Z"),
+        workspaceId,
+        storyPoints: 8,
+      },
+    });
+    createdTaskIds.push(parent.id);
+    const leaf = await db.task.create({
+      data: {
+        title: `leaf-${randomUUID()}`,
+        priority: "low",
+        status: "ready_for_handoff",
+        completedAt: new Date("2024-01-04T09:00:00.000Z"),
+        workspaceId,
+        parentTaskId: parent.id,
+        storyPoints: 5,
+      },
+    });
+    createdTaskIds.push(leaf.id);
+    await completedTask(new Date("2024-01-05T09:00:00.000Z"), { storyPoints: null });
+
+    const summary = await getSummary("week", 1);
+
+    // parent + leaf + unset leaf
+    expect(summary.periods[0].completedCount).toBe(3);
+    // leaf(5) + unset(0); parent excluded from points (has active child)
+    expect(summary.periods[0].completedPoints).toBe(5);
+
+    await cleanup();
+  });
+
+  it("filters periods to the given caseId and leaves workspace-wide as default (Requirements 4.1, 4.2)", async () => {
+    const caseA = await createCase();
+    const caseB = await createCase();
+    await completedTaskForCase(caseA, new Date("2024-01-03T09:00:00.000Z"), 5);
+    await completedTaskForCase(caseB, new Date("2024-01-04T09:00:00.000Z"), 10);
+    await completedTask(new Date("2024-01-05T09:00:00.000Z"), { storyPoints: 3 }); // no case
+
+    try {
+      const filtered = await getSummary("week", 1, NOW_MID_WEEK, caseA);
+      expect(filtered.periods[0].completedCount).toBe(1);
+      expect(filtered.periods[0].completedPoints).toBe(5);
+      expect(filtered).toHaveProperty("caseOutlook");
+
+      const whole = await getSummary("week", 1);
+      expect(whole.periods[0].completedCount).toBe(3);
+      expect(whole.periods[0].completedPoints).toBe(18);
+      expect(whole).not.toHaveProperty("caseOutlook");
+    } finally {
+      await cleanup();
+    }
+  });
+
   it("aggregates by calendar month when periodType is 'month'", async () => {
     // 2024-03-15 is mid-March; the most recent completed month is February
     // 2024 (a leap year, so Feb has 29 days).
@@ -531,7 +600,7 @@ describe("throughputService module boundary (module-boundary-cleanup task 4.4 / 
   });
 });
 
-describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7.5)", () => {
+describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7.5 / task 6.2)", () => {
   it("omits caseOutlook when caseId is not provided", async () => {
     const summary = await getSummary("week", 1);
     expect(summary).not.toHaveProperty("caseOutlook");
@@ -559,64 +628,80 @@ describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7
     }
   });
 
-  it("when endDate is unset: remaining/required/margin are null; open counts still present (7.1, 7.4)", async () => {
+  // endDate × forecastNextPeriodPoints matrix (Requirements 7.3–7.5):
+  //   forecast: null (実績不足) | 0 | >0
+  //   endDate:  unset            | set
+  it.each([
+    {
+      name: "endDate unset × forecast null → remaining/required/margin all null (7.4)",
+      endDate: null as Date | null,
+      rangeCount: 1,
+      seedForecast: "none" as const,
+      expectForecast: null as number | null,
+      expected: { remainingPeriods: null, requiredPeriods: null, marginPoints: null },
+    },
+    {
+      name: "endDate unset × forecast 0 → remaining/required/margin all null (7.4)",
+      endDate: null,
+      rangeCount: 2,
+      seedForecast: "zero" as const,
+      expectForecast: 0,
+      expected: { remainingPeriods: null, requiredPeriods: null, marginPoints: null },
+    },
+    {
+      name: "endDate unset × forecast >0 → remaining/required/margin all null (7.4)",
+      endDate: null,
+      rangeCount: 2,
+      seedForecast: "positive" as const,
+      expectForecast: 8,
+      expected: { remainingPeriods: null, requiredPeriods: null, marginPoints: null },
+    },
+    {
+      name: "endDate set × forecast null → remaining only; required/margin null (7.5)",
+      endDate: new Date("2024-01-17T00:00:00.000Z"), // 7 days → 1 week
+      rangeCount: 1,
+      seedForecast: "none" as const,
+      expectForecast: null,
+      expected: { remainingPeriods: 1, requiredPeriods: null, marginPoints: null },
+    },
+    {
+      name: "endDate set × forecast 0 → remaining only; required/margin null (7.5)",
+      endDate: new Date("2024-01-24T00:00:00.000Z"), // 14 days → 2 weeks
+      rangeCount: 2,
+      seedForecast: "zero" as const,
+      expectForecast: 0,
+      expected: { remainingPeriods: 2, requiredPeriods: null, marginPoints: null },
+    },
+    {
+      name: "endDate set × forecast >0 → remaining/required/margin all computed (7.3)",
+      endDate: new Date("2024-01-24T00:00:00.000Z"), // 14 days → 2; open 10; forecast 8
+      rangeCount: 2,
+      seedForecast: "positive" as const,
+      expectForecast: 8,
+      // required = ceil(10/8)=2; margin = 8*2 - 10 = 6
+      expected: { remainingPeriods: 2, requiredPeriods: 2, marginPoints: 6 },
+    },
+  ])("$name", async ({ endDate, rangeCount, seedForecast, expectForecast, expected }) => {
     try {
-      const caseId = await createCase({ endDate: null });
-      await openTask(caseId, 5);
-      await openTask(caseId, 3);
-
-      const summary = await getSummary("week", 2, NOW_MID_WEEK, caseId);
-
-      expect(summary.caseOutlook).toEqual({
-        openTaskCount: 2,
-        openPoints: 8,
-        remainingPeriods: null,
-        requiredPeriods: null,
-        marginPoints: null,
-      });
-    } finally {
-      await cleanup();
-    }
-  });
-
-  it("when endDate is set but forecast is 0: remainingPeriods only; required/margin null (7.2, 7.5)", async () => {
-    try {
-      // endDate 14 days after NOW_MID_WEEK UTC midnight → 14/7 = 2 remaining weeks
-      const caseId = await createCase({ endDate: new Date("2024-01-24T00:00:00.000Z") });
+      const caseId = await createCase({ endDate });
       await openTask(caseId, 10);
-      // Two past periods exist but with 0 completed points → forecastNextPeriodPoints = 0
-      await completedTaskForCase(caseId, new Date("2024-01-03T09:00:00.000Z"), null);
-      await completedTaskForCase(caseId, new Date("2023-12-26T09:00:00.000Z"), null);
 
-      const summary = await getSummary("week", 2, NOW_MID_WEEK, caseId);
+      if (seedForecast === "zero") {
+        await completedTaskForCase(caseId, new Date("2024-01-03T09:00:00.000Z"), null);
+        await completedTaskForCase(caseId, new Date("2023-12-26T09:00:00.000Z"), null);
+      } else if (seedForecast === "positive") {
+        await completedTaskForCase(caseId, new Date("2024-01-03T09:00:00.000Z"), 5);
+        await completedTaskForCase(caseId, new Date("2023-12-26T09:00:00.000Z"), 3);
+        await completedTaskForCase(caseId, new Date("2023-12-27T09:00:00.000Z"), 8);
+      }
 
-      expect(summary.forecastNextPeriodPoints).toBe(0);
+      const summary = await getSummary("week", rangeCount, NOW_MID_WEEK, caseId);
+
+      expect(summary.forecastNextPeriodPoints).toBe(expectForecast);
       expect(summary.caseOutlook).toEqual({
         openTaskCount: 1,
         openPoints: 10,
-        remainingPeriods: 2,
-        requiredPeriods: null,
-        marginPoints: null,
-      });
-    } finally {
-      await cleanup();
-    }
-  });
-
-  it("when endDate is set but forecast is uncalculated: remainingPeriods only; required/margin null (7.5)", async () => {
-    try {
-      const caseId = await createCase({ endDate: new Date("2024-01-17T00:00:00.000Z") }); // 7 days → 1 week
-      await openTask(caseId, 4);
-
-      const summary = await getSummary("week", 1, NOW_MID_WEEK, caseId);
-
-      expect(summary.forecastNextPeriodPoints).toBeNull();
-      expect(summary.caseOutlook).toEqual({
-        openTaskCount: 1,
-        openPoints: 4,
-        remainingPeriods: 1,
-        requiredPeriods: null,
-        marginPoints: null,
+        ...expected,
       });
     } finally {
       await cleanup();
