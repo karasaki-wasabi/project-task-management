@@ -1,12 +1,14 @@
-// user-avatar 1.1 — FNV-1a / mulberry32 / N=12 mechanical palette
-// (Requirements 1.1, 1.4; design.md UserAvatar.helpers.ts Service Interface).
+// user-avatar 1.1 / 1.2 — FNV-1a / mulberry32 / palette / symmetric grid
+// (Requirements 1.1, 1.2, 1.3, 1.4; design.md UserAvatar.helpers.ts Service Interface).
 import { describe, expect, it } from "vitest";
 import {
   createMulberry32,
   fnv1aHash,
   generateUserAvatarPalette,
+  generateUserAvatarPattern,
   userAvatarPaletteAt,
 } from "./UserAvatar.helpers";
+import type { UserAvatarAxis, UserAvatarCell } from "./UserAvatar.helpers";
 
 const HSL_RE = /^hsl\((\d+), (\d+)%, (\d+)%\)$/;
 
@@ -124,5 +126,124 @@ describe("generateUserAvatarPalette", () => {
       indices.add(generateUserAvatarPalette(`user-${i}`).index);
     }
     expect(indices.size).toBe(12);
+  });
+});
+
+const AXES: UserAvatarAxis[] = ["leftRight", "topBottom", "point"];
+const GRID_LAST = 4;
+const MIN_FILL_RATIO = 0.34;
+const MAX_FILL_RATIO = 0.74;
+
+function cellKey(x: number, y: number): string {
+  return `${x},${y}`;
+}
+
+function paintedMap(cells: UserAvatarCell[]): Map<string, "main" | "alt"> {
+  const map = new Map<string, "main" | "alt">();
+  for (const cell of cells) {
+    map.set(cellKey(cell.x, cell.y), cell.tone);
+  }
+  return map;
+}
+
+function mirrorOf(axis: UserAvatarAxis, x: number, y: number): { x: number; y: number } {
+  if (axis === "leftRight") return { x: GRID_LAST - x, y };
+  if (axis === "topBottom") return { x, y: GRID_LAST - y };
+  return { x: GRID_LAST - x, y: GRID_LAST - y };
+}
+
+function isIndependentCell(axis: UserAvatarAxis, x: number, y: number): boolean {
+  const mirror = mirrorOf(axis, x, y);
+  if (axis === "leftRight") return x <= mirror.x;
+  if (axis === "topBottom") return y <= mirror.y;
+  return y < mirror.y || (y === mirror.y && x <= mirror.x);
+}
+
+function independentRegionSize(axis: UserAvatarAxis): number {
+  return axis === "point" ? 13 : 15;
+}
+
+function paintedIndependentCount(cells: UserAvatarCell[], axis: UserAvatarAxis): number {
+  return cells.filter((cell) => isIndependentCell(axis, cell.x, cell.y)).length;
+}
+
+describe("generateUserAvatarPattern", () => {
+  it("returns the same grid, colors, and axis for the same userId", () => {
+    const first = generateUserAvatarPattern("user-abc");
+    const second = generateUserAvatarPattern("user-abc");
+    expect(first).toEqual(second);
+    expect(first.gridSize).toBe(5);
+    expect(AXES).toContain(first.axis);
+  });
+
+  it("lists only painted cells with main or alt tones and coords in 0..4", () => {
+    const pattern = generateUserAvatarPattern("user-abc");
+    const seen = new Set<string>();
+    for (const cell of pattern.cells) {
+      expect(cell.tone === "main" || cell.tone === "alt").toBe(true);
+      expect(cell.x).toBeGreaterThanOrEqual(0);
+      expect(cell.x).toBeLessThanOrEqual(GRID_LAST);
+      expect(cell.y).toBeGreaterThanOrEqual(0);
+      expect(cell.y).toBeLessThanOrEqual(GRID_LAST);
+      const key = cellKey(cell.x, cell.y);
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
+    }
+  });
+
+  it("uses the same hsl() colors as generateUserAvatarPalette for the same userId", () => {
+    const userId = "user-abc";
+    const palette = generateUserAvatarPalette(userId);
+    const pattern = generateUserAvatarPattern(userId);
+    expect(pattern.mainColor).toBe(palette.mainColor);
+    expect(pattern.altColor).toBe(palette.altColor);
+    expect(pattern.backgroundColor).toBe(palette.backgroundColor);
+  });
+
+  it("selects the axis from the second mulberry32 draw after the palette index", () => {
+    const userId = "user-abc";
+    const rng = createMulberry32(fnv1aHash(userId));
+    rng();
+    const expectedAxis = AXES[Math.floor(rng() * AXES.length)];
+    expect(generateUserAvatarPattern(userId).axis).toBe(expectedAxis);
+  });
+
+  it("mirrors painted tones across the chosen axis, including the point-symmetry center", () => {
+    const userIds = ["user-abc", "user-0", "user-1", "user-2", "user-3", ""];
+    for (const userId of userIds) {
+      const pattern = generateUserAvatarPattern(userId);
+      const map = paintedMap(pattern.cells);
+      for (let y = 0; y <= GRID_LAST; y += 1) {
+        for (let x = 0; x <= GRID_LAST; x += 1) {
+          const tone = map.get(cellKey(x, y));
+          const mirror = mirrorOf(pattern.axis, x, y);
+          expect(map.get(cellKey(mirror.x, mirror.y))).toBe(tone);
+        }
+      }
+    }
+  });
+
+  it("keeps independent-region fill count within 34%..74% for typical userIds", () => {
+    for (let i = 0; i < 50; i += 1) {
+      const pattern = generateUserAvatarPattern(`user-${i}`);
+      const regionSize = independentRegionSize(pattern.axis);
+      const painted = paintedIndependentCount(pattern.cells, pattern.axis);
+      expect(painted).toBeGreaterThanOrEqual(MIN_FILL_RATIO * regionSize);
+      expect(painted).toBeLessThanOrEqual(MAX_FILL_RATIO * regionSize);
+    }
+  });
+
+  it("accepts an empty userId without throwing and still returns a pattern", () => {
+    const pattern = generateUserAvatarPattern("");
+    expect(pattern.gridSize).toBe(5);
+    expect(AXES).toContain(pattern.axis);
+    expect(pattern.mainColor).toMatch(HSL_RE);
+  });
+
+  it("does not change the pattern when only a display-name-like string differs from the userId", () => {
+    const byId = generateUserAvatarPattern("user-abc");
+    const byName = generateUserAvatarPattern("田中");
+    expect(byId).not.toEqual(byName);
+    expect(generateUserAvatarPattern("user-abc")).toEqual(byId);
   });
 });
