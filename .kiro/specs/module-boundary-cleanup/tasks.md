@@ -66,7 +66,7 @@
   - _Boundary: recurrenceService_
   - _Requirements: 1.1, 1.3, 1.4, 3.1, 3.2_
 
-- [ ] 4.4 (P) 消化数集計を整合専用面経由にする
+- [x] 4.4 (P) 消化数集計を整合専用面経由にする
   - soft-delete 含む完了カウントの意味を変えない
   - throughput 側の task 集計用 repository は削除する
   - 観測可能: throughput 既存テストが緑で、throughput モジュールに task 直カウント／当該 repository が残らない
