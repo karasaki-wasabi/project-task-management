@@ -43,7 +43,7 @@
   - _Boundary: task.repository.ts_
   - _Depends: 1.1_
 
-- [ ] 2.3 TasksService: 直接入力拒否の検証と再計算トリガーの配線
+- [x] 2.3 TasksService: 直接入力拒否の検証と再計算トリガーの配線
   - `update`に「`storyPoints`が指定され、かつ対象タスクが1件以上の子を持つ場合は`validation_error`を返す」検証を追加する
   - `create`(`parentTaskId`指定時)・`addChild`・`splitTask`・`update`(`storyPoints`変更時・`parentTaskId`変更時)・`delete`の各経路の末尾で、影響を受ける親(`parentTaskId`変更時は旧親・新親の両方)を起点に`recalculateAncestorStoryPoints`を呼び出す(いずれも既存の`runActivityWrite`が提供するトランザクション内で実行する)
   - `update`で`storyPoints`が変化した場合、既存の`title`/`priority`等と同様に`recordFieldChanges`へ変更前後の値を渡し、操作ログ(タイムライン)に記録する。祖先再計算による自動更新は記録対象に含めない
@@ -53,7 +53,7 @@
   - _Depends: 2.1, 2.2_
 
 - [ ] 3. Core: throughputモジュール — ワークスペーススコープとポイント集計・見通し
-- [ ] 3.1 ThroughputService: スコープ付き集計を integrity 経由に切り替える
+- [x] 3.1 ThroughputService: スコープ付き集計を integrity 経由に切り替える
   - `getSummary`にワークスペーススコープと任意の`caseId`スコープを組み込む(既存の期間境界計算はそのまま踏襲)
   - 完了件数・完了ポイントは`taskIntegrityService.countCompletedWithPointsInPeriodIncludingDeleted`から得る。切替後、引数なしの旧`countCompletedInPeriodIncludingDeleted`は削除する。`throughput.repository.ts`は再導入しない
   - 完了条件: 指定ワークスペース外の完了がレスポンスに含まれないこと。throughput モジュールが`task.closure`も Prisma Task も import していないこと

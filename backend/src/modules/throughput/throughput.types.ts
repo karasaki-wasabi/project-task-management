@@ -1,11 +1,11 @@
-// Throughput domain types (task 7.1, design.md "Backend/throughput" Service
-// Interface).
+// Throughput domain types (design.md "Backend/throughput" Service Interface).
 export type PeriodType = "week" | "month";
 
 export interface ThroughputPeriod {
   periodStart: Date;
   periodEnd: Date;
   completedCount: number;
+  completedPoints: number;
 }
 
 export interface ThroughputSummary {

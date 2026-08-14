@@ -49,10 +49,6 @@ export const taskIntegrityService = {
     return { requiredTotal, requiredCompleted };
   },
 
-  countCompletedInPeriodIncludingDeleted(periodStart: Date, periodEnd: Date): Promise<number> {
-    return taskRepository.countCompletedInPeriodIncludingDeleted(periodStart, periodEnd);
-  },
-
   countCompletedWithPointsInPeriodIncludingDeleted(
     periodStart: Date,
     periodEnd: Date,

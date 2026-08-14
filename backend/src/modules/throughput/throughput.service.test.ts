@@ -29,24 +29,42 @@ let ownerUserId: string;
 
 const taskActor = () => ({ type: "user" as const, userId: ownerUserId });
 
-// throughput 集計はワークスペース非依存のグローバル COUNT のため、共有 DB 上の
-// 他テスト／前回失敗の残留 `completedAt` が絶対件数アサートを壊す。
+// 共有 DB 上の他テスト／前回失敗の残留 `completedAt` が絶対件数アサートを壊すため、
 // このスイート専用の歴史日付帯だけを beforeEach で物理削除して隔離する。
 const THROUGHPUT_BAND_START = new Date("2023-11-01T00:00:00.000Z");
 const THROUGHPUT_BAND_END_EXCLUSIVE = new Date("2024-04-01T00:00:00.000Z");
 
-async function completedTask(completedAt: Date): Promise<string> {
+// 2024-01-10 is a Wednesday; the Monday-started week containing it is
+// 2024-01-08..2024-01-14, so the most recent COMPLETED week is
+// 2024-01-01..2024-01-07.
+const NOW_MID_WEEK = new Date("2024-01-10T12:00:00.000Z");
+
+async function completedTask(
+  completedAt: Date,
+  options: { workspaceId?: string; storyPoints?: number | null } = {},
+): Promise<string> {
   const task = await db.task.create({
     data: {
       title: `task-${randomUUID()}`,
       priority: "low",
       status: "ready_for_handoff",
       completedAt,
-      workspaceId,
+      workspaceId: options.workspaceId ?? workspaceId,
+      storyPoints: options.storyPoints ?? null,
     },
   });
   createdTaskIds.push(task.id);
   return task.id;
+}
+
+function getSummary(
+  periodType: "week" | "month",
+  rangeCount: number,
+  now: Date = NOW_MID_WEEK,
+  caseId?: string,
+  scope: VerifiedWorkspaceId = verifiedWorkspaceId,
+) {
+  return throughputService.getSummary(periodType, rangeCount, scope, caseId, now);
 }
 
 async function cleanup(): Promise<void> {
@@ -141,11 +159,6 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-// 2024-01-10 is a Wednesday; the Monday-started week containing it is
-// 2024-01-08..2024-01-14, so the most recent COMPLETED week is
-// 2024-01-01..2024-01-07.
-const NOW_MID_WEEK = new Date("2024-01-10T12:00:00.000Z");
-
 describe("throughputService (task 7.1)", () => {
   it("counts completed tasks within the most recent completed week (Requirement 6.1)", async () => {
     await completedTask(new Date("2024-01-03T09:00:00.000Z"));
@@ -153,17 +166,18 @@ describe("throughputService (task 7.1)", () => {
     // Outside the target week (in the in-progress current week) — must not count.
     await completedTask(new Date("2024-01-09T09:00:00.000Z"));
 
-    const summary = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    const summary = await getSummary("week", 1);
 
     expect(summary.periods).toHaveLength(1);
     expect(summary.periods[0].periodStart.toISOString()).toBe("2024-01-01T00:00:00.000Z");
     expect(summary.periods[0].completedCount).toBe(2);
+    expect(summary.periods[0].completedPoints).toBe(0);
 
     await cleanup();
   });
 
   it("returns periods sorted ascending by periodStart (Requirement 6.2)", async () => {
-    const summary = await throughputService.getSummary("week", 3, NOW_MID_WEEK);
+    const summary = await getSummary("week", 3);
 
     expect(summary.periods).toHaveLength(3);
     const starts = summary.periods.map((p) => p.periodStart.getTime());
@@ -172,11 +186,11 @@ describe("throughputService (task 7.1)", () => {
   });
 
   it("rejects rangeCount < 1", async () => {
-    await expect(throughputService.getSummary("week", 0, NOW_MID_WEEK)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(getSummary("week", 0)).rejects.toMatchObject({ statusCode: 400 });
   });
 
   it("returns forecastNextPeriodCount: null when fewer than 2 periods are available (Requirement 6.4)", async () => {
-    const summary = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    const summary = await getSummary("week", 1);
 
     expect(summary.forecastNextPeriodCount).toBeNull();
   });
@@ -186,7 +200,7 @@ describe("throughputService (task 7.1)", () => {
     await completedTask(new Date("2023-12-26T09:00:00.000Z")); // week of 2023-12-25: 1 task
     await completedTask(new Date("2023-12-27T09:00:00.000Z")); // week of 2023-12-25: +1 (total 2)
 
-    const summary = await throughputService.getSummary("week", 2, NOW_MID_WEEK);
+    const summary = await getSummary("week", 2);
 
     // periods: [2023-12-25 (count 2), 2024-01-01 (count 1)] -> average 1.5 -> rounds to 2
     expect(summary.forecastNextPeriodCount).toBe(2);
@@ -214,7 +228,7 @@ describe("throughputService (task 7.1)", () => {
     await completedTask(new Date("2024-01-01T15:00:00.000Z"));
     await completedTask(new Date("2024-01-01T18:00:00.000Z")); // week 5 (most recent): 4
 
-    const summary = await throughputService.getSummary("week", 6, NOW_MID_WEEK);
+    const summary = await getSummary("week", 6);
 
     expect(summary.periods.map((p) => p.completedCount)).toEqual([9, 1, 1, 2, 3, 4]);
     expect(summary.periods[0].periodStart.toISOString()).toBe("2023-11-27T00:00:00.000Z");
@@ -227,12 +241,12 @@ describe("throughputService (task 7.1)", () => {
 
   it("still counts a task toward its historical period after the task is soft-deleted (Requirement 9.5)", async () => {
     const taskId = await completedTask(new Date("2024-01-03T09:00:00.000Z"));
-    const before = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    const before = await getSummary("week", 1);
     expect(before.periods[0].completedCount).toBe(1);
 
     await db.task.delete({ where: { id: taskId } });
 
-    const after = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    const after = await getSummary("week", 1);
     expect(after.periods[0].completedCount).toBe(1);
 
     await cleanup();
@@ -246,12 +260,34 @@ describe("throughputService (task 7.1)", () => {
     await completedTask(new Date("2024-02-29T23:59:59.000Z"));
     await completedTask(new Date("2024-03-01T00:00:00.000Z")); // in-progress month, excluded
 
-    const summary = await throughputService.getSummary("month", 1, nowMidMonth);
+    const summary = await getSummary("month", 1, nowMidMonth);
 
     expect(summary.periods[0].periodStart.toISOString()).toBe("2024-02-01T00:00:00.000Z");
     expect(summary.periods[0].completedCount).toBe(2);
 
     await cleanup();
+  });
+
+  it("excludes completions outside the requested workspace and returns completedPoints (Requirements 3.1, 3.2)", async () => {
+    const otherWorkspace = await db.workspace.create({
+      data: { name: `throughput-other-${randomUUID()}`, createdByUserId: ownerUserId },
+    });
+    await completedTask(new Date("2024-01-03T09:00:00.000Z"), { storyPoints: 5 });
+    await completedTask(new Date("2024-01-04T09:00:00.000Z"), { storyPoints: 3 });
+    await completedTask(new Date("2024-01-05T09:00:00.000Z"), {
+      workspaceId: otherWorkspace.id,
+      storyPoints: 99,
+    });
+
+    try {
+      const summary = await getSummary("week", 1);
+      expect(summary.periods[0].completedCount).toBe(2);
+      expect(summary.periods[0].completedPoints).toBe(8);
+    } finally {
+      await cleanup();
+      await db.$executeRawUnsafe(`DELETE FROM tasks WHERE workspace_id = ?`, otherWorkspace.id);
+      await db.workspace.delete({ where: { id: otherWorkspace.id } }).catch(() => undefined);
+    }
   });
 });
 
@@ -271,11 +307,11 @@ describe("throughputService completion stamp non-regression (task-status-model 7
     const normal = await createStage("normal", 100);
     const bandStamp = new Date("2024-01-03T09:00:00.000Z");
 
-    const before = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    const before = await getSummary("week", 1);
     expect(before.periods[0].completedCount).toBe(0);
 
     await completeIntoBand(created.value.id, completed.id, bandStamp);
-    const afterEnter = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    const afterEnter = await getSummary("week", 1);
     expect(afterEnter.periods[0].completedCount).toBe(1);
 
     const left = await tasksService.updateDevelopmentStage(
@@ -288,7 +324,7 @@ describe("throughputService completion stamp non-regression (task-status-model 7
     if (!left.ok) return;
     expect(left.value.completedAt).toBeNull();
 
-    const afterLeave = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    const afterLeave = await getSummary("week", 1);
     expect(afterLeave.periods[0].completedCount).toBe(0);
 
     await cleanup();
@@ -317,7 +353,7 @@ describe("throughputService completion stamp non-regression (task-status-model 7
     if (!cancelledMove.ok) return;
     expect(cancelledMove.value.completedAt).toBeNull();
 
-    const afterCancel = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    const afterCancel = await getSummary("week", 1);
     expect(afterCancel.periods[0].completedCount).toBe(0);
 
     // Prove digest still keys only on completedAt: a cancelled-stage row with a
@@ -326,7 +362,7 @@ describe("throughputService completion stamp non-regression (task-status-model 7
       where: { id: created.value.id },
       data: { completedAt: new Date("2024-01-03T09:00:00.000Z") },
     });
-    const afterForcedStamp = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    const afterForcedStamp = await getSummary("week", 1);
     expect(afterForcedStamp.periods[0].completedCount).toBe(1);
 
     await cleanup();
@@ -344,15 +380,15 @@ describe("throughputService completion stamp non-regression (task-status-model 7
     });
     createdTaskIds.push(task.id);
 
-    const summary = await throughputService.getSummary("week", 1, NOW_MID_WEEK);
+    const summary = await getSummary("week", 1);
     expect(summary.periods[0].completedCount).toBe(0);
 
     await cleanup();
   });
 });
 
-describe("throughputService module boundary (module-boundary-cleanup task 4.4)", () => {
-  it("delegates completion counts via taskIntegrityService; no throughput.repository or task Prisma (Requirements 1.1, 1.3, 1.4, 4.5, 4.6)", () => {
+describe("throughputService module boundary (module-boundary-cleanup task 4.4 / velocity-dashboard 3.1)", () => {
+  it("delegates via countCompletedWithPoints; no task.closure, throughput.repository, or task Prisma", () => {
     const dir = dirname(fileURLToPath(import.meta.url));
     const sourcePath = join(dir, "throughput.service.ts");
     const source = readFileSync(sourcePath, "utf8");
@@ -368,7 +404,11 @@ describe("throughputService module boundary (module-boundary-cleanup task 4.4)",
     expect(importLines).toMatch(/taskIntegrityService/);
     expect(importLines).not.toMatch(/throughput\.repository/);
     expect(importLines).not.toMatch(/throughputRepository/);
-    expect(codeWithoutComments).toMatch(/taskIntegrityService\.countCompletedInPeriodIncludingDeleted/);
+    expect(importLines).not.toMatch(/task\.closure/);
+    expect(codeWithoutComments).toMatch(
+      /taskIntegrityService\.countCompletedWithPointsInPeriodIncludingDeleted/,
+    );
+    expect(codeWithoutComments).not.toMatch(/countCompletedInPeriodIncludingDeleted/);
     expect(codeWithoutComments).not.toMatch(/throughputRepository\.countCompleted/);
     expect(codeWithoutComments).not.toMatch(/\b(?:db|client)\.task\b/);
 
@@ -380,6 +420,7 @@ describe("throughputService module boundary (module-boundary-cleanup task 4.4)",
         .replace(/\/\*[\s\S]*?\*\//g, "")
         .replace(/\/\/.*$/gm, "");
       expect(fileSource, name).not.toMatch(/\b(?:db|client)\.task\b/);
+      expect(fileSource, name).not.toMatch(/task\.closure/);
       expect(name).not.toBe("throughput.repository.ts");
     }
   });

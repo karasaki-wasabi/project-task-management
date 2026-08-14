@@ -244,15 +244,6 @@ export const taskRepository = {
     });
   },
 
-  countCompletedInPeriodIncludingDeleted(periodStart: Date, periodEnd: Date): Promise<number> {
-    return db.task.count({
-      where: {
-        completedAt: { gte: periodStart, lte: periodEnd },
-        deletedAt: undefined,
-      },
-    });
-  },
-
   async countCompletedWithPointsInPeriodIncludingDeleted(
     periodStart: Date,
     periodEnd: Date,

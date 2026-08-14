@@ -1,6 +1,6 @@
-// ThroughputService (task 7.1, design.md "Backend/throughput", Requirements
-// 6.1-6.4, 9.5).
+// ThroughputService (design.md "Backend/throughput", Requirements 3.1–3.6, 4.1–4.3).
 import { badRequest } from "../../shared/http-errors.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { taskIntegrityService } from "../tasks/task-integrity.service.js";
 import type { PeriodType, ThroughputPeriod, ThroughputSummary } from "./throughput.types.js";
 
@@ -47,18 +47,33 @@ function buildPeriodBoundaries(periodType: PeriodType, rangeCount: number, now: 
 }
 
 export const throughputService = {
-  async getSummary(periodType: PeriodType, rangeCount: number, now: Date = new Date()): Promise<ThroughputSummary> {
+  async getSummary(
+    periodType: PeriodType,
+    rangeCount: number,
+    workspaceId: VerifiedWorkspaceId,
+    caseId?: string,
+    now: Date = new Date(),
+  ): Promise<ThroughputSummary> {
     if (!Number.isInteger(rangeCount) || rangeCount < 1) {
       throw badRequest("rangeCount must be a positive integer");
     }
 
     const boundaries = buildPeriodBoundaries(periodType, rangeCount, now);
     const periods: ThroughputPeriod[] = await Promise.all(
-      boundaries.map(async ({ start, end }) => ({
-        periodStart: start,
-        periodEnd: end,
-        completedCount: await taskIntegrityService.countCompletedInPeriodIncludingDeleted(start, end),
-      })),
+      boundaries.map(async ({ start, end }) => {
+        const { count, points } = await taskIntegrityService.countCompletedWithPointsInPeriodIncludingDeleted(
+          start,
+          end,
+          workspaceId,
+          caseId,
+        );
+        return {
+          periodStart: start,
+          periodEnd: end,
+          completedCount: count,
+          completedPoints: points,
+        };
+      }),
     );
 
     let forecastNextPeriodCount: number | null = null;

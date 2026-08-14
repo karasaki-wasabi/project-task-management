@@ -364,7 +364,7 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     await hardDelete("cases", [caseRow.id, caseB.id]);
   });
 
-  it("countCompletedInPeriodIncludingDeleted includes soft-deleted tasks (Requirement 4.5)", async () => {
+  it("countCompletedWithPointsInPeriodIncludingDeleted includes soft-deleted tasks (Requirement 4.5)", async () => {
     const periodStart = new Date("2024-01-01T00:00:00.000Z");
     const periodEnd = new Date("2024-01-07T23:59:59.999Z");
     const inPeriod = await db.task.create({
@@ -384,11 +384,23 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
       },
     });
 
-    expect(await taskIntegrityService.countCompletedInPeriodIncludingDeleted(periodStart, periodEnd)).toBe(1);
+    expect(
+      await taskIntegrityService.countCompletedWithPointsInPeriodIncludingDeleted(
+        periodStart,
+        periodEnd,
+        workspaceA,
+      ),
+    ).toEqual({ count: 1, points: 0 });
 
     await db.task.delete({ where: { id: inPeriod.id } });
 
-    expect(await taskIntegrityService.countCompletedInPeriodIncludingDeleted(periodStart, periodEnd)).toBe(1);
+    expect(
+      await taskIntegrityService.countCompletedWithPointsInPeriodIncludingDeleted(
+        periodStart,
+        periodEnd,
+        workspaceA,
+      ),
+    ).toEqual({ count: 1, points: 0 });
 
     await hardDelete("tasks", [inPeriod.id, outside.id]);
   });
@@ -763,8 +775,7 @@ describe("taskIntegrityService aggregation (velocity-dashboard 1.3)", () => {
     }
   });
 
-  it("keeps legacy countCompletedInPeriodIncludingDeleted without workspace args", async () => {
-    expect(typeof taskIntegrityService.countCompletedInPeriodIncludingDeleted).toBe("function");
-    expect(taskIntegrityService.countCompletedInPeriodIncludingDeleted.length).toBe(2);
+  it("removes legacy countCompletedInPeriodIncludingDeleted after throughput switch (Requirement 3.1)", async () => {
+    expect(taskIntegrityService).not.toHaveProperty("countCompletedInPeriodIncludingDeleted");
   });
 });
