@@ -1,7 +1,7 @@
 # Implementation Plan: velocity-dashboard
 
 - [ ] 1. Foundation: データモデルと共有プリミティブ
-- [ ] 1.1 `Task.storyPoints`列と操作ログ用`FieldName`の追加
+- [x] 1.1 `Task.storyPoints`列と操作ログ用`FieldName`の追加
   - `schema.prisma`の`Task`モデルに`storyPoints Int? @map("story_points")`を追加する
   - `schema.prisma`の`FieldName` enumに`storyPoints`を追加する（既存値と同じ camelCase。DB 列名の`story_points`とは別）
   - `activity-log.types.ts`の`FieldName`ユニオン型に`"storyPoints"`を追加する
