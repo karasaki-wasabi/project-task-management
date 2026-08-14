@@ -97,7 +97,7 @@
   - _Boundary: app.ts_
   - _Depends: 3.4_
 
-- [ ] 4. Core: フロントエンド消化数ダッシュボードの部品
+- [x] 4. Core: フロントエンド消化数ダッシュボードの部品
 - [x] 4.1 (P) APIクライアントの型・メソッド拡張
   - `useApiClient.ts`の`Task`/`CreateTaskInput`/`UpdateTaskInput`に`storyPoints`を追加する
   - `ThroughputPeriod`/`ThroughputSummary`型を完了ポイント・ポイントのフォーキャスト・案件見通し込みに拡張し、`getThroughput`に任意の`caseId`引数を追加する
@@ -129,7 +129,7 @@
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
   - _Boundary: CaseOutlookPanel_
 
-- [ ] 4.5 消化数ダッシュボードページの作り直し
+- [x] 4.5 消化数ダッシュボードページの作り直し
   - `pages/workspaces/[workspaceId]/throughput/index.vue`を、コントロール行(期間種別・表示件数・案件フィルタ)+`ThroughputTrendChart`+目安サマリーカード+(案件選択時のみ)`CaseOutlookPanel`の構成に作り直す
   - 案件フィルタの選択・解除に応じて、表示中の集計・グラフ・見通しパネルを再取得して切り替える
   - `workspace-empty-state`は復活させない。集計のワークスペースは URL の`workspaceId`と`x-workspace-id`に任せる
