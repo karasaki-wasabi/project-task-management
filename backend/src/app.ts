@@ -39,6 +39,7 @@ const WORKSPACE_SCOPED_PATH_PREFIXES = [
   "/api/recurring-templates",
   "/api/holidays",
   "/api/development-stages",
+  "/api/throughput",
 ] as const;
 
 function isWorkspaceScopedPath(path: string): boolean {

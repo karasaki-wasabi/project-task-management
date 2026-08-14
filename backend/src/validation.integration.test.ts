@@ -25,6 +25,7 @@ const WORKSPACE_SCOPED_PREFIXES = [
   "/api/recurring-templates",
   "/api/holidays",
   "/api/development-stages",
+  "/api/throughput",
 ] as const;
 
 function needsWorkspaceHeader(url: string): boolean {

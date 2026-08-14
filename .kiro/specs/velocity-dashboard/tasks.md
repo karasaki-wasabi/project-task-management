@@ -52,7 +52,7 @@
   - _Boundary: TasksService_
   - _Depends: 2.1, 2.2_
 
-- [ ] 3. Core: throughputモジュール — ワークスペーススコープとポイント集計・見通し
+- [x] 3. Core: throughputモジュール — ワークスペーススコープとポイント集計・見通し
 - [x] 3.1 ThroughputService: スコープ付き集計を integrity 経由に切り替える
   - `getSummary`にワークスペーススコープと任意の`caseId`スコープを組み込む(既存の期間境界計算はそのまま踏襲)
   - 完了件数・完了ポイントは`taskIntegrityService.countCompletedWithPointsInPeriodIncludingDeleted`から得る。切替後、引数なしの旧`countCompletedInPeriodIncludingDeleted`は削除する。`throughput.repository.ts`は再導入しない
@@ -89,7 +89,7 @@
   - _Boundary: ThroughputRoutes_
   - _Depends: 3.2, 3.3_
 
-- [ ] 3.5 Integration: `/api/throughput`のワークスペーススコープ有効化
+- [x] 3.5 Integration: `/api/throughput`のワークスペーススコープ有効化
   - `app.ts`の`WORKSPACE_SCOPED_PATH_PREFIXES`に`/api/throughput`を追加し、`requireWorkspaceMember`が適用されるようにする
   - `app.routes.test.ts`・`validation.integration.test.ts`の同名`WORKSPACE_SCOPED_PREFIXES`にも同じ追加を行う
   - 完了条件: `x-workspace-id`ヘッダーなしで`GET /api/throughput`を呼ぶと400、他ワークスペースのIDを指定すると403が返る

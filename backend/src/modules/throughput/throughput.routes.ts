@@ -2,8 +2,8 @@
 // Contract; velocity-dashboard task 3.4 extends query + response).
 // Registered into the shared app in task 10.3; standalone Fastify plugin
 // here so this module stays testable in isolation.
-// WORKSPACE_SCOPED_PATH_PREFIXES wiring is task 3.5 — this module already
-// forwards request.currentWorkspaceId into ThroughputService.
+// WORKSPACE_SCOPED_PATH_PREFIXES includes /api/throughput (task 3.5);
+// this module forwards request.currentWorkspaceId into ThroughputService.
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";

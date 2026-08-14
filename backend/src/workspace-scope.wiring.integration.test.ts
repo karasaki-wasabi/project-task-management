@@ -1,6 +1,6 @@
 // App-level wiring of requireWorkspaceMember (task 1.4;
 // Requirements 2.2, 3.1, 3.2). Confirms the guard runs after requireUser
-// only on the five workspace-scoped path prefixes, and leaves excluded
+// only on the workspace-scoped path prefixes, and leaves excluded
 // paths unaffected.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -26,6 +26,7 @@ const SCOPED_PATHS = [
   "/api/recurring-templates",
   "/api/holidays",
   "/api/development-stages",
+  "/api/throughput",
 ] as const;
 
 function sessionCookie(response: { headers: Record<string, string | string[] | undefined> }): string {
@@ -165,14 +166,6 @@ describe("workspace scope guard wiring (task 1.4)", () => {
       withSessionCookie({ method: "GET", url: "/api/users" }, memberCsrf.cookie),
     );
     expect(users.statusCode).toBe(200);
-
-    const throughput = await app.inject(
-      withSessionCookie(
-        { method: "GET", url: "/api/throughput?periodType=week&rangeCount=1" },
-        memberCsrf.cookie,
-      ),
-    );
-    expect(throughput.statusCode).toBe(200);
 
     const me = await app.inject(
       withSessionCookie({ method: "GET", url: "/api/auth/me" }, memberCsrf.cookie),

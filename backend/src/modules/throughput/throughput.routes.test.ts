@@ -1,5 +1,5 @@
 // throughputRoutes (legacy task 7.1 + velocity-dashboard task 3.4).
-// Registration into main app.ts / WORKSPACE_SCOPED_PATH_PREFIXES is task 3.5;
+// Registration into main app.ts / WORKSPACE_SCOPED_PATH_PREFIXES is done (task 3.5);
 // this suite mounts the plugin on a throwaway Fastify and decorates
 // currentWorkspaceId the way requireWorkspaceMember would.
 import { randomUUID } from "node:crypto";
