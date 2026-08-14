@@ -79,7 +79,7 @@
   - _Boundary: ThroughputService_
   - _Depends: 3.2_
 
-- [ ] 3.4 ThroughputRoutes: クエリパラメータとレスポンスの拡張
+- [x] 3.4 ThroughputRoutes: クエリパラメータとレスポンスの拡張
   - クエリスキーマに任意の`caseId`(文字列)を追加する
   - `request.currentWorkspaceId`を`ThroughputService.getSummary`へ渡すよう配線する
   - レスポンスに完了ストーリーポイント合計・ポイントのフォーキャスト・(`caseId`指定時のみ)案件見通しを含める
