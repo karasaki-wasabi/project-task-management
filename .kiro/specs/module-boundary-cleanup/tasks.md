@@ -8,7 +8,7 @@
   - _Requirements: 6.1, 6.2_
   - _Boundary: date-only, holidays, recurrence_
 
-- [ ] 2. 公開面の追加（参照・整合・段階ブートストラップ）
+- [x] 2. 公開面の追加（参照・整合・段階ブートストラップ）
 - [x] 2.1 (P) 案件の読み取り専用公開面を追加する
   - ワークスペース内参照と、TX 内の ID 参照（無ければ notFound）を公開する
   - write 面や繰り返しサービスに依存しない
@@ -24,7 +24,7 @@
   - _Requirements: 1.4, 3.2, 4.4_
   - _Boundary: developmentStagesService_
 
-- [ ] 2.3 (P) タスク行の整合・集計専用面を追加する
+- [x] 2.3 (P) タスク行の整合・集計専用面を追加する
   - detach／clear／必須進捗カウント／soft-delete 含む完了期間カウント／生成タスク列挙を公開する
   - detach／clear の更新条件は現行どおり ID のみ（workspace 条件を付けない）
   - アンカー型は tasks 側定義とし、recurrence 実行時依存を作らない
@@ -104,3 +104,7 @@
   - 観測可能: 本仕様起因のテスト失敗が無く、対外契約維持の要件を満たす
   - _Depends: 5.1_
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 7.1_
+
+## Implementation Notes
+
+- taskIntegrityService は Prisma 直叩きせず `taskRepository` と `task.closure` のみに依存する（2.3 レビューで差し戻し）

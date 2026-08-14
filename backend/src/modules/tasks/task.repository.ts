@@ -4,6 +4,9 @@
 // CaseService same-TX apply (task 4).
 // workspace-resource-scope task 3.1: all queries take VerifiedWorkspaceId and
 // compose where via withWorkspaceScope.
+// module-boundary-cleanup 2.3: integrity-supporting updateMany / count /
+// findMany (ID-only detach/clear, progress counts, soft-delete bypass).
+import type { Prisma } from "@prisma/client";
 import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
@@ -16,6 +19,8 @@ import type {
   TaskStatus,
   UpdateTaskInput,
 } from "./task.types.js";
+
+type GeneratedSourceAnchor = NonNullable<Task["sourceAnchor"]>;
 
 async function findSubtreeIds(
   rootTaskId: string,
@@ -148,6 +153,56 @@ export const taskRepository = {
   // Open = not on a completed/cancelled stage (task-status-model 3.1 / 5.1).
   countIncompleteChildren(parentTaskId: string): Promise<number> {
     return db.task.count({ where: { parentTaskId, ...openTaskFilter } });
+  },
+
+  // module-boundary-cleanup 2.3: integrity persistence (ID-only updateMany,
+  // progress counts, soft-delete bypass count, generated-task findMany).
+  async detachFromCase(caseId: string, client: DbClient = db): Promise<void> {
+    await client.task.updateMany({ where: { caseId }, data: { caseId: null } });
+  },
+
+  async clearDevelopmentStage(developmentStageId: string, client: DbClient = db): Promise<void> {
+    await client.task.updateMany({
+      where: { developmentStageId },
+      data: { developmentStageId: null },
+    });
+  },
+
+  listGeneratedByAnchors(
+    caseId: string,
+    anchors: GeneratedSourceAnchor[],
+    client: DbClient = db,
+  ): Promise<Array<{ id: string; workspaceId: string }>> {
+    return client.task.findMany({
+      where: { caseId, sourceAnchor: { in: anchors } },
+      select: { id: true, workspaceId: true },
+    });
+  },
+
+  countRequiredMatching(
+    caseId: string,
+    workspaceId: VerifiedWorkspaceId,
+    progressWhere: Prisma.TaskWhereInput,
+  ): Promise<number> {
+    return db.task.count({
+      where: withWorkspaceScope(
+        {
+          caseId,
+          isRequiredForCase: true,
+          ...progressWhere,
+        },
+        workspaceId,
+      ),
+    });
+  },
+
+  countCompletedInPeriodIncludingDeleted(periodStart: Date, periodEnd: Date): Promise<number> {
+    return db.task.count({
+      where: {
+        completedAt: { gte: periodStart, lte: periodEnd },
+        deletedAt: undefined,
+      },
+    });
   },
 
   async createMany(inputs: CreateTaskInput[], client: DbClient = db): Promise<Task[]> {
