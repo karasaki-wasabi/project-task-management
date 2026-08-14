@@ -18,6 +18,8 @@ import type { TaskError } from "./task.types.js";
 const priority = z.enum(["high", "medium", "low"]);
 const taskStatus = z.enum(["not_started", "in_progress", "ready_for_handoff", "on_hold"]);
 
+const storyPoints = z.number().int().min(1);
+
 const createTaskBodySchema = z.object({
   title: z.string(),
   priority,
@@ -27,6 +29,7 @@ const createTaskBodySchema = z.object({
   assigneeUserId: z.string().optional(),
   parentTaskId: z.string().optional(),
   scheduledEndDate: z.coerce.date().optional(),
+  storyPoints: storyPoints.optional(),
 });
 const updateStatusBodySchema = z.object({ status: taskStatus });
 const updateTaskBodySchema = z
@@ -39,6 +42,7 @@ const updateTaskBodySchema = z
     assigneeUserId: z.string().nullable().optional(),
     parentTaskId: z.string().nullable().optional(),
     scheduledEndDate: z.coerce.date().nullable().optional(),
+    storyPoints: storyPoints.nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, { message: "at least one field must be provided" });
 const updateDevelopmentStageBodySchema = z.object({

@@ -27,7 +27,7 @@
   - _Depends: 1.1, 1.2_
 
 - [ ] 2. Core: tasksモジュール — ストーリーポイントの入力・自動合算
-- [ ] 2.1 (P) ストーリーポイントの入力型とバリデーション追加
+- [x] 2.1 (P) ストーリーポイントの入力型とバリデーション追加
   - `CreateTaskInput`/`UpdateTaskInput`(`task.types.ts`)に`storyPoints`を追加する(作成時は`number`任意、更新時は`number | null`任意)
   - `task.routes.ts`の作成/更新Zodスキーマに`storyPoints`検証(1以上の整数、更新時は`null`も許可)を追加する
   - 完了条件: `storyPoints`に0以下または非整数の値を送ると`POST/PATCH /api/tasks`が400を返す

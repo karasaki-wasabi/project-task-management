@@ -203,6 +203,172 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(response.statusCode).toBe(400);
   });
 
+  describe("storyPoints validation (velocity-dashboard 2.1; Requirements 1.1–1.4)", () => {
+    it.each([0, -1, 1.5])(
+      "POST /api/tasks returns 400 for invalid storyPoints=%s",
+      async (storyPoints) => {
+        const response = await app.inject(
+          withWorkspace(
+            {
+              method: "POST",
+              url: "/api/tasks",
+              payload: { title: "invalid points", priority: "medium", storyPoints },
+            },
+            memberCsrf.cookie,
+            memberCsrf.token,
+            workspaceA,
+          ),
+        );
+
+        expect(response.statusCode).toBe(400);
+      },
+    );
+
+    it("POST /api/tasks accepts omitted storyPoints (optional)", async () => {
+      const response = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/tasks",
+            payload: { title: "no points", priority: "medium" },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+
+      if (response.statusCode === 201) {
+        await hardDelete("tasks", [response.json().id]);
+      }
+      expect(response.statusCode).toBe(201);
+    });
+
+    it("POST /api/tasks accepts a valid storyPoints integer >= 1", async () => {
+      const response = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/tasks",
+            payload: { title: "with points", priority: "medium", storyPoints: 5 },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+
+      if (response.statusCode === 201) {
+        await hardDelete("tasks", [response.json().id]);
+      }
+      expect(response.statusCode).toBe(201);
+    });
+
+    it.each([0, -1, 1.5])(
+      "PATCH /api/tasks/:id returns 400 for invalid storyPoints=%s",
+      async (storyPoints) => {
+        const created = await app.inject(
+          withWorkspace(
+            {
+              method: "POST",
+              url: "/api/tasks",
+              payload: { title: "patch points target", priority: "low" },
+            },
+            memberCsrf.cookie,
+            memberCsrf.token,
+            workspaceA,
+          ),
+        );
+        expect(created.statusCode).toBe(201);
+        const { id } = created.json();
+
+        // Include a valid field so rejection is from storyPoints, not empty-body refine
+        // (unknown keys are stripped before validation is implemented).
+        const response = await app.inject(
+          withWorkspace(
+            {
+              method: "PATCH",
+              url: `/api/tasks/${id}`,
+              payload: { title: "still valid", storyPoints },
+            },
+            memberCsrf.cookie,
+            memberCsrf.token,
+            workspaceA,
+          ),
+        );
+
+        await hardDelete("tasks", [id]);
+        expect(response.statusCode).toBe(400);
+      },
+    );
+
+    it("PATCH /api/tasks/:id accepts storyPoints null", async () => {
+      const created = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/tasks",
+            payload: { title: "clear points target", priority: "low" },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(created.statusCode).toBe(201);
+      const { id } = created.json();
+
+      const response = await app.inject(
+        withWorkspace(
+          {
+            method: "PATCH",
+            url: `/api/tasks/${id}`,
+            payload: { storyPoints: null },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+
+      await hardDelete("tasks", [id]);
+      expect(response.statusCode).toBe(200);
+    });
+
+    it("PATCH /api/tasks/:id accepts a valid storyPoints integer >= 1", async () => {
+      const created = await app.inject(
+        withWorkspace(
+          {
+            method: "POST",
+            url: "/api/tasks",
+            payload: { title: "set points target", priority: "low" },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+      expect(created.statusCode).toBe(201);
+      const { id } = created.json();
+
+      const response = await app.inject(
+        withWorkspace(
+          {
+            method: "PATCH",
+            url: `/api/tasks/${id}`,
+            payload: { storyPoints: 3 },
+          },
+          memberCsrf.cookie,
+          memberCsrf.token,
+          workspaceA,
+        ),
+      );
+
+      await hardDelete("tasks", [id]);
+      expect(response.statusCode).toBe(200);
+    });
+  });
+
   it("PATCH /api/tasks/:id/status updates status, returns 404 for unknown id", async () => {
     const created = await app.inject(
       withWorkspace(
