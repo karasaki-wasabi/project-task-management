@@ -68,7 +68,7 @@
 - [x] task-status-model -- 開発段階に種別（通常/完了/中止）を持たせ、完了判定と `completedAt` 打刻をステータスから段階到達へ移す。ステータスは段階内の作業状態へ再定義する。Dependencies: none（ワークスペース系とは独立。操作ログが記録するステータス語彙を確定させるため task-detail より先行させる）
 - [x] task-field-rename -- `memo`→`detail`、`scheduledDate`→`scheduledEndDate` の API／DB／文言揃え。将来の開始予定日は `scheduledStartDate` と命名予約（カラム追加はしない）。完了済み仕様文書は更新しない。Dependencies: none（task-detail より先行）
 - [x] task-detail -- モーダルは簡易表示のまま、詳細画面でコメント・操作ログ・CRUD を提供する。Dependencies: workspace-resource-scope, task-status-model, task-field-rename
-- [ ] user-avatar -- `userId` から決定的に生成する identicon を、担当者・コメント投稿者・メンバー一覧・ヘッダー等のユーザー名表示へ一貫して出す。画像アップロードは対象外。Dependencies: user-auth, workspace-membership, task-detail
+- [x] user-avatar -- `userId` から決定的に生成する identicon を、担当者・コメント投稿者・メンバー一覧・ヘッダー等のユーザー名表示へ一貫して出す。画像アップロードは対象外。Dependencies: user-auth, workspace-membership, task-detail
 - [ ] velocity-dashboard -- ストーリーポイントと消化ペース／案件見通しのダッシュボード。Dependencies: workspace-resource-scope, task-detail, task-status-model
 
 ## Phase: Frontend workspace URL
