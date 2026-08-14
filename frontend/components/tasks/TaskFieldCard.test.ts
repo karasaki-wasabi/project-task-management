@@ -2,12 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 import { defineComponent } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import type { Case, DevelopmentStage, Task, User } from "../../composables/useApiClient";
+import UserAvatar from "../shared/UserAvatar.vue";
 import TaskFieldCard from "./TaskFieldCard.vue";
 
 const users: User[] = [
   {
     id: "user-1",
     name: "山田",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "user-2",
+    name: "佐藤",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
@@ -395,5 +402,89 @@ describe("TaskFieldCard", () => {
     await flushPromises();
 
     expect(onUpdate).toHaveBeenCalledWith("detail", "新しい詳細");
+  });
+
+  it("メイン担当者フィールドの氏名に UserAvatar を併記する（size 24、name なし）", () => {
+    const wrapper = mountCard();
+    const row = wrapper.get('[aria-label="担当者の行。選択すると編集操作を表示します"]');
+    const avatar = row.getComponent(UserAvatar);
+
+    expect(avatar.props("userId")).toBe("user-1");
+    expect(avatar.props("size")).toBe(24);
+    expect(avatar.props("name")).toBeUndefined();
+    expect(avatar.attributes("aria-hidden")).toBe("true");
+    expect(row.text()).toContain("山田");
+  });
+
+  it("担当者が未設定のときはメインフィールドに UserAvatar を出さない", () => {
+    const wrapper = mountCard(makeTask({ assigneeUserId: null }));
+    const row = wrapper.get('[aria-label="担当者の行。選択すると編集操作を表示します"]');
+
+    expect(row.findComponent(UserAvatar).exists()).toBe(false);
+    expect(row.text()).toContain("未設定");
+  });
+
+  it("子タスク行の担当者ラベルに UserAvatar を併記する（size 24、name なし）", async () => {
+    const wrapper = mountCard();
+    await openRelatedTasks(wrapper);
+    const list = wrapper.get('[data-testid="child-task-list"]');
+    const avatar = list.getComponent(UserAvatar);
+
+    expect(avatar.props("userId")).toBe("user-1");
+    expect(avatar.props("size")).toBe(24);
+    expect(avatar.props("name")).toBeUndefined();
+    expect(avatar.attributes("aria-hidden")).toBe("true");
+    expect(list.text()).toContain("山田");
+  });
+
+  it("子タスクに担当者がいないときは UserAvatar を出さない", async () => {
+    const unassignedChild = makeTask({
+      id: "child-unassigned",
+      title: "未割当の子",
+      parentTaskId: "task-1",
+      assigneeUserId: null,
+    });
+    const wrapper = mountCard(makeTask({ assigneeUserId: null }), undefined, true, {
+      childTasks: [unassignedChild],
+    });
+    await openRelatedTasks(wrapper);
+    const list = wrapper.get('[data-testid="child-task-list"]');
+
+    expect(list.findComponent(UserAvatar).exists()).toBe(false);
+    expect(list.text()).toContain("未設定");
+  });
+
+  it("担当者ドロップダウンの各選択肢に #leading 経由で UserAvatar を差し込む（size 20、name なし）", async () => {
+    const wrapper = mountCard();
+    await wrapper.get('button[aria-label="担当者を編集"]').trigger("click");
+    const picker = wrapper.get('[data-testid="inline-editable-picker"]');
+    const options = picker.findAll('[role="option"]');
+    const avatars = picker.findAllComponents(UserAvatar);
+
+    expect(options).toHaveLength(users.length);
+    expect(avatars).toHaveLength(users.length);
+    for (const [index, user] of users.entries()) {
+      const option = options[index]!;
+      const avatar = avatars[index]!;
+      expect(avatar.props("userId")).toBe(user.id);
+      expect(avatar.props("size")).toBe(20);
+      expect(avatar.props("name")).toBeUndefined();
+      expect(avatar.attributes("aria-hidden")).toBe("true");
+      expect(option.element.children[0]).toBe(avatar.element);
+      expect(option.text()).toContain(user.name);
+    }
+  });
+
+  it.each([
+    ["ステータス", "ステータスを編集"],
+    ["優先度", "優先度を編集"],
+    ["開発段階", "開発段階を編集"],
+  ] as const)("%s の FieldOptionList には UserAvatar を渡さない", async (_label, editAria) => {
+    const wrapper = mountCard();
+    await wrapper.get(`button[aria-label="${editAria}"]`).trigger("click");
+    const picker = wrapper.get('[data-testid="inline-editable-picker"]');
+
+    expect(picker.find('[role="option"]').exists()).toBe(true);
+    expect(picker.findComponent(UserAvatar).exists()).toBe(false);
   });
 });
