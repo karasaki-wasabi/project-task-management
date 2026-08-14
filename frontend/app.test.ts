@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { reactive, ref } from "vue";
 import App from "./app.vue";
+import UserAvatar from "./components/shared/UserAvatar.vue";
 
 const ErrorAlertStub = {
   props: ["message"],
@@ -16,7 +17,7 @@ const logout = vi.fn();
 const navigateTo = vi.fn();
 const currentId = ref<string | null>(null);
 const auth = {
-  user: ref<{ name: string } | null>(null),
+  user: ref<{ id: string; name: string } | null>(null),
   logout,
 };
 
@@ -32,6 +33,7 @@ vi.mock("./composables/useCurrentWorkspace", () => ({
 function mountApp(stubs: Record<string, unknown> = {}) {
   return mount(App, {
     global: {
+      components: { UserAvatar },
       stubs: {
         NuxtPage: { template: "<div>業務画面</div>" },
         NuxtLink: { template: "<a><slot /></a>" },
@@ -74,6 +76,7 @@ describe("App shell (task 6.4 / 6.2)", () => {
 
   it("ログイン中の表示名を表示し、ログアウト後はログイン画面へ移動する", async () => {
     auth.user.value = {
+      id: "user-1",
       name: "山田 太郎",
     };
     logout.mockResolvedValue(undefined);
@@ -90,6 +93,33 @@ describe("App shell (task 6.4 / 6.2)", () => {
     expect(navigateTo).toHaveBeenCalledWith("/login");
   });
 
+  it("ヘッダーの現在ユーザー表示に UserAvatar（28px）を併記する（user-avatar 3.6 / Req 2.1）", () => {
+    auth.user.value = {
+      id: "user-1",
+      name: "山田 太郎",
+    };
+
+    const wrapper = mountApp();
+    const avatar = wrapper.getComponent(UserAvatar);
+
+    expect(avatar.props("userId")).toBe("user-1");
+    expect(avatar.props("size")).toBe(28);
+    expect(avatar.props("name")).toBeUndefined();
+    expect(wrapper.text()).toContain("山田 太郎");
+
+    const row = avatar.element.parentElement;
+    expect(row).not.toBeNull();
+    expect(row!.className).toMatch(/flex/);
+    expect(row!.textContent).toContain("山田 太郎");
+  });
+
+  it("ユーザー未ログイン時はヘッダーに UserAvatar を出さない", () => {
+    auth.user.value = null;
+    const wrapper = mountApp();
+
+    expect(wrapper.findComponent(UserAvatar).exists()).toBe(false);
+  });
+
   it("ログアウトに失敗するとエラーを表示し、現在の画面にとどまる", async () => {
     const error = new Error("ログアウトに失敗しました");
     logout.mockRejectedValue(error);
@@ -103,7 +133,7 @@ describe("App shell (task 6.4 / 6.2)", () => {
   });
 
   it("ヘッダー右クラスタに WorkspaceSwitcher を置き、ナビと表示名の間に配置する（task 6.2 案B）", () => {
-    auth.user.value = { name: "山田 太郎" };
+    auth.user.value = { id: "user-1", name: "山田 太郎" };
     const wrapper = mountApp();
 
     const header = wrapper.get("header");
@@ -120,7 +150,7 @@ describe("App shell (task 6.4 / 6.2)", () => {
 
   it("currentId があるとき業務ナビは同一 workspaceId の scoped path になる（workspace-url-routing 4.1）", () => {
     currentId.value = "ws-1";
-    auth.user.value = { name: "山田 太郎" };
+    auth.user.value = { id: "user-1", name: "山田 太郎" };
     const wrapper = mountApp({
       NuxtLink: {
         props: ["to"],
@@ -140,7 +170,7 @@ describe("App shell (task 6.4 / 6.2)", () => {
 
   it("currentId が null のときナビは / と /workspaces のみ（workspace-url-routing 4.1）", () => {
     currentId.value = null;
-    auth.user.value = { name: "山田 太郎" };
+    auth.user.value = { id: "user-1", name: "山田 太郎" };
     const wrapper = mountApp({
       NuxtLink: {
         props: ["to"],
