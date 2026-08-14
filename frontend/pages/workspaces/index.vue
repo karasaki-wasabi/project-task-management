@@ -10,6 +10,7 @@
 -->
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import UserAvatar from "../../components/shared/UserAvatar.vue";
 import { useApiClient, type WorkspaceUserSummary } from "../../composables/useApiClient";
 import { useAuth } from "../../composables/useAuth";
 import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
@@ -370,7 +371,10 @@ async function confirmDelete() {
               class="border-b border-slate-100 last:border-0"
             >
               <td data-testid="member-name" class="px-3 py-2 font-medium text-slate-900">
-                {{ member.name }}
+                <div class="flex items-center gap-2">
+                  <UserAvatar :userId="member.userId" :size="20" />
+                  {{ member.name }}
+                </div>
               </td>
               <td data-testid="member-email" class="px-3 py-2 text-slate-600">
                 {{ member.email }}

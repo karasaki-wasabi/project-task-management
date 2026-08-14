@@ -78,7 +78,7 @@
   - _Boundary: TeamWorkloadSummary_
   - _Depends: 2.1_
 
-- [ ] 3.5 (P) ワークスペースメンバー表示への統合
+- [x] 3.5 (P) ワークスペースメンバー表示への統合
   - ワークスペースメンバー一覧(`/workspaces`)の各行の氏名表示にUserAvatarを併記する
   - メンバー行にUserAvatarが表示されることをテストで確認する(観測可能な完了条件)
   - _Requirements: 2.1_
