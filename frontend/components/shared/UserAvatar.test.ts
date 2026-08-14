@@ -57,21 +57,31 @@ describe("UserAvatar (user-avatar 2.1)", () => {
   it("renders the pattern as an SVG background plus painted cells", () => {
     const expected = generateUserAvatarPattern(DUMMY_USER_ID);
     expect(expected.cells.length).toBeGreaterThan(0);
+    const pad = 0.35;
+    const span = expected.gridSize + 2 * pad;
 
     const wrapper = mount(UserAvatar, {
       props: { userId: DUMMY_USER_ID },
     });
+    const svg = wrapper.get("svg");
     const rects = wrapper.findAll("rect");
 
+    expect(svg.attributes("viewBox")).toBe(`${-pad} ${-pad} ${span} ${span}`);
+    expect(svg.attributes("shape-rendering")).toBe("crispEdges");
     expect(rects).toHaveLength(1 + expected.cells.length);
-    expect(rects[0]!.attributes("width")).toBe(String(expected.gridSize));
-    expect(rects[0]!.attributes("height")).toBe(String(expected.gridSize));
+    expect(rects[0]!.attributes("x")).toBe(String(-pad));
+    expect(rects[0]!.attributes("y")).toBe(String(-pad));
+    expect(rects[0]!.attributes("width")).toBe(String(span));
+    expect(rects[0]!.attributes("height")).toBe(String(span));
     expect(rects[0]!.attributes("fill")).toBe(expected.backgroundColor);
 
     for (const [index, cell] of expected.cells.entries()) {
       const rect = rects[index + 1]!;
-      expect(rect.attributes("x")).toBe(String(cell.x));
-      expect(rect.attributes("y")).toBe(String(cell.y));
+      // 非整数スケール時のセル間ヘアライン対策でわずかにオーバーラップする
+      expect(rect.attributes("x")).toBe(String(cell.x - 0.02));
+      expect(rect.attributes("y")).toBe(String(cell.y - 0.02));
+      expect(rect.attributes("width")).toBe("1.04");
+      expect(rect.attributes("height")).toBe("1.04");
       expect(rect.attributes("fill")).toBe(
         cell.tone === "main" ? expected.mainColor : expected.altColor,
       );
