@@ -70,7 +70,7 @@ function page(items: TaskTimelinePage["items"], nextCursor: string | null = null
 
 function mountTimeline(
   readOnly = false,
-  extra: ComponentMountingOptions<typeof TaskTimeline>["props"] = {},
+  extra: Partial<NonNullable<ComponentMountingOptions<typeof TaskTimeline>["props"]>> = {},
 ) {
   return mount(TaskTimeline, {
     props: {
@@ -199,8 +199,22 @@ describe("TaskTimeline", () => {
         },
       ],
       cases: [
-        { id: "case-1", name: "案件A", createdAt: "", updatedAt: "" },
-        { id: "case-2", name: "案件B", createdAt: "", updatedAt: "" },
+        {
+          id: "case-1",
+          name: "案件A",
+          endDate: null,
+          isCompleted: false,
+          createdAt: "",
+          updatedAt: "",
+        },
+        {
+          id: "case-2",
+          name: "案件B",
+          endDate: null,
+          isCompleted: false,
+          createdAt: "",
+          updatedAt: "",
+        },
       ],
       stages: [
         {
@@ -220,7 +234,7 @@ describe("TaskTimeline", () => {
         {
           id: "task-parent-a",
           title: "親A",
-          status: "todo",
+          status: "not_started",
           priority: "medium",
           detail: null,
           caseId: null,
@@ -237,7 +251,7 @@ describe("TaskTimeline", () => {
         {
           id: "task-parent-b",
           title: "親B",
-          status: "todo",
+          status: "not_started",
           priority: "medium",
           detail: null,
           caseId: null,

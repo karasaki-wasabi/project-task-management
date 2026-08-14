@@ -233,6 +233,6 @@ describe("TaskDetailModal (task-status-model 5.3)", () => {
     expect(wrapper.findAll("button").some((button) => button.text() === "編集")).toBe(false);
     expect(wrapper.findAll("button").some((button) => button.text() === "削除")).toBe(false);
     expect(wrapper.find("#task-detail-title").exists()).toBe(false);
-    expect(wrapper.get('a[href="/workspaces/w1/tasks/t1"]').exists()).toBe(true);
+    expect(wrapper.find('a[href="/workspaces/w1/tasks/t1"]').exists()).toBe(true);
   });
 });

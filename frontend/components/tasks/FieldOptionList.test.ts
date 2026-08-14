@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { h } from "vue";
 import { mount } from "@vue/test-utils";
+import type { ComponentMountingOptions } from "@vue/test-utils";
 import FieldOptionList from "./FieldOptionList.vue";
 
 const OPTIONS = [
@@ -12,7 +13,7 @@ const OPTIONS = [
 
 function mountList(options: {
   modelValue?: string;
-  slots?: Record<string, unknown>;
+  slots?: ComponentMountingOptions<typeof FieldOptionList>["slots"];
 } = {}) {
   return mount(FieldOptionList, {
     props: {

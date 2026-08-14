@@ -117,9 +117,11 @@ export function generateUserAvatarPatternFromRng(next: () => number): UserAvatar
 
   const cells: UserAvatarCell[] = [];
   for (let y = 0; y < GRID_SIZE; y += 1) {
+    const row = grid[y];
+    if (!row) continue;
     for (let x = 0; x < GRID_SIZE; x += 1) {
-      const tone = grid[y][x];
-      if (tone === "blank") continue;
+      const tone = row[x];
+      if (tone === undefined || tone === "blank") continue;
       cells.push({ x, y, tone });
     }
   }
@@ -139,13 +141,16 @@ function paintIndependentRegion(next: () => number, axis: UserAvatarAxis): CellT
     Array<CellTone>(GRID_SIZE).fill("blank"),
   );
   for (let y = 0; y < GRID_SIZE; y += 1) {
+    const row = grid[y];
+    if (!row) continue;
     for (let x = 0; x < GRID_SIZE; x += 1) {
       if (!isIndependentCell(axis, x, y)) continue;
       const tone = drawTone(next);
-      grid[y][x] = tone;
+      row[x] = tone;
       const mirror = mirrorOf(axis, x, y);
       if (mirror.x !== x || mirror.y !== y) {
-        grid[mirror.y][mirror.x] = tone;
+        const mirrorRow = grid[mirror.y];
+        if (mirrorRow) mirrorRow[mirror.x] = tone;
       }
     }
   }
@@ -175,9 +180,12 @@ function mirrorOf(axis: UserAvatarAxis, x: number, y: number): { x: number; y: n
 function paintedIndependentCount(grid: CellTone[][], axis: UserAvatarAxis): number {
   let count = 0;
   for (let y = 0; y < GRID_SIZE; y += 1) {
+    const row = grid[y];
+    if (!row) continue;
     for (let x = 0; x < GRID_SIZE; x += 1) {
       if (!isIndependentCell(axis, x, y)) continue;
-      if (grid[y][x] !== "blank") count += 1;
+      const tone = row[x];
+      if (tone !== undefined && tone !== "blank") count += 1;
     }
   }
   return count;
