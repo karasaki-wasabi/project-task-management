@@ -9,14 +9,16 @@
 
 ## Current State
 
-- `frontend/pages/workspaces/[workspaceId]/throughput/index.vue`(`workspace-url-routing`により旧`frontend/pages/throughput/index.vue`から移動済み): 期間開始/終了/完了数を並べる表のみ(グラフなし)。scoped ページのため未選択空状態は出さない（`workspace-url-routing`で削除済み）
-- `backend/src/modules/throughput/`: 期間境界と件数フォーキャストを持ち、完了件数は`taskIntegrityService.countCompletedInPeriodIncludingDeleted`に委譲している（`throughput.repository.ts`は`module-boundary-cleanup`で削除済み）。**`/api/throughput`はワークスペーススコープ化されておらず、全ワークスペース横断で集計している**(`isWorkspaceScopedPath`の対象外、integrity 側にも`workspaceId`条件なし)。`workspace-resource-scope`は意図的にここを対象外とし、「選択済みでも集計は当面グローバルのまま残りうる点は`velocity-dashboard`で解消する」と本specへ明示的に申し送っている
-- `task-status-model`(実装完了)により、`completedAt`の意味が形式化された:「`completedAt`が非nullであることと、タスクが完了種別の開発段階にあることは同値」という不変条件がDB制約と実装の両面で保証されている。同spec設計は「`throughput`は新しい概念に依存させない。同モジュールは`completedAt`のみを見る現在の実装を維持する」と明言しており、本specの集計方針(`completedAt`基準)はそのまま踏襲してよい
-- `Task`モデルに見積もり工数フィールドは存在しない。`task-detail`(実装完了)の承認済み設計・モックは意図的にストーリーポイント入力欄を含んでいない(「ストーリーポイント入力欄は出さない」と明記)ため、本specでは既存の完成画面(タスク作成/編集フォーム、詳細の`TaskFieldCard`)に新規入力欄を追加する形の変更になる
+実装完了後の状態（discovery 時点の前提は Desired Outcome / Approach に残す）。
+
+- `frontend/pages/workspaces/[workspaceId]/throughput/index.vue`: コントロール行・2段推移グラフ・目安サマリー・案件選択時の見通しパネル。表主体の一覧は廃止済み。scoped ページのため未選択空状態は出さない
+- `backend/src/modules/throughput/`: 期間境界と件数・ポイントのフォーキャスト、任意の`caseId`による案件フィルタと案件見通しを持つ。完了集計は`taskIntegrityService.countCompletedWithPointsInPeriodIncludingDeleted`へ委譲（`throughput.repository.ts`は再導入しない）。`/api/throughput`は`WORKSPACE_SCOPED_PATH_PREFIXES`対象で、現在ワークスペースに閉じる
+- `Task.storyPoints`（`Int?` / DB `story_points`）と操作ログ用`FieldName.storyPoints`を持つ。葉への直接入力、親への合算再計算、親への直接入力拒否は tasks モジュールが担う
+- `task-status-model`(実装完了)により、`completedAt`が非nullであることと完了種別の開発段階にあることは同値。本specの集計は`completedAt`基準のまま
 - `Case.endDate`は nullable。未設定時は残期間数・必要期間数・余力を算出不可とし、消化ペース自体は表示する（requirements Requirement 7）
 - `Case.isCompleted`は既定 false。完了済み案件は案件フィルタ・見通しのセレクタから除外する（requirements Requirement 4 / 7）
-- `task-delivery-management` specは実装完了(implementation-complete)として凍結されており、本specでは更新しない
-- `module-boundary-cleanup`は実装完了。後続の集計追加は`taskIntegrityService`、案件参照は`caseReadService`を使う
+- `task-delivery-management` / `task-detail` 等の凍結 spec 文書は更新しない（コード拡張のみ）
+- `module-boundary-cleanup`は実装完了。集計は`taskIntegrityService`、案件参照は`caseReadService`を使う
 
 ## Desired Outcome
 
@@ -24,7 +26,7 @@
 - 消化数ダッシュボードで、件数ベースに加えてポイント合計ベースの消化ペースを確認でき、直近実績から今後の期間で消化できそうなポイント数の目安がわかる
 - 既定は全体ペース。案件でフィルタして案件スコープのペースも確認できる
 - `/api/throughput`を現在のワークスペースにスコープ化する(`workspace-resource-scope`からの申し送り事項。全体ペースも「現在ワークスペース内の全体」を意味するようにする)
-- 期間ごとの推移がグラフで直感的に把握できる(現状は表のみ)
+- 期間ごとの推移がグラフで直感的に把握できる（discovery 時点では表のみだった）
 - 案件を選んで、その案件の残タスク(未完了の件数・ポイント合計)と消化ペースを突き合わせ、「このペースで納期までに終わりそうか」「まだタスクを追加で積めそうか(余力)」の目安を確認できる
 
 ## Approach
