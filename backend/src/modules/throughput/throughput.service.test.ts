@@ -195,6 +195,18 @@ describe("throughputService (task 7.1)", () => {
     expect(summary.forecastNextPeriodCount).toBeNull();
   });
 
+  it("returns both count and points forecasts as null when fewer than 2 periods are available (Requirements 6.1–6.3)", async () => {
+    await completedTask(new Date("2024-01-03T09:00:00.000Z"), { storyPoints: 8 });
+
+    const summary = await getSummary("week", 1);
+
+    expect(summary.periods).toHaveLength(1);
+    expect(summary.forecastNextPeriodCount).toBeNull();
+    expect(summary.forecastNextPeriodPoints).toBeNull();
+
+    await cleanup();
+  });
+
   it("forecasts as the simple average of up to the last 4 periods once >= 2 are available (Requirement 6.3)", async () => {
     await completedTask(new Date("2024-01-03T09:00:00.000Z")); // week of 2024-01-01: 1 task
     await completedTask(new Date("2023-12-26T09:00:00.000Z")); // week of 2023-12-25: 1 task
@@ -203,6 +215,22 @@ describe("throughputService (task 7.1)", () => {
     const summary = await getSummary("week", 2);
 
     // periods: [2023-12-25 (count 2), 2024-01-01 (count 1)] -> average 1.5 -> rounds to 2
+    expect(summary.forecastNextPeriodCount).toBe(2);
+
+    await cleanup();
+  });
+
+  it("forecasts next-period points as the simple average of completedPoints over the same window (Requirements 6.2, 6.3)", async () => {
+    // week of 2024-01-01: 5 points; week of 2023-12-25: 3+8=11 points
+    await completedTask(new Date("2024-01-03T09:00:00.000Z"), { storyPoints: 5 });
+    await completedTask(new Date("2023-12-26T09:00:00.000Z"), { storyPoints: 3 });
+    await completedTask(new Date("2023-12-27T09:00:00.000Z"), { storyPoints: 8 });
+
+    const summary = await getSummary("week", 2);
+
+    expect(summary.periods.map((p) => p.completedPoints)).toEqual([11, 5]);
+    // average (11+5)/2 = 8; count average (2+1)/2 = 1.5 -> rounds to 2
+    expect(summary.forecastNextPeriodPoints).toBe(8);
     expect(summary.forecastNextPeriodCount).toBe(2);
 
     await cleanup();

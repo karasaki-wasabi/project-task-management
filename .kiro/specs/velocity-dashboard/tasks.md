@@ -61,7 +61,7 @@
   - _Boundary: ThroughputService_
   - _Depends: 1.3_
 
-- [ ] 3.2 ThroughputService: ポイントのフォーキャスト
+- [x] 3.2 ThroughputService: ポイントのフォーキャスト
   - 完了ストーリーポイント合計の直近実績に基づくフォーキャストを、既存の完了タスク数と同型のロジック(窓`FORECAST_WINDOW = 4`、最小期間数`MIN_PERIODS_FOR_FORECAST = 2`未満は`null`)で算出する
   - 完了条件: 実績期間数が最小期間数未満のとき、完了タスク数・完了ストーリーポイントいずれのフォーキャストも`null`になることを単体テストで確認できる
   - _Requirements: 6.1, 6.2, 6.3_

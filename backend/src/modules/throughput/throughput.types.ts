@@ -11,4 +11,5 @@ export interface ThroughputPeriod {
 export interface ThroughputSummary {
   periods: ThroughputPeriod[];
   forecastNextPeriodCount: number | null;
+  forecastNextPeriodPoints: number | null;
 }

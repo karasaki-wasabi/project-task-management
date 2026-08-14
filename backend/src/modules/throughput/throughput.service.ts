@@ -77,12 +77,15 @@ export const throughputService = {
     );
 
     let forecastNextPeriodCount: number | null = null;
+    let forecastNextPeriodPoints: number | null = null;
     if (periods.length >= MIN_PERIODS_FOR_FORECAST) {
       const window = periods.slice(-FORECAST_WINDOW);
-      const sum = window.reduce((total, p) => total + p.completedCount, 0);
-      forecastNextPeriodCount = Math.round(sum / window.length);
+      const countSum = window.reduce((total, p) => total + p.completedCount, 0);
+      const pointsSum = window.reduce((total, p) => total + p.completedPoints, 0);
+      forecastNextPeriodCount = Math.round(countSum / window.length);
+      forecastNextPeriodPoints = Math.round(pointsSum / window.length);
     }
 
-    return { periods, forecastNextPeriodCount };
+    return { periods, forecastNextPeriodCount, forecastNextPeriodPoints };
   },
 };
