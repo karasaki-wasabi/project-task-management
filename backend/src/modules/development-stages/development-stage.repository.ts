@@ -5,6 +5,7 @@
 // compose where via withWorkspaceScope.
 import type { DevelopmentStage as PrismaDevelopmentStage } from "@prisma/client";
 import { db } from "../../shared/db.js";
+import type { DbClient } from "../../shared/soft-delete.repository.js";
 import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import type { DevelopmentStage } from "./development-stage.types.js";
 
@@ -34,11 +35,25 @@ export const developmentStageRepository = {
     });
   },
 
-  async findById(id: string, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage | null> {
-    const row = await db.developmentStage.findFirst({
+  async findById(
+    id: string,
+    workspaceId: VerifiedWorkspaceId,
+    client: DbClient = db,
+  ): Promise<DevelopmentStage | null> {
+    const row = await client.developmentStage.findFirst({
       where: withWorkspaceScope({ id }, workspaceId),
     });
     return row ? toDomain(row) : null;
+  },
+
+  // Same payload as workspaceService.create terminal bootstrap (name/order/kind).
+  createTerminalStages(workspaceId: VerifiedWorkspaceId, client: DbClient): Promise<{ count: number }> {
+    return client.developmentStage.createMany({
+      data: [
+        { name: "完了", order: 0, kind: "completed", workspaceId },
+        { name: "中止", order: 1, kind: "cancelled", workspaceId },
+      ],
+    });
   },
 
   async rename(id: string, workspaceId: VerifiedWorkspaceId, name: string): Promise<DevelopmentStage> {
@@ -65,14 +80,11 @@ export const developmentStageRepository = {
     });
   },
 
-  // design.md Data Models "Consistency & Integrity": deleting a development
-  // stage detaches (does not cascade-delete) linked Task records by nulling
-  // their developmentStageId, matching the `deliveries` deletion pattern.
-  delete(id: string, workspaceId: VerifiedWorkspaceId): Promise<PrismaDevelopmentStage> {
-    return db.$transaction(async (tx) => {
-      await tx.task.updateMany({ where: { developmentStageId: id }, data: { developmentStageId: null } });
-      return tx.developmentStage.delete({ where: withWorkspaceScope({ id }, workspaceId) });
-    });
+  // Stage row only. Linked-task clear is owned by taskIntegrityService and
+  // orchestrated by developmentStagesService in the same write unit
+  // (design.md developmentStagesService.delete).
+  delete(id: string, workspaceId: VerifiedWorkspaceId, client: DbClient = db): Promise<PrismaDevelopmentStage> {
+    return client.developmentStage.delete({ where: withWorkspaceScope({ id }, workspaceId) });
   },
 
   async list(workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage[]> {

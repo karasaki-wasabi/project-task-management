@@ -6,6 +6,9 @@
 // (not just at the end of the happy path). This suite shares one real MySQL
 // database across runs.
 import { randomUUID } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
@@ -1172,6 +1175,46 @@ describe("recurrenceService workspace scope (workspace-resource-scope 4.1)", () 
       expect(tasks[0].workspaceId).toBe(caseEntity.workspaceId);
     } finally {
       await cleanup({ taskIds, templateIds, caseIds });
+    }
+  });
+});
+
+describe("recurrenceService module boundary (module-boundary-cleanup task 4.3)", () => {
+  it("uses caseReadService.requireById and taskIntegrityService.listGeneratedByAnchors; no case/task Prisma (Requirements 1.1, 1.3, 1.4, 3.1, 3.2)", () => {
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const sourcePath = join(dir, "recurrence.service.ts");
+    const source = readFileSync(sourcePath, "utf8");
+    const importLines = source
+      .split("\n")
+      .filter((line) => /^\s*import\b/.test(line))
+      .join("\n");
+    const codeWithoutComments = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+
+    expect(importLines).toMatch(/case-read\.service/);
+    expect(importLines).toMatch(/caseReadService/);
+    expect(importLines).toMatch(/task-integrity\.service/);
+    expect(importLines).toMatch(/taskIntegrityService/);
+    expect(importLines).not.toMatch(/case\.service/);
+    expect(importLines).not.toMatch(/\bcaseService\b/);
+    expect(importLines).not.toMatch(/case\.repository/);
+    expect(importLines).toMatch(/\btasksService\b/);
+
+    expect(codeWithoutComments).toMatch(/caseReadService\.requireById/);
+    expect(codeWithoutComments).toMatch(/taskIntegrityService\.listGeneratedByAnchors/);
+    expect(codeWithoutComments).toMatch(/tasksService\.create/);
+    expect(codeWithoutComments).toMatch(/tasksService\.delete/);
+    expect(codeWithoutComments).not.toMatch(/\b(?:db|client)\.case\b/);
+    expect(codeWithoutComments).not.toMatch(/\b(?:db|client)\.task\b/);
+
+    const productionFiles = readdirSync(dir).filter((name) => name.endsWith(".ts") && !name.includes(".test."));
+    for (const name of productionFiles) {
+      const fileSource = readFileSync(join(dir, name), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/.*$/gm, "");
+      expect(fileSource, name).not.toMatch(/\b(?:db|client)\.case\b/);
+      expect(fileSource, name).not.toMatch(/\b(?:db|client)\.task\b/);
     }
   });
 });

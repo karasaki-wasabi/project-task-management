@@ -1,7 +1,7 @@
 // ThroughputService (task 7.1, design.md "Backend/throughput", Requirements
 // 6.1-6.4, 9.5).
 import { badRequest } from "../../shared/http-errors.js";
-import { throughputRepository } from "./throughput.repository.js";
+import { taskIntegrityService } from "../tasks/task-integrity.service.js";
 import type { PeriodType, ThroughputPeriod, ThroughputSummary } from "./throughput.types.js";
 
 const FORECAST_WINDOW = 4;
@@ -57,7 +57,7 @@ export const throughputService = {
       boundaries.map(async ({ start, end }) => ({
         periodStart: start,
         periodEnd: end,
-        completedCount: await throughputRepository.countCompleted(start, end),
+        completedCount: await taskIntegrityService.countCompletedInPeriodIncludingDeleted(start, end),
       })),
     );
 

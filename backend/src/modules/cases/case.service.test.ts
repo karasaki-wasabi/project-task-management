@@ -1,6 +1,9 @@
 // caseService workspace scope (workspace-resource-scope task 2.1;
 // Requirements 1.1, 1.2, 3.1, 3.2, 3.3) plus prior CaseService coverage.
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Writable } from "node:stream";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../shared/db.js";
@@ -624,6 +627,28 @@ describe("caseService.delete / list (task 3.2 + workspace-resource-scope 2.1)", 
     expect(listA.some((c) => c.id === inB.id)).toBe(false);
 
     await hardDelete("cases", [inA.id, inB.id]);
+  });
+});
+
+describe("caseService module boundary (module-boundary-cleanup task 4.1)", () => {
+  it("orchestrates progress and delete via taskIntegrityService (Requirements 1.1, 1.4, 4.1, 4.2, 4.6)", () => {
+    const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "case.service.ts");
+    const source = readFileSync(sourcePath, "utf8");
+    const importLines = source
+      .split("\n")
+      .filter((line) => /^\s*import\b/.test(line))
+      .join("\n");
+    const codeWithoutComments = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+
+    expect(importLines).toMatch(/task-integrity\.service/);
+    expect(importLines).toMatch(/taskIntegrityService/);
+    expect(importLines).not.toMatch(/task\.closure/);
+    expect(codeWithoutComments).toMatch(/taskIntegrityService\.countRequiredForCaseProgress/);
+    expect(codeWithoutComments).toMatch(/taskIntegrityService\.detachFromCase/);
+    expect(codeWithoutComments).not.toMatch(/countRequiredTasks/);
+    expect(codeWithoutComments).not.toMatch(/countRequiredCompletedTasks/);
   });
 });
 

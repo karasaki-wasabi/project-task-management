@@ -3,7 +3,10 @@
 // 6.1, 6.2, 6.3, 6.4, 6.5, 7.1, 7.2, 7.3). Integration test against real
 // MySQL via shared/db.ts.
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { Writable } from "node:stream";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { setBusinessEventLoggerForTests } from "../../shared/business-event-logger.js";
 import { db } from "../../shared/db.js";
@@ -657,5 +660,33 @@ describe("workspaceService.addMember (task 3.2)", () => {
     );
     await hardDelete("workspaces", [workspace.id]);
     await hardDelete("users", [creator.id, target.id]);
+  });
+});
+
+describe("workspaceService module boundary (module-boundary-cleanup task 4.5)", () => {
+  it("provisions terminal stages via ensureTerminalStages in the same TX; no developmentStage createMany (Requirements 1.1, 1.4, 3.1, 3.2, 4.4, 4.6)", () => {
+    const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "workspace.service.ts");
+    const source = readFileSync(sourcePath, "utf8");
+    const importLines = source
+      .split("\n")
+      .filter((line) => /^\s*import\b/.test(line))
+      .join("\n");
+    const codeWithoutComments = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+
+    expect(importLines).toMatch(/development-stage\.service/);
+    expect(importLines).toMatch(/developmentStagesService/);
+    expect(codeWithoutComments).not.toMatch(/\b(?:tx|db|client)\.developmentStage\.createMany\b/);
+    expect(codeWithoutComments).not.toMatch(/\bdevelopmentStage\.createMany\b/);
+
+    const createFn = codeWithoutComments.match(/async create\([\s\S]*?\n  \},/);
+    expect(createFn?.[0]).toBeDefined();
+    const createBody = createFn?.[0] ?? "";
+    expect(createBody).toMatch(/\$transaction/);
+    expect(createBody).toMatch(
+      /developmentStagesService\.ensureTerminalStages\(\s*[\s\S]*?,\s*tx\s*,?\s*\)/,
+    );
+    expect(createBody).not.toMatch(/\b(?:tx|db|client)\.developmentStage\b/);
   });
 });
