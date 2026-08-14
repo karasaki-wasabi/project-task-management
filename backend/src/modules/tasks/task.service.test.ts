@@ -1,6 +1,9 @@
 // tasksService workspace scope (workspace-resource-scope task 3.1;
 // Requirements 1.1, 1.2, 3.1, 3.2, 3.3) plus prior TasksService coverage.
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
@@ -1719,5 +1722,30 @@ describe("tasksService related resource workspace scope (workspace-resource-scop
 
     await hardDeleteTasks([result.value.id, parent.value.id]);
     await hardDeleteCases([sameCase.id]);
+  });
+});
+
+describe("tasksService module boundary (module-boundary-cleanup task 3)", () => {
+  it("uses caseReadService and stages getById(client); no case repository or developmentStage Prisma (Requirements 1.1–1.4, 3.2)", () => {
+    const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "task.service.ts");
+    const source = readFileSync(sourcePath, "utf8");
+    const importLines = source
+      .split("\n")
+      .filter((line) => /^\s*import\b/.test(line))
+      .join("\n");
+    const codeWithoutComments = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+
+    expect(importLines).not.toMatch(/case\.repository/);
+    expect(importLines).not.toMatch(/caseRepository/);
+    expect(importLines).toMatch(/case-read\.service/);
+    expect(importLines).toMatch(/caseReadService/);
+    expect(importLines).toMatch(/development-stage\.service/);
+    expect(importLines).toMatch(/developmentStagesService/);
+    expect(codeWithoutComments).not.toMatch(/\b(?:db|client)\.developmentStage\b/);
+    expect(codeWithoutComments).toMatch(
+      /developmentStagesService\.getById\(\s*[\s\S]*?,\s*[\s\S]*?,\s*client\s*,?\s*\)/,
+    );
   });
 });

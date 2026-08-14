@@ -34,7 +34,7 @@
   - _Requirements: 1.1, 1.4, 2.1, 2.2, 3.2, 4.1, 4.2, 4.3, 4.5, 4.6_
   - _Boundary: taskIntegrityService_
 
-- [ ] 3. タスク業務サービスの検証を公開参照面へ接続する
+- [x] 3. タスク業務サービスの検証を公開参照面へ接続する
   - 案件存在検証を案件 repository 直呼びから読み取り専用面へ切り替える
   - 開発段階存在検証を他ドメイン永続化直触りから TX 対応 getById へ切り替える
   - 観測可能: タスク作成・更新の既存検証テストが緑で、tasks 本番コードに cases repository／developmentStage 直クエリが残らない
