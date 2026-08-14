@@ -378,6 +378,7 @@ export async function seedManualConfirmationData(
       caseId: SEED_CASE_DONE_ID,
       isRequiredForCase: true,
       assigneeUserId: SEED_USER_YAMADA_ID,
+      developmentStageId: SEED_STAGE_DONE_ID,
       scheduledEndDate: utcDate(year, month, Math.max(1, day - 2)),
       completedAt: utcDate(year, month, Math.max(1, day - 1)),
       workspaceId: SEED_WORKSPACE_ID,
