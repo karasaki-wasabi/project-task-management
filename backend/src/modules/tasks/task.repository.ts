@@ -178,7 +178,7 @@ export const taskRepository = {
   ): Promise<void> {
     let currentId: string | null = startTaskId;
     while (currentId !== null) {
-      const current = await client.task.findFirst({
+      const current: { parentTaskId: string | null } | null = await client.task.findFirst({
         where: withWorkspaceScope({ id: currentId }, workspaceId),
         select: { parentTaskId: true },
       });
