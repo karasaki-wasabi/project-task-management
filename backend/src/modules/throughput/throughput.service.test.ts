@@ -23,6 +23,7 @@ import { throughputService } from "./throughput.service.js";
 
 const createdTaskIds: string[] = [];
 const createdStageIds: string[] = [];
+const createdCaseIds: string[] = [];
 let workspaceId: string;
 let verifiedWorkspaceId: VerifiedWorkspaceId;
 let ownerUserId: string;
@@ -79,6 +80,17 @@ async function cleanup(): Promise<void> {
     );
     createdTaskIds.length = 0;
   }
+  // Cases may still have tasks if a prior assertion skipped cleanup; clear by caseId too.
+  if (createdCaseIds.length > 0) {
+    await db.$executeRawUnsafe(
+      `DELETE FROM activity_logs WHERE task_id IN (SELECT id FROM tasks WHERE case_id IN (${createdCaseIds.map(() => "?").join(",")}))`,
+      ...createdCaseIds,
+    );
+    await db.$executeRawUnsafe(
+      `DELETE FROM tasks WHERE case_id IN (${createdCaseIds.map(() => "?").join(",")})`,
+      ...createdCaseIds,
+    );
+  }
   if (createdStageIds.length > 0) {
     await db.$executeRawUnsafe(
       `DELETE FROM development_stages WHERE id IN (${createdStageIds.map(() => "?").join(",")})`,
@@ -86,6 +98,62 @@ async function cleanup(): Promise<void> {
     );
     createdStageIds.length = 0;
   }
+  if (createdCaseIds.length > 0) {
+    await db.$executeRawUnsafe(
+      `DELETE FROM cases WHERE id IN (${createdCaseIds.map(() => "?").join(",")})`,
+      ...createdCaseIds,
+    );
+    createdCaseIds.length = 0;
+  }
+}
+
+async function createCase(options: { endDate?: Date | null } = {}): Promise<string> {
+  const caseRow = await db.case.create({
+    data: {
+      name: `throughput-case-${randomUUID()}`,
+      endDate: options.endDate === undefined ? new Date("2030-06-01T00:00:00.000Z") : options.endDate,
+      workspaceId,
+    },
+  });
+  createdCaseIds.push(caseRow.id);
+  return caseRow.id;
+}
+
+async function openTask(caseId: string, storyPoints: number | null = null): Promise<string> {
+  const task = await db.task.create({
+    data: {
+      title: `open-${randomUUID()}`,
+      priority: "low",
+      workspaceId,
+      caseId,
+      storyPoints,
+    },
+  });
+  createdTaskIds.push(task.id);
+  return task.id;
+}
+
+/** Completed for openTaskFilter (stage kind) and for throughput periods (completedAt). */
+async function completedTaskForCase(
+  caseId: string,
+  completedAt: Date,
+  storyPoints: number | null = null,
+): Promise<string> {
+  const completedStage = await createStage("completed", 900 + createdStageIds.length);
+  const task = await db.task.create({
+    data: {
+      title: `done-${randomUUID()}`,
+      priority: "low",
+      status: "ready_for_handoff",
+      completedAt,
+      workspaceId,
+      caseId,
+      storyPoints,
+      developmentStageId: completedStage.id,
+    },
+  });
+  createdTaskIds.push(task.id);
+  return task.id;
 }
 
 async function purgeThroughputDateBand(): Promise<void> {
@@ -147,10 +215,12 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  await cleanup();
   await purgeThroughputDateBand();
   if (workspaceId) {
     await db.$executeRawUnsafe(`DELETE FROM tasks WHERE workspace_id = ?`, workspaceId);
     await db.$executeRawUnsafe(`DELETE FROM development_stages WHERE workspace_id = ?`, workspaceId);
+    await db.$executeRawUnsafe(`DELETE FROM cases WHERE workspace_id = ?`, workspaceId);
     await db.workspace.delete({ where: { id: workspaceId } }).catch(() => undefined);
   }
   if (ownerUserId) {
@@ -430,15 +500,22 @@ describe("throughputService module boundary (module-boundary-cleanup task 4.4 / 
 
     expect(importLines).toMatch(/task-integrity\.service/);
     expect(importLines).toMatch(/taskIntegrityService/);
+    expect(importLines).toMatch(/case-read\.service/);
+    expect(importLines).toMatch(/caseReadService/);
     expect(importLines).not.toMatch(/throughput\.repository/);
     expect(importLines).not.toMatch(/throughputRepository/);
     expect(importLines).not.toMatch(/task\.closure/);
+    expect(importLines).not.toMatch(/case\.service/);
+    expect(importLines).not.toMatch(/caseService/);
     expect(codeWithoutComments).toMatch(
       /taskIntegrityService\.countCompletedWithPointsInPeriodIncludingDeleted/,
     );
+    expect(codeWithoutComments).toMatch(/taskIntegrityService\.countOpenTasksWithPoints/);
+    expect(codeWithoutComments).toMatch(/caseReadService\.findInWorkspace/);
     expect(codeWithoutComments).not.toMatch(/countCompletedInPeriodIncludingDeleted/);
     expect(codeWithoutComments).not.toMatch(/throughputRepository\.countCompleted/);
     expect(codeWithoutComments).not.toMatch(/\b(?:db|client)\.task\b/);
+    expect(codeWithoutComments).not.toMatch(/caseService\.getById/);
 
     expect(existsSync(join(dir, "throughput.repository.ts"))).toBe(false);
 
@@ -450,6 +527,172 @@ describe("throughputService module boundary (module-boundary-cleanup task 4.4 / 
       expect(fileSource, name).not.toMatch(/\b(?:db|client)\.task\b/);
       expect(fileSource, name).not.toMatch(/task\.closure/);
       expect(name).not.toBe("throughput.repository.ts");
+    }
+  });
+});
+
+describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7.5)", () => {
+  it("omits caseOutlook when caseId is not provided", async () => {
+    const summary = await getSummary("week", 1);
+    expect(summary).not.toHaveProperty("caseOutlook");
+  });
+
+  it("rejects caseId that is not in the current workspace with 400 (validation_error)", async () => {
+    const otherWorkspace = await db.workspace.create({
+      data: { name: `throughput-case-other-${randomUUID()}`, createdByUserId: ownerUserId },
+    });
+    const foreignCase = await db.case.create({
+      data: {
+        name: `foreign-${randomUUID()}`,
+        endDate: new Date("2030-01-01T00:00:00.000Z"),
+        workspaceId: otherWorkspace.id,
+      },
+    });
+
+    try {
+      await expect(getSummary("week", 1, NOW_MID_WEEK, foreignCase.id)).rejects.toMatchObject({
+        statusCode: 400,
+      });
+    } finally {
+      await db.$executeRawUnsafe(`DELETE FROM cases WHERE id = ?`, foreignCase.id);
+      await db.workspace.delete({ where: { id: otherWorkspace.id } }).catch(() => undefined);
+    }
+  });
+
+  it("when endDate is unset: remaining/required/margin are null; open counts still present (7.1, 7.4)", async () => {
+    try {
+      const caseId = await createCase({ endDate: null });
+      await openTask(caseId, 5);
+      await openTask(caseId, 3);
+
+      const summary = await getSummary("week", 2, NOW_MID_WEEK, caseId);
+
+      expect(summary.caseOutlook).toEqual({
+        openTaskCount: 2,
+        openPoints: 8,
+        remainingPeriods: null,
+        requiredPeriods: null,
+        marginPoints: null,
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("when endDate is set but forecast is 0: remainingPeriods only; required/margin null (7.2, 7.5)", async () => {
+    try {
+      // endDate 14 days after NOW_MID_WEEK UTC midnight → 14/7 = 2 remaining weeks
+      const caseId = await createCase({ endDate: new Date("2024-01-24T00:00:00.000Z") });
+      await openTask(caseId, 10);
+      // Two past periods exist but with 0 completed points → forecastNextPeriodPoints = 0
+      await completedTaskForCase(caseId, new Date("2024-01-03T09:00:00.000Z"), null);
+      await completedTaskForCase(caseId, new Date("2023-12-26T09:00:00.000Z"), null);
+
+      const summary = await getSummary("week", 2, NOW_MID_WEEK, caseId);
+
+      expect(summary.forecastNextPeriodPoints).toBe(0);
+      expect(summary.caseOutlook).toEqual({
+        openTaskCount: 1,
+        openPoints: 10,
+        remainingPeriods: 2,
+        requiredPeriods: null,
+        marginPoints: null,
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("when endDate is set but forecast is uncalculated: remainingPeriods only; required/margin null (7.5)", async () => {
+    try {
+      const caseId = await createCase({ endDate: new Date("2024-01-17T00:00:00.000Z") }); // 7 days → 1 week
+      await openTask(caseId, 4);
+
+      const summary = await getSummary("week", 1, NOW_MID_WEEK, caseId);
+
+      expect(summary.forecastNextPeriodPoints).toBeNull();
+      expect(summary.caseOutlook).toEqual({
+        openTaskCount: 1,
+        openPoints: 4,
+        remainingPeriods: 1,
+        requiredPeriods: null,
+        marginPoints: null,
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("when endDate is in the past: remainingPeriods is 0; required/margin null if forecast unavailable (7.2)", async () => {
+    try {
+      const caseId = await createCase({ endDate: new Date("2024-01-01T00:00:00.000Z") });
+      await openTask(caseId, 7);
+
+      const summary = await getSummary("week", 1, NOW_MID_WEEK, caseId);
+
+      expect(summary.caseOutlook).toEqual({
+        openTaskCount: 1,
+        openPoints: 7,
+        remainingPeriods: 0,
+        requiredPeriods: null,
+        marginPoints: null,
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("when endDate is today UTC: remainingPeriods is 0 (7.2)", async () => {
+    try {
+      const caseId = await createCase({ endDate: new Date("2024-01-10T00:00:00.000Z") });
+      await openTask(caseId, 1);
+
+      const summary = await getSummary("week", 1, NOW_MID_WEEK, caseId);
+
+      expect(summary.caseOutlook?.remainingPeriods).toBe(0);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("computes requiredPeriods and marginPoints when endDate set and forecast points > 0 (7.3)", async () => {
+    try {
+      // remaining: 14 days / 7 = 2; open 10 pts; forecast (5+11)/2 = 8
+      // required = ceil(10/8) = 2; margin = 8*2 - 10 = 6
+      const caseId = await createCase({ endDate: new Date("2024-01-24T00:00:00.000Z") });
+      await openTask(caseId, 10);
+      await completedTaskForCase(caseId, new Date("2024-01-03T09:00:00.000Z"), 5);
+      await completedTaskForCase(caseId, new Date("2023-12-26T09:00:00.000Z"), 3);
+      await completedTaskForCase(caseId, new Date("2023-12-27T09:00:00.000Z"), 8);
+
+      const summary = await getSummary("week", 2, NOW_MID_WEEK, caseId);
+
+      expect(summary.forecastNextPeriodPoints).toBe(8);
+      expect(summary.caseOutlook).toEqual({
+        openTaskCount: 1,
+        openPoints: 10,
+        remainingPeriods: 2,
+        requiredPeriods: 2,
+        marginPoints: 6,
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("returns remainingPeriods as a real number without flooring (week=7, month=30) (7.2)", async () => {
+    try {
+      // 3 days after 2024-01-10 → 3/7
+      const caseId = await createCase({ endDate: new Date("2024-01-13T00:00:00.000Z") });
+      await openTask(caseId, 1);
+
+      const weekSummary = await getSummary("week", 1, NOW_MID_WEEK, caseId);
+      expect(weekSummary.caseOutlook?.remainingPeriods).toBeCloseTo(3 / 7, 10);
+
+      const monthSummary = await getSummary("month", 1, NOW_MID_WEEK, caseId);
+      expect(monthSummary.caseOutlook?.remainingPeriods).toBeCloseTo(3 / 30, 10);
+    } finally {
+      await cleanup();
     }
   });
 });

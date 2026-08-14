@@ -68,7 +68,7 @@
   - _Boundary: ThroughputService_
   - _Depends: 3.1_
 
-- [ ] 3.3 ThroughputService: 案件見通しの算出
+- [x] 3.3 ThroughputService: 案件見通しの算出
   - `caseId`指定時、`caseReadService.findInWorkspace`で案件を取得する（`caseService.getById`は新設しない）。属さなければ400
   - 未完了件数・ポイントは`taskIntegrityService.countOpenTasksWithPoints`から得る
   - 残期間数は`endDate`があるときだけ、週=7日/月=30日近似の実数（切り捨てしない）。今日以前なら`0`。`endDate`未設定なら`null`

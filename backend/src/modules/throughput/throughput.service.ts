@@ -1,11 +1,13 @@
-// ThroughputService (design.md "Backend/throughput", Requirements 3.1–3.6, 4.1–4.3).
+// ThroughputService (design.md "Backend/throughput", Requirements 3.1–3.6, 4.1–4.3, 7.1–7.5).
 import { badRequest } from "../../shared/http-errors.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
+import { caseReadService } from "../cases/case-read.service.js";
 import { taskIntegrityService } from "../tasks/task-integrity.service.js";
-import type { PeriodType, ThroughputPeriod, ThroughputSummary } from "./throughput.types.js";
+import type { CaseOutlook, PeriodType, ThroughputPeriod, ThroughputSummary } from "./throughput.types.js";
 
 const FORECAST_WINDOW = 4;
 const MIN_PERIODS_FOR_FORECAST = 2;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 // design.md Implementation Notes: "期間境界(週開始曜日等)はUTC基準の月曜始
 // まりで固定する". Both helpers return the start of the period CONTAINING
@@ -44,6 +46,55 @@ function buildPeriodBoundaries(periodType: PeriodType, rangeCount: number, now: 
     boundaries.push({ start, end: new Date(nextStart.getTime() - 1) });
   }
   return boundaries;
+}
+
+function periodLengthDays(periodType: PeriodType): number {
+  return periodType === "week" ? 7 : 30;
+}
+
+function computeRemainingPeriods(endDate: Date, now: Date, periodType: PeriodType): number {
+  const todayMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const daysRemaining = Math.max(0, (endDate.getTime() - todayMidnight.getTime()) / MS_PER_DAY);
+  return daysRemaining / periodLengthDays(periodType);
+}
+
+async function buildCaseOutlook(
+  workspaceId: VerifiedWorkspaceId,
+  caseId: string,
+  periodType: PeriodType,
+  forecastNextPeriodPoints: number | null,
+  now: Date,
+): Promise<CaseOutlook> {
+  const caseEntity = await caseReadService.findInWorkspace(caseId, workspaceId);
+  if (!caseEntity) {
+    throw badRequest("caseId does not exist in the current workspace");
+  }
+
+  const { count: openTaskCount, points: openPoints } = await taskIntegrityService.countOpenTasksWithPoints(
+    workspaceId,
+    caseId,
+  );
+
+  let remainingPeriods: number | null = null;
+  let requiredPeriods: number | null = null;
+  let marginPoints: number | null = null;
+
+  if (caseEntity.endDate != null) {
+    remainingPeriods = computeRemainingPeriods(caseEntity.endDate, now, periodType);
+    // Forecast must be calculable AND > 0 (0 would divide-by-zero / "算出不可").
+    if (forecastNextPeriodPoints != null && forecastNextPeriodPoints > 0) {
+      requiredPeriods = Math.ceil(openPoints / forecastNextPeriodPoints);
+      marginPoints = forecastNextPeriodPoints * remainingPeriods - openPoints;
+    }
+  }
+
+  return {
+    openTaskCount,
+    openPoints,
+    requiredPeriods,
+    remainingPeriods,
+    marginPoints,
+  };
 }
 
 export const throughputService = {
@@ -86,6 +137,18 @@ export const throughputService = {
       forecastNextPeriodPoints = Math.round(pointsSum / window.length);
     }
 
-    return { periods, forecastNextPeriodCount, forecastNextPeriodPoints };
+    const summary: ThroughputSummary = { periods, forecastNextPeriodCount, forecastNextPeriodPoints };
+
+    if (caseId !== undefined) {
+      summary.caseOutlook = await buildCaseOutlook(
+        workspaceId,
+        caseId,
+        periodType,
+        forecastNextPeriodPoints,
+        now,
+      );
+    }
+
+    return summary;
   },
 };
