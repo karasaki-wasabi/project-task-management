@@ -98,7 +98,7 @@
   - _Depends: 3.4_
 
 - [ ] 4. Core: フロントエンド消化数ダッシュボードの部品
-- [ ] 4.1 (P) APIクライアントの型・メソッド拡張
+- [x] 4.1 (P) APIクライアントの型・メソッド拡張
   - `useApiClient.ts`の`Task`/`CreateTaskInput`/`UpdateTaskInput`に`storyPoints`を追加する
   - `ThroughputPeriod`/`ThroughputSummary`型を完了ポイント・ポイントのフォーキャスト・案件見通し込みに拡張し、`getThroughput`に任意の`caseId`引数を追加する
   - `WORKSPACE_SCOPED_PATH_PREFIXES`に`/api/throughput`を追加する

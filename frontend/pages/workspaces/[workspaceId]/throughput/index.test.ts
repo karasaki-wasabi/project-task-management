@@ -36,9 +36,11 @@ function makeSummary(overrides: Partial<ThroughputSummary> = {}): ThroughputSumm
         periodStart: "2026-08-03T00:00:00.000Z",
         periodEnd: "2026-08-09T23:59:59.999Z",
         completedCount: 3,
+        completedPoints: 0,
       },
     ],
     forecastNextPeriodCount: 2,
+    forecastNextPeriodPoints: null,
     ...overrides,
   };
 }

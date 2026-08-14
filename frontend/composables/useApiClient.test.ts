@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import type {
+  CaseOutlook,
   CaseTemplateApplyOperation,
   Comment,
   CreateCaseInput,
@@ -12,6 +13,8 @@ import type {
   RecurringTaskTemplate,
   Task,
   TaskTimelinePage,
+  ThroughputPeriod,
+  ThroughputSummary,
   UpdateCaseInput,
   UpdateTaskInput,
 } from "./useApiClient";
@@ -482,6 +485,14 @@ describe("useApiClient workspace scope header (task 7.1)", () => {
       credentials: "include",
       headers: { "x-workspace-id": "ws-1" },
     });
+
+    fetchMock.mockClear();
+    await api.getThroughput("week", 4);
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/throughput", {
+      query: { periodType: "week", rangeCount: 4 },
+      credentials: "include",
+      headers: { "x-workspace-id": "ws-1" },
+    });
   });
 
   it("omits x-workspace-id when currentId is null", async () => {
@@ -494,7 +505,7 @@ describe("useApiClient workspace scope header (task 7.1)", () => {
     });
   });
 
-  it("does not attach x-workspace-id to /api/throughput or /api/workspaces", async () => {
+  it("attaches x-workspace-id to /api/throughput and omits it for /api/workspaces (velocity-dashboard 4.1)", async () => {
     currentId.value = "ws-1";
     const api = useApiClient();
 
@@ -502,6 +513,15 @@ describe("useApiClient workspace scope header (task 7.1)", () => {
     expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/throughput", {
       query: { periodType: "week", rangeCount: 4 },
       credentials: "include",
+      headers: { "x-workspace-id": "ws-1" },
+    });
+
+    fetchMock.mockClear();
+    await api.getThroughput("month", 3, "case-1");
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/throughput", {
+      query: { periodType: "month", rangeCount: 3, caseId: "case-1" },
+      credentials: "include",
+      headers: { "x-workspace-id": "ws-1" },
     });
 
     fetchMock.mockClear();
@@ -509,6 +529,57 @@ describe("useApiClient workspace scope header (task 7.1)", () => {
     expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/workspaces", {
       credentials: "include",
     });
+  });
+
+  it("exposes storyPoints and throughput point/outlook types (velocity-dashboard 4.1)", () => {
+    expect(clientSource).toMatch(/storyPoints\??:/);
+    expect(clientSource).toMatch(/completedPoints:/);
+    expect(clientSource).toMatch(/forecastNextPeriodPoints:/);
+    expect(clientSource).toMatch(/export interface CaseOutlook/);
+    expect(clientSource).toMatch(/caseOutlook\??:/);
+    expect(clientSource).toMatch(/\/api\/throughput/);
+
+    const task: Task = {
+      id: "t1",
+      title: "Leaf",
+      status: "not_started",
+      priority: "medium",
+      isRequiredForCase: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      storyPoints: 5,
+    };
+    const createInput: CreateTaskInput = {
+      title: "New",
+      priority: "low",
+      storyPoints: 3,
+    };
+    const updateInput: UpdateTaskInput = { storyPoints: null };
+    const period: ThroughputPeriod = {
+      periodStart: "2026-01-01",
+      periodEnd: "2026-01-07",
+      completedCount: 2,
+      completedPoints: 8,
+    };
+    const outlook: CaseOutlook = {
+      openTaskCount: 4,
+      openPoints: 12,
+      requiredPeriods: 2,
+      remainingPeriods: 3,
+      marginPoints: 5,
+    };
+    const summary: ThroughputSummary = {
+      periods: [period],
+      forecastNextPeriodCount: 1,
+      forecastNextPeriodPoints: 4,
+      caseOutlook: outlook,
+    };
+
+    expect(task.storyPoints).toBe(5);
+    expect(createInput.storyPoints).toBe(3);
+    expect(updateInput.storyPoints).toBeNull();
+    expect(summary.forecastNextPeriodPoints).toBe(4);
+    expect(summary.caseOutlook?.openPoints).toBe(12);
   });
 
   it("merges x-workspace-id with csrf-token on mutating scoped requests", async () => {
