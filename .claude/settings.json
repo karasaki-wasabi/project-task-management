@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-design-gate.cjs",
+            "timeout": 10,
+            "statusMessage": "claude design ゲートを確認中..."
+          }
+        ]
+      }
+    ]
+  }
+}

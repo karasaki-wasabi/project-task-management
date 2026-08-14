@@ -11,6 +11,9 @@
 // task-status-model design: throughput still counts only by completedAt —
 // cancelled tasks stay out via the stamp rule (no stage-kind filter).
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
@@ -345,5 +348,39 @@ describe("throughputService completion stamp non-regression (task-status-model 7
     expect(summary.periods[0].completedCount).toBe(0);
 
     await cleanup();
+  });
+});
+
+describe("throughputService module boundary (module-boundary-cleanup task 4.4)", () => {
+  it("delegates completion counts via taskIntegrityService; no throughput.repository or task Prisma (Requirements 1.1, 1.3, 1.4, 4.5, 4.6)", () => {
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const sourcePath = join(dir, "throughput.service.ts");
+    const source = readFileSync(sourcePath, "utf8");
+    const importLines = source
+      .split("\n")
+      .filter((line) => /^\s*import\b/.test(line))
+      .join("\n");
+    const codeWithoutComments = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+
+    expect(importLines).toMatch(/task-integrity\.service/);
+    expect(importLines).toMatch(/taskIntegrityService/);
+    expect(importLines).not.toMatch(/throughput\.repository/);
+    expect(importLines).not.toMatch(/throughputRepository/);
+    expect(codeWithoutComments).toMatch(/taskIntegrityService\.countCompletedInPeriodIncludingDeleted/);
+    expect(codeWithoutComments).not.toMatch(/throughputRepository\.countCompleted/);
+    expect(codeWithoutComments).not.toMatch(/\b(?:db|client)\.task\b/);
+
+    expect(existsSync(join(dir, "throughput.repository.ts"))).toBe(false);
+
+    const productionFiles = readdirSync(dir).filter((name) => name.endsWith(".ts") && !name.includes(".test."));
+    for (const name of productionFiles) {
+      const fileSource = readFileSync(join(dir, name), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/.*$/gm, "");
+      expect(fileSource, name).not.toMatch(/\b(?:db|client)\.task\b/);
+      expect(name).not.toBe("throughput.repository.ts");
+    }
   });
 });

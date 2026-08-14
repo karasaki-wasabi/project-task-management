@@ -15,8 +15,10 @@ import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { db } from "../../shared/db.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
+import type { DbClient } from "../../shared/soft-delete.repository.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { recurrenceService } from "../recurrence/recurrence.service.js";
+import { taskIntegrityService } from "../tasks/task-integrity.service.js";
 import { caseRepository } from "./case.repository.js";
 import {
   buildCaseTemplateApplyCandidates,
@@ -166,14 +168,13 @@ export const caseService = {
       throw notFound(`Case not found: ${id}`);
     }
 
-    // task-status-model 3.4: counts come from closure-based repository
-    // filters (6.1–6.3). requiredTotal === 0 means no progress to present
-    // (all required cancelled or none exist; 6.6). Overdue follows from
-    // requiredIncomplete after cancelled are excluded from the denominator (6.4, 6.5).
-    const [requiredTotal, requiredCompleted] = await Promise.all([
-      caseRepository.countRequiredTasks(id, workspaceId),
-      caseRepository.countRequiredCompletedTasks(id, workspaceId),
-    ]);
+    // task-status-model 3.4: counts come from the task integrity surface
+    // (same open ∪ completed ≡ not cancelled rules). requiredTotal === 0
+    // means no progress to present (all required cancelled or none exist; 6.6).
+    const { requiredTotal, requiredCompleted } = await taskIntegrityService.countRequiredForCaseProgress(
+      id,
+      workspaceId,
+    );
     const requiredIncomplete = requiredTotal - requiredCompleted;
 
     return {
@@ -197,9 +198,18 @@ export const caseService = {
     id: string,
     workspaceId: VerifiedWorkspaceId,
     requestId: string = randomUUID(),
+    client?: DbClient,
   ): Promise<void> {
+    const run = async (tx: DbClient) => {
+      await taskIntegrityService.detachFromCase(id, tx);
+      await caseRepository.delete(id, workspaceId, tx);
+    };
     try {
-      await caseRepository.delete(id, workspaceId);
+      if (client) {
+        await run(client);
+      } else {
+        await db.$transaction(run);
+      }
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         throw notFound(`Case not found: ${id}`);

@@ -5,10 +5,11 @@
 // same TX as template apply (task 4).
 // workspace-resource-scope task 2.1: all queries take VerifiedWorkspaceId and
 // compose where via withWorkspaceScope; list() honors the optional client.
+// module-boundary-cleanup 4.1: no task / task.closure access — detach and
+// progress counts live on taskIntegrityService; delete is the case row only.
 import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
-import { completedTaskFilter, openTaskFilter } from "../tasks/task.closure.js";
 import type { Case } from "./case.types.js";
 
 export const caseRepository = {
@@ -49,42 +50,9 @@ export const caseRepository = {
     });
   },
 
-  // design.md Data Models "Consistency & Integrity": deleting a case
-  // detaches (does not cascade-delete) linked Task records by nulling
-  // their caseId, so a case deletion never destroys task history.
-  delete(id: string, workspaceId: VerifiedWorkspaceId): Promise<Case> {
-    return db.$transaction(async (tx) => {
-      await tx.task.updateMany({ where: { caseId: id }, data: { caseId: null } });
-      return tx.case.delete({ where: withWorkspaceScope({ id }, workspaceId) });
-    });
-  },
-
-  // task-status-model 3.4: denominator excludes cancelled-kind stages (6.2)
-  // via TaskClosure predicates (open ∪ completed ≡ not cancelled).
-  countRequiredTasks(caseId: string, workspaceId: VerifiedWorkspaceId): Promise<number> {
-    return db.task.count({
-      where: withWorkspaceScope(
-        {
-          caseId,
-          isRequiredForCase: true,
-          OR: [openTaskFilter, completedTaskFilter],
-        },
-        workspaceId,
-      ),
-    });
-  },
-
-  // task-status-model 3.4: completed count is completed-kind stage, not status (6.1, 6.3).
-  countRequiredCompletedTasks(caseId: string, workspaceId: VerifiedWorkspaceId): Promise<number> {
-    return db.task.count({
-      where: withWorkspaceScope(
-        {
-          caseId,
-          isRequiredForCase: true,
-          ...completedTaskFilter,
-        },
-        workspaceId,
-      ),
-    });
+  // Case row only. Linked-task detach is owned by taskIntegrityService and
+  // orchestrated by caseService in the same write unit (design.md caseService).
+  delete(id: string, workspaceId: VerifiedWorkspaceId, client: DbClient = db): Promise<Case> {
+    return client.case.delete({ where: withWorkspaceScope({ id }, workspaceId) });
   },
 };

@@ -37,7 +37,10 @@ Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロント
 
 ### Code Quality
 - Fastifyルートでのリクエストボディ/クエリ/パラメータ検証はZodスキーマ + `safeParse`で行い、失敗時は`badRequest(...)`(`shared/http-errors.ts`)に変換する([[error-handling]]参照)
-- モジュール間はサービスの公開インターフェース経由でのみ依存する(他モジュールのPrismaクエリやrepositoryへ直接アクセスしない)
+- モジュール間の依存は、依存先が公開した手続き経由のみ
+  - 通常の service 公開インターフェース
+  - 当該モジュールが明示した読み取り専用／整合専用の公開面（例: `caseReadService`、`taskIntegrityService`）
+  - 他モジュールの Prisma クエリや repository へ直接アクセスしない
 
 ### Testing
 - Vitest(バックエンド・フロントエンドとも)。バックエンドは実MySQLに対して実行しモックしない。詳細は[[testing]]参照

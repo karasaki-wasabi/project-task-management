@@ -7,6 +7,8 @@ import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { db } from "../../shared/db.js";
 import { badRequest, forbidden, notFound } from "../../shared/http-errors.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
+import { developmentStagesService } from "../development-stages/development-stage.service.js";
 import { usersService } from "../users/user.service.js";
 import { workspaceRepository } from "./workspace.repository.js";
 import {
@@ -57,12 +59,10 @@ export const workspaceService = {
       // Requirements 1.2 / 1.3: every workspace must have exactly one completed
       // and one cancelled stage. Migration covers pre-existing rows; seed covers
       // the demo workspace; UI/API create must provision terminals here.
-      await tx.developmentStage.createMany({
-        data: [
-          { name: "完了", order: 0, kind: "completed", workspaceId: created.id },
-          { name: "中止", order: 1, kind: "cancelled", workspaceId: created.id },
-        ],
-      });
+      await developmentStagesService.ensureTerminalStages(
+        created.id as VerifiedWorkspaceId,
+        tx,
+      );
       return created;
     });
 

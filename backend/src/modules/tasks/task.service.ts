@@ -15,13 +15,13 @@ import { businessEventLogger } from "../../shared/business-event-logger.js";
 import { db } from "../../shared/db.js";
 import { err, ok, type Result } from "../../shared/result.js";
 import type { DbClient, SoftDeleteTx } from "../../shared/soft-delete.repository.js";
-import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
+import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { activityLogService } from "../activity-logs/activity-log.service.js";
 import type {
   FieldName,
   RecordActorInput,
 } from "../activity-logs/activity-log.types.js";
-import { caseRepository } from "../cases/case.repository.js";
+import { caseReadService } from "../cases/case-read.service.js";
 import { developmentStagesService } from "../development-stages/development-stage.service.js";
 import type { DevelopmentStageKind } from "../development-stages/development-stage.types.js";
 import { workspaceService } from "../workspaces/workspace.service.js";
@@ -137,7 +137,7 @@ async function assertRelatedResourcesInWorkspace(
     // Must use the same DbClient as the caller: caseService.create runs
     // applyToCase inside an interactive TX, so an uncommitted case is only
     // visible on that TX client (not the global `db`).
-    const caseRecord = await caseRepository.findById(refs.caseId, workspaceId, client);
+    const caseRecord = await caseReadService.findInWorkspace(refs.caseId, workspaceId, client);
     if (!caseRecord) {
       return err({
         type: "validation_error",
@@ -155,9 +155,11 @@ async function assertRelatedResourcesInWorkspace(
     }
   }
   if (refs.developmentStageId != null) {
-    const stage = await client.developmentStage.findFirst({
-      where: withWorkspaceScope({ id: refs.developmentStageId }, workspaceId),
-    });
+    const stage = await developmentStagesService.getById(
+      refs.developmentStageId,
+      workspaceId,
+      client,
+    );
     if (!stage) {
       return err({
         type: "validation_error",

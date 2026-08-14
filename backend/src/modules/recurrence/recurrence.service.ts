@@ -16,8 +16,10 @@ import { db } from "../../shared/db.js";
 import { badRequest, notFound } from "../../shared/http-errors.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
-import { formatDateOnly, parseDateOnly } from "../holidays/holiday.repository.js";
+import { formatDateOnly, parseDateOnly } from "../../shared/date-only.js";
+import { caseReadService } from "../cases/case-read.service.js";
 import { holidaysService } from "../holidays/holiday.service.js";
+import { taskIntegrityService } from "../tasks/task-integrity.service.js";
 import { tasksService } from "../tasks/task.service.js";
 import { isUniqueConstraintViolation, recurrenceRepository } from "./recurrence.repository.js";
 import type {
@@ -200,9 +202,7 @@ async function deleteGeneratedForAnchors(
   requestId: string,
   client: DbClient,
 ): Promise<void> {
-  const tasks = await client.task.findMany({
-    where: { caseId, sourceAnchor: { in: anchors } },
-  });
+  const tasks = await taskIntegrityService.listGeneratedByAnchors(caseId, anchors, client);
   for (const task of tasks) {
     const result = await tasksService.delete(
       task.id,
@@ -317,10 +317,7 @@ export const recurrenceService = {
   ): Promise<void> {
     if (operations.length === 0) return;
 
-    const caseEntity = await client.case.findUnique({ where: { id: caseId } });
-    if (!caseEntity) {
-      throw notFound(`Case not found: ${caseId}`);
-    }
+    const caseEntity = await caseReadService.requireById(caseId, client);
 
     for (const operation of operations) {
       switch (operation) {

@@ -1,6 +1,9 @@
 // caseRepository workspace scope (workspace-resource-scope task 2.1;
 // Requirements 1.1, 1.2, 3.1, 3.2, 3.3). Integration tests against real MySQL.
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
@@ -189,32 +192,41 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("deletes a case and detaches (does not cascade-delete) linked Task records (Requirement 8.1, 8.2)", async () => {
+  it("deletes a case row within workspace (Requirement 4.1 detach is on the integrity surface)", async () => {
     const created = await caseRepository.create({
       name: `delete-${randomUUID()}`,
       endDate: new Date("2035-03-01"),
       workspaceId: workspaceA,
     });
-    const linkedTask = await db.task.create({
-      data: {
-        title: "keep me",
-        priority: "low",
-        caseId: created.id,
-        workspaceId: workspaceA,
-      },
-    });
 
     await caseRepository.delete(created.id, workspaceA);
-
-    const survivingTask = await db.task.findUnique({ where: { id: linkedTask.id } });
-    expect(survivingTask).not.toBeNull();
-    expect(survivingTask?.caseId).toBeNull();
 
     const deletedCase = await db.case.findFirst({ where: { id: created.id, deletedAt: { not: null } } });
     expect(deletedCase).not.toBeNull();
 
-    await hardDelete("tasks", [linkedTask.id]);
     await hardDelete("cases", [created.id]);
+  });
+
+  it("delete uses the provided client instead of always hitting the default db", async () => {
+    await expect(
+      db.$transaction(async (tx) => {
+        const created = await caseRepository.create(
+          {
+            name: `tx-delete-${randomUUID()}`,
+            endDate: new Date("2035-03-08"),
+            workspaceId: workspaceA,
+          },
+          tx,
+        );
+
+        await caseRepository.delete(created.id, workspaceA, tx);
+
+        const insideTx = await caseRepository.findById(created.id, workspaceA, tx);
+        expect(insideTx).toBeNull();
+
+        throw new Error("rollback-delete-client-proof");
+      }),
+    ).rejects.toThrow("rollback-delete-client-proof");
   });
 
   it("delete fails when the case belongs to another workspace (Requirement 3.3)", async () => {
@@ -230,209 +242,24 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
 
     await hardDelete("cases", [created.id]);
   });
+});
 
-  it("counts required completed by completed stage, not status (task-status-model 3.4; Requirements 6.1, 6.3)", async () => {
-    const created = await caseRepository.create({
-      name: `progress-${randomUUID()}`,
-      endDate: new Date("2035-04-01"),
-      workspaceId: workspaceA,
-    });
-    const completedStage = await db.developmentStage.create({
-      data: {
-        name: `completed-${randomUUID()}`,
-        order: 900,
-        kind: "completed",
-        workspaceId: workspaceA,
-      },
-    });
-    const taskIds: string[] = [];
-    const stageIds = [completedStage.id];
-    try {
-      const requiredDone = await db.task.create({
-        data: {
-          title: "required done on completed stage",
-          priority: "low",
-          caseId: created.id,
-          isRequiredForCase: true,
-          // Default status is not_started — must still count as completed (6.1).
-          developmentStageId: completedStage.id,
-          workspaceId: workspaceA,
-        },
-      });
-      taskIds.push(requiredDone.id);
-      const requiredOpen = await db.task.create({
-        data: {
-          title: "required open",
-          priority: "low",
-          caseId: created.id,
-          isRequiredForCase: true,
-          workspaceId: workspaceA,
-        },
-      });
-      taskIds.push(requiredOpen.id);
-      const optional = await db.task.create({
-        data: {
-          title: "optional",
-          priority: "low",
-          caseId: created.id,
-          isRequiredForCase: false,
-          developmentStageId: completedStage.id,
-          workspaceId: workspaceA,
-        },
-      });
-      taskIds.push(optional.id);
+describe("caseRepository module boundary (module-boundary-cleanup task 4.1)", () => {
+  it("does not import task.closure or touch task persistence (Requirements 1.1, 1.3, 1.4, 4.6)", () => {
+    const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "case.repository.ts");
+    const source = readFileSync(sourcePath, "utf8");
+    const importLines = source
+      .split("\n")
+      .filter((line) => /^\s*import\b/.test(line))
+      .join("\n");
+    const codeWithoutComments = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
 
-      expect(await caseRepository.countRequiredTasks(created.id, workspaceA)).toBe(2);
-      // Stage-based: completed-stage task counts even with not_started status (6.1).
-      expect(await caseRepository.countRequiredCompletedTasks(created.id, workspaceA)).toBe(1);
-
-      // Status alone must not count as completed (6.3).
-      const statusOnlyHandoff = await db.task.create({
-        data: {
-          title: "required handoff only",
-          priority: "low",
-          caseId: created.id,
-          isRequiredForCase: true,
-          status: "ready_for_handoff",
-          workspaceId: workspaceA,
-        },
-      });
-      taskIds.push(statusOnlyHandoff.id);
-
-      expect(await caseRepository.countRequiredTasks(created.id, workspaceA)).toBe(3);
-      expect(await caseRepository.countRequiredCompletedTasks(created.id, workspaceA)).toBe(1);
-    } finally {
-      await hardDelete("tasks", taskIds);
-      await hardDelete("development_stages", stageIds);
-      await hardDelete("cases", [created.id]);
-    }
-  });
-
-  it("excludes cancelled required tasks from the denominator (task-status-model 3.4; Requirement 6.2)", async () => {
-    const created = await caseRepository.create({
-      name: `progress-cancel-${randomUUID()}`,
-      endDate: new Date("2035-04-01"),
-      workspaceId: workspaceA,
-    });
-    const [completedStage, cancelledStage] = await Promise.all([
-      db.developmentStage.create({
-        data: {
-          name: `completed-${randomUUID()}`,
-          order: 900,
-          kind: "completed",
-          workspaceId: workspaceA,
-        },
-      }),
-      db.developmentStage.create({
-        data: {
-          name: `cancelled-${randomUUID()}`,
-          order: 901,
-          kind: "cancelled",
-          workspaceId: workspaceA,
-        },
-      }),
-    ]);
-
-    // Observable: 5 required, 1 cancelled → denominator 4; 3 completed → 3/4.
-    const taskIds: string[] = [];
-    const stageIds = [completedStage.id, cancelledStage.id];
-    try {
-      for (let i = 0; i < 3; i++) {
-        const task = await db.task.create({
-          data: {
-            title: `required completed ${i}`,
-            priority: "low",
-            caseId: created.id,
-            isRequiredForCase: true,
-            developmentStageId: completedStage.id,
-            workspaceId: workspaceA,
-          },
-        });
-        taskIds.push(task.id);
-      }
-      const openTask = await db.task.create({
-        data: {
-          title: "required open",
-          priority: "low",
-          caseId: created.id,
-          isRequiredForCase: true,
-          workspaceId: workspaceA,
-        },
-      });
-      taskIds.push(openTask.id);
-      const cancelledTask = await db.task.create({
-        data: {
-          title: "required cancelled",
-          priority: "low",
-          caseId: created.id,
-          isRequiredForCase: true,
-          developmentStageId: cancelledStage.id,
-          workspaceId: workspaceA,
-        },
-      });
-      taskIds.push(cancelledTask.id);
-
-      const requiredTotal = await caseRepository.countRequiredTasks(created.id, workspaceA);
-      const requiredCompleted = await caseRepository.countRequiredCompletedTasks(created.id, workspaceA);
-
-      expect(requiredTotal).toBe(4);
-      expect(requiredCompleted).toBe(3);
-    } finally {
-      await hardDelete("tasks", taskIds);
-      await hardDelete("development_stages", stageIds);
-      await hardDelete("cases", [created.id]);
-    }
-  });
-
-  it("does not count required tasks that share caseId but belong to another workspace (Requirement 3.1)", async () => {
-    const created = await caseRepository.create({
-      name: `progress-scope-${randomUUID()}`,
-      endDate: new Date("2035-04-15"),
-      workspaceId: workspaceA,
-    });
-    const completedStage = await db.developmentStage.create({
-      data: {
-        name: `completed-scope-${randomUUID()}`,
-        order: 900,
-        kind: "completed",
-        workspaceId: workspaceA,
-      },
-    });
-    const taskIds: string[] = [];
-    try {
-      const sameWs = await db.task.create({
-        data: {
-          title: "same workspace required",
-          priority: "low",
-          caseId: created.id,
-          isRequiredForCase: true,
-          developmentStageId: completedStage.id,
-          workspaceId: workspaceA,
-        },
-      });
-      taskIds.push(sameWs.id);
-      // Adversarial row: Prisma FK allows caseId + workspaceId mismatch.
-      const otherWs = await db.task.create({
-        data: {
-          title: "cross workspace required",
-          priority: "low",
-          caseId: created.id,
-          isRequiredForCase: true,
-          developmentStageId: completedStage.id,
-          workspaceId: workspaceB,
-        },
-      });
-      taskIds.push(otherWs.id);
-
-      const requiredTotal = await caseRepository.countRequiredTasks(created.id, workspaceA);
-      const requiredCompleted = await caseRepository.countRequiredCompletedTasks(created.id, workspaceA);
-
-      expect(requiredTotal).toBe(1);
-      expect(requiredCompleted).toBe(1);
-    } finally {
-      await hardDelete("tasks", taskIds);
-      await hardDelete("development_stages", [completedStage.id]);
-      await hardDelete("cases", [created.id]);
-    }
+    expect(importLines).not.toMatch(/task\.closure/);
+    expect(importLines).not.toMatch(/from ["']\.\.\/tasks\//);
+    expect(codeWithoutComments).not.toMatch(/\b(?:db|tx|client)\.task\b/);
+    expect(codeWithoutComments).not.toMatch(/\bopenTaskFilter\b/);
+    expect(codeWithoutComments).not.toMatch(/\bcompletedTaskFilter\b/);
   });
 });
