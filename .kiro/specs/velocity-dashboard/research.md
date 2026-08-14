@@ -1,34 +1,45 @@
 # Gap Analysis: velocity-dashboard
 
+以下のギャップ表は design 前の調査記録。実装の正本は design.md / tasks.md。`module-boundary-cleanup` 完了後の前提は末尾「再整合」を参照する。
+
 ## 1. Requirement-to-Asset Map
 
 | Requirement | 関連する既存アセット | ギャップ種別 | 内容 |
 |---|---|---|---|
 | R1 葉タスクへのストーリーポイント設定 | `backend/src/prisma/schema.prisma`(`Task`モデル)、`backend/src/modules/tasks/task.types.ts`(`CreateTaskInput`/`UpdateTaskInput`)、`task.routes.ts`(Zodスキーマ)、`task.service.ts` | Missing | `Task.storyPoints`列が存在しない。作成/更新の入力型・バリデーションも未対応 |
-| R1 入力欄(UI) | `frontend/pages/workspaces/[workspaceId]/tasks/index.vue`(作成フォーム)、`frontend/components/kanban/TaskDetailModal.vue`(カンバンからの編集モーダル)、`frontend/pages/workspaces/[workspaceId]/tasks/[taskId].vue`(タスク詳細ページ、`InlineEditableField.vue`によるインライン編集) | Missing | ストーリーポイント入力欄は**3箇所**に追加が必要(作成フォーム1・編集面2)。requirements/briefは「`task-detail`実装済みフォーム」を単数で想定していたが、実際は作成用ページと2つの独立した編集UIが並存している |
+| R1 入力欄(UI) | 作成フォーム、`TaskDetailModal.vue`、詳細は`TaskFieldCard.vue`（`[taskId].vue`はカードを載せるだけ） | Missing | ストーリーポイント入力欄は3箇所。分割ダイアログには置かない |
 | R2 親タスクの自動合算 | `task.service.ts`の`assertParentChangeIsValid`(祖先探索・サイクル検出)、`countIncompleteChildren`、`update`(`parentTaskId`変更経路)、`task.repository.ts` | Missing | 子構成変化(追加・削除・付け替え)や子のポイント変化を契機に親(および祖先)のストーリーポイントを再計算する処理が丸ごと未実装。再計算のトリガー箇所は「タスク作成(親付き)」「タスク更新(`parentTaskId`変更・`storyPoints`変更)」「タスク削除」の複数経路にまたがる |
 | R3.1 `/api/throughput`のワークスペーススコープ化 | `backend/src/app.ts`(`WORKSPACE_SCOPED_PATH_PREFIXES`、`isWorkspaceScopedPath`)、`backend/src/workspace-scope.guard.ts`、`frontend/composables/useApiClient.ts`(`WORKSPACE_SCOPED_PATH_PREFIXES`の別定義、`isWorkspaceScopedPath`)、`backend/src/validation.integration.test.ts`・`app.routes.test.ts`(同種のprefixリストを個別に保持) | Missing / Constraint | 現状`/api/throughput`はどちらのリストにも含まれておらず、`requireWorkspaceMember`もヘッダー付与も行われない。**プレフィックスリストがバックエンド・フロントエンド・2つのテストファイルの計4箇所に重複定義**されており、追加時は全箇所の同期が必要(既存の設計判断であり本specで統合するかは design 判断) |
-| R3.2-3.6 ポイント込み集計・葉タスクのみ計上・進行中期間除外 | `backend/src/modules/throughput/{throughput.service,throughput.repository,throughput.types}.ts`、`backend/src/modules/tasks/task.closure.ts`(`completedTaskFilter`等、本モジュールは未使用) | Missing / Reuse候補 | `throughputRepository.countCompleted`は`completedAt`の範囲一致のみで`workspaceId`条件も葉/親の区別もない。「葉タスクのみ計上」はPrismaの`childTasks: { none: {} }`条件で表現可能。進行中期間の除外ロジック(`buildPeriodBoundaries`)は既存のまま再利用できる |
-| R4 案件フィルタ | `backend/src/modules/cases/case.repository.ts`(`list`, `isCompleted`列)、`frontend/composables/useApiClient.ts`(`listCases`) | Partial | 案件一覧取得自体は既存流用可能。`isCompleted=false`のみに絞る呼び出し側フィルタ、および`throughput`側への`caseId`パラメータ追加が必要 |
-| R5 推移グラフ | `frontend/package.json`(dependencies) | Missing | チャート系ライブラリは未導入。自作SVGか導入かはdesign判断(brief記載の通り) |
+| R3.2-3.6 ポイント込み集計・葉タスクのみ計上・進行中期間除外 | `throughput.service.ts`、`taskIntegrityService.countCompletedInPeriodIncludingDeleted`（`throughput.repository.ts`は削除済み） | Missing / Reuse候補 | 現行は全WS横断の件数のみ（論理削除込み）。ポイント・WS・案件フィルタは integrity 側へ拡張する。進行中期間の除外は`buildPeriodBoundaries`を再利用 |
+| R4 案件フィルタ | `listCases`、`Case.isCompleted` | Partial | 案件一覧は既存。完了済み除外は`CaseFilterSelect`が行う。`throughput`へ`caseId`を追加する |
+| R5 推移グラフ | `frontend/package.json`(dependencies) | Missing | チャート系ライブラリは未導入。自作インラインSVGで確定 |
 | R6 ポイントのフォーキャスト | `throughput.service.ts`の`FORECAST_WINDOW`/`MIN_PERIODS_FOR_FORECAST`/単純移動平均ロジック | Partial | 件数向けロジックは実装済みで、ポイント向けに同型のロジックを追加するだけで済む(パターン再利用) |
-| R7 案件の見通し(残タスク・必要期間数・余力) | `case.repository.ts`の`countRequiredTasks`/`countRequiredCompletedTasks`(必須タスク限定、`task.closure.ts`の`openTaskFilter`/`completedTaskFilter`を使用)、`throughput.service.ts`の`shiftPeriod`/`startOfCurrentWeekUTC`/`startOfCurrentMonthUTC` | Missing / Reuse候補 | 「未完了タスク(全件、必須限定でない)の件数・ポイント合計」は`case.repository`の必須タスク集計とは別クエリが要るが、`openTaskFilter`はそのまま再利用できる。「今日から`endDate`までの残期間数」を求めるロジックは既存になく新規実装が必要だが、`shiftPeriod`の考え方(週/月の単位加算)を将来方向に転用できる |
+| R7 案件の見通し(残タスク・必要期間数・余力) | `taskIntegrityService.countRequiredForCaseProgress`（必須タスク専用、流用しない）、`caseReadService.findInWorkspace`、`throughput.service.ts`の期間境界 | Missing / Reuse候補 | 未完了件数・ポイントは integrity に新メソッド。残期間数は新規。`openTaskFilter`は tasks 内で使う |
 | 全要件共通: `Case.isCompleted=true`除外、`endDate`未設定時の「算出不可」 | `Case`モデル(`isCompleted`, `endDate`は両方nullable/boolean) | Constraint | データモデル上は両方とも既存列で対応可能。UI側の「算出不可」表示は新規 |
 
-## 2. Research Needed(設計フェーズへの持ち越し)
+## 2. Research Needed(設計フェーズへの持ち越し) — 解消済み
 
-- **「未完了タスク」の定義**: Requirement 7 は「未完了タスクの件数・ポイント合計」とだけ規定しており、中止(`cancelled`)種別の段階にあるタスクを含めるかは要件上未確定。`case.repository.countRequiredTasks`は`openTaskFilter ∪ completedTaskFilter`(中止を除外)を分母にしており、この前例に倣うなら中止タスクは「残タスク」からも除外するのが整合的だが、design.mdで明示的に決定する必要がある
-- **プレフィックスリストの重複定義**: `/api/throughput`をスコープ対象に追加する際、`app.ts`・`useApiClient.ts`・`validation.integration.test.ts`・`app.routes.test.ts`の4箇所を同期する必要がある。design.mdでこの重複を許容(既存踏襲)するか、共有定数へ統合するかを判断する
-- **チャート描画手段**: ライブラリ導入(バンドルサイズ増・実装コスト減)か自作SVG(依存ゼロ・実装コスト増)か。brief記載の通りdesignフェーズで確定
-- **`storyPoints`の型と単位境界**: 要件は「1以上の整数」で確定したが、親タスクの合算値に上限があるか(実用上は無いはずだが、DBの型幅は決める必要がある)
-- **3箇所のUI入力欄の一貫性**: 作成フォーム・カンバン編集モーダル・タスク詳細ページのインライン編集という異なるUIパターン3種へ同じ入力ルール(葉タスクのみ・親は読み取り専用)をどう一貫させるか。特にタスク詳細ページの`InlineEditableField.vue`パターンが「読み取り専用(親の場合)」表示にそのまま対応できるか確認が必要
+設計・タスク生成後、および`module-boundary-cleanup`完了後の再点検で以下はすべて確定した。未決として扱わない。
+
+- 「未完了タスク」の定義: 中止(`cancelled`)は残タスクから除外する（`openTaskFilter`）
+- プレフィックスリストの重複: 本specでは4箇所へ`/api/throughput`を足すだけ。共有定数化はしない
+- チャート描画手段: 自作インラインSVG。ライブラリ非導入
+- `storyPoints`の型: `Int?`。範囲は Zod の1以上の整数のみ。DB CHECK は足さない
+- 3箇所の UI: 作成フォーム、`TaskDetailModal`、詳細は`TaskFieldCard`（`[taskId].vue`本体ではない）
+- 集計の置き場: `throughput.repository`は再導入しない。`taskIntegrityService`を拡張する。`task.closure`は tasks 外へ出さない
+- 案件参照: `caseReadService.findInWorkspace`。`caseService.getById`は新設しない
+- 論理削除済みの完了: 件数・ポイントの両方に含める（現行件数と同じ）。ポイントの葉判定は論理削除込みの子が0件
+- 完了件数は親を含む。ポイント合計だけ葉
+- 残期間数は実数（切り捨てしない）。`0`は算出不可ではない。進捗バーは残期間`0`では割らない
+- 分割ダイアログにポイント欄は置かない
+- 未選択空状態は復活させない
 
 ## 3. Implementation Approach Options
 
 ### Option A: 既存モジュールを拡張(Extend)
 - **対象ファイル**:
-  - Backend: `schema.prisma`(`storyPoints`列追加)、`task.types.ts`/`task.routes.ts`/`task.service.ts`(入力・バリデーション・再計算)、`throughput.{types,repository,service,routes}.ts`(ポイント集計・案件フィルタ・見通し計算・ワークスペーススコープ)、`app.ts`(スコープ対象prefixに追加)
-  - Frontend: `useApiClient.ts`(型・スコープ対象prefix追加)、`tasks/index.vue`・`TaskDetailModal.vue`・`tasks/[taskId].vue`(入力欄3箇所)、`pages/workspaces/[workspaceId]/throughput/index.vue`(グラフ主体への作り直し)
+  - Backend: `schema.prisma`、`task.types.ts`/`task.routes.ts`/`task.service.ts`、`task-integrity.service.ts`、`throughput.{types,service,routes}.ts`、`app.ts`
+  - Frontend: `useApiClient.ts`、`tasks/index.vue`・`TaskDetailModal.vue`・`TaskFieldCard.vue`、`pages/workspaces/[workspaceId]/throughput/index.vue`
 - **互換性**: `throughput`の既存レスポンス形状(`ThroughputSummary`)を拡張するため、フィールド追加は後方互換(既存consumerは`throughput`ページのみで本spec内で同時に書き換えるため実質問題なし)
 - **トレードオフ**: ✅ 既存パターン(Zod検証・`HttpError`・`withWorkspaceScope`・`task.closure.ts`のフィルタ群)をそのまま再利用できる。✅ brief/design.mdの「新規並行モジュールは作らない」方針に合致。❌ `task.service.ts`・`throughput.service.ts`双方に新しい責務(再計算・見通し計算)が積み増され、ファイルが肥大化する可能性(特に`task.service.ts`は既にサイクル検出・クローズ判定など複雑)
 
@@ -40,7 +51,7 @@
 - ストーリーポイントの列追加・入力検証・親子整合(サイクル検出等の既存処理と密結合な部分)は`tasks`モジュール内で拡張(Option A)、消化数集計・案件フィルタ・見通し計算は`throughput`モジュール内で拡張(Option A)としつつ、両モジュールをまたぐ「葉タスク判定」(`childTasks: { none: {} }`)のようなクエリ条件だけを`task.closure.ts`と同じ並びの共有ヘルパー(例: `task.closure.ts`に`leafTaskFilter`を追加)として`tasks`モジュールの公開点に置き、`throughput`から利用する
 - **トレードオフ**: ✅ 既存の`task.closure.ts`パターン(`completedTaskFilter`等)への自然な追加であり、モジュール分割の粒度を増やさない。✅ 「他モジュールのPrismaクエリへ直接アクセスしない」という`structure.md`の依存規約(`tasks`の公開型/フィルタとして提供すれば違反しない)を守れる。❌ 追加のシンボル(`leafTaskFilter`)を`tasks`モジュールの公開面に増やすため、設計時に「どこまでを`tasks`が公開してよいか」の線引きが必要
 
-**推奨の方向性**: Option C。列追加とサイクル検出寄りの再計算はOption Aの延長で`tasks`モジュールに、集計・フォーキャスト・見通しはOption Aの延長で`throughput`モジュールに置きつつ、葉/親の判定条件だけ`task.closure.ts`スタイルの共有フィルタとして`tasks`から公開する形が、既存の依存方向規約(`routes→service→repository`、モジュール間は公開インターフェース経由)と最も整合する。
+**推奨の方向性（module-boundary-cleanup 後に更新）**: 列追加と親子再計算は`tasks`、期間境界・フォーキャスト・見通しは`throughput`に置く。タスク行の集計クエリは Option C の「WhereInput を throughput が import」ではなく、`taskIntegrityService`の手続きとして tasks が所有する。`leafTaskFilter`は tasks 内専用。案件参照は`caseReadService`。
 
 ## 4. Implementation Complexity & Risk
 
@@ -50,7 +61,7 @@
 | 親タスク自動合算・多階層再帰反映(R2) | M | Medium | ロジック自体は単純だが、再計算のトリガー箇所(作成・`parentTaskId`変更・`storyPoints`変更・削除)が`task.service.ts`内の複数の既存経路に散らばっており、既存のサイクル検出・クローズ制約と整合させながら差し込む必要がある |
 | ストーリーポイント入力欄(UI 3箇所) | M | Medium | ロジックは同じでも、3つの異なるUIパターン(フォーム/モーダル/インライン編集)への実装が必要で、想定より touchpoint が多い |
 | `/api/throughput`ワークスペーススコープ化(R3.1) | S | Low | `withWorkspaceScope`パターンの適用のみ。ただしprefixリスト4箇所の同期漏れに注意 |
-| ポイント込み集計・葉タスク限定(R3.2-3.6) | S〜M | Low | `throughput.repository.ts`へのクエリ条件追加のみで、既存の期間境界計算はそのまま再利用可能 |
+| ポイント込み集計・葉タスク限定(R3.2-3.6) | S〜M | Low | `taskIntegrityService`へのクエリ条件追加。既存の期間境界計算はそのまま再利用可能 |
 | 案件フィルタ(R4) | S | Low | 既存`list`/`isCompleted`列を使うクエリ条件追加のみ |
 | 推移グラフ(R5) | M〜L | Medium | チャートライブラリ選定・導入、またはSVG自作のいずれでも実装工数が発生。フロントエンドの新しい表現形式のため実装後のブラウザ確認(`run`スキル等)が要る |
 | ポイントのフォーキャスト(R6) | S | Low | 既存の件数向けロジックと同型のロジックをもう1系統追加するだけ |
@@ -77,7 +88,7 @@
   - **見通しパネル(R7)の数値表示**: 「必要期間数」は`ceil(残ポイント ÷ 今後の目安ポイント)`の**切り上げ整数**で表示する(例:「3 週」、補助テキストで計算式を明示)。案件終了日未設定時・予測データ不足時は該当項目を「算出不可」表示にし、算出可能な項目(未完了件数・ポイント、endDateがあれば残期間数)は表示を継続する。進捗バーの「消化率の目安」も切り上げ後の必要期間数を用いて計算する
   - **実績データ不足時の文言・閾値**: 既存実装の`MIN_PERIODS_FOR_FORECAST = 2`(`backend/src/modules/throughput/throughput.service.ts`)に合わせ、「実績データ不足のため、今後の目安は表示できません。2 期間以上の実績が集まると表示されます」という文言・閾値で統一する(2ラウンド目で「3期間以上」の誤記から修正)
   - **案件フィルタのUI**: 検索可能セレクト(案件名の部分一致で絞り込み、先頭固定の「全体(ワークスペース)」で選択解除)を採用。完了済み(isCompleted=true)案件は選択肢に出さない旨をセレクト内に明示する。ネイティブselect案(15件程度までしか実用的でない)は不採用
-  - **ストーリーポイント入力欄(3箇所)**: 葉タスクは直接入力可能な数値入力(1以上の整数)、親タスクは「子の合計(自動計算)」バッジ付きの読み取り専用表示という2状態を、(a)タスク新規作成フォーム、(b)タスク編集モーダル、(c)タスク詳細ページのインライン編集(既存の項目ピッカー方式を踏襲、親タスクの行はホバー時の下地・カーソル・ピッカーを一切出さずツールチップで理由を説明)の3箇所すべてに適用する
+  - **ストーリーポイント入力欄(3箇所)**: 葉タスクは直接入力可能な数値入力(1以上の整数)、親タスクは「子の合計(自動計算)」バッジ付きの読み取り専用表示という2状態を、(a)タスク新規作成フォーム、(b)タスク編集モーダル、(c)タスク詳細の`TaskFieldCard`（既存の項目ピッカー方式を踏襲、親タスクの行はホバー時の下地・カーソル・ピッカーを一切出さずツールチップで理由を説明）の3箇所すべてに適用する
 - 経緯: 第1ラウンドでdual-axisチャート(1b)が「採用推奨」だったが、レビューでdataviz観点のアンチパターンに該当すると判断し、第2ラウンドで1c(単一軸2段)ベースへ差し替え。あわせて必要期間数の丸め(切り上げ整数化)と実績データ不足の閾値文言(2期間以上)を実装済みロジックに合わせて修正し、確定した
 
 ---
@@ -85,7 +96,7 @@
 ## Design Synthesis(design.mdの前段判断)
 
 ### 1. Generalization
-- 「葉タスク」判定を`task.closure.ts`の`completedTaskFilter`/`closedTaskFilter`/`openTaskFilter`と同型の公開Prismaフィルタ(`leafTaskFilter`)として一般化した。`throughput`は`tasks`の内部実装ではなくこの型だけに依存する形にし、将来他モジュールが「葉タスク」概念を必要にした場合も同じ入口を再利用できる
+- 「葉タスク」判定を`task.closure.ts`に`leafTaskFilter`として追加するが、tasks モジュール内（`taskIntegrityService` / `taskRepository`）専用とする。throughput は WhereInput を import せず、integrity の手続きだけを呼ぶ
 - ストーリーポイントの「直接入力値」と「導出値」を別カラム・別フラグにせず、「子を持つか」で動的に判定する1カラム設計に一般化した。子の追加・削除のたびにフラグの整合を取る必要がなくなる
 
 ### 2. Build vs. Adopt
@@ -105,7 +116,7 @@
 
 1. **ストーリーポイント変更が操作ログ(タイムライン)に記録されない**: `FieldName` enum(`activity-log.types.ts`・`schema.prisma`)に`storyPoints`を追加し、`TasksService.update`の`recordFieldChanges`呼び出しに含めるよう修正。親タスクの自動再計算による更新は記録対象外のまま(利用者操作ではないため)
 2. **`GET /api/throughput`のAPI契約が未記載**: `ThroughputRoutes(拡張)`に独立した詳細ブロック(API Contractテーブル + `ThroughputPeriod`/`CaseOutlook`/`ThroughputSummary`のTypeScript型定義)を追加
-3. **`ThroughputService`が`cases`モジュールの`caseRepository`に直接依存**: ユーザーの明示的な指示により、`caseService.getById`(新設する薄い公開メソッド)経由に統一。`tasks`モジュールの既存の`caseRepository`直接参照(既存実装)は本specの対象外として維持し、新設する依存だけを正しい経路にする方針で確定
+3. **`ThroughputService`が`cases`モジュールの`caseRepository`に直接依存**: 当時は`caseService.getById`新設で解消する方針だった。`module-boundary-cleanup`後は既存の`caseReadService.findInWorkspace`を使う（`caseService.getById`は新設しない）
 
 ---
 
@@ -121,3 +132,16 @@
 6. `TaskDetailModal.vue`の帰属スペックの誤り(requirements.md/design.mdはタスク編集モーダルも`task-detail`実装済みとしていたが、実際は`kanban-ux-redesign` Requirement 8由来) → 両ドキュメントで`kanban-ux-redesign`を正しく併記
 7. design.mdの`CaseService(拡張)`のReq Coverageが「7.1, 7.2」だったが、`getById`は7.2(endDate取得)にのみ関与し7.1とは無関係 → 「7.2」のみに訂正
 8. tasks.mdタスク6.2に、他ワークスペースの`caseId`指定時のテストシナリオが明記されていなかった → タスク3.4・6.2の両方に追加
+
+---
+
+## module-boundary-cleanup 完了後の再整合（実装前）
+
+`velocity-dashboard`の tasks 承認後に`module-boundary-cleanup`が完了し、次がコード上の前提になった。
+
+- `throughput.repository.ts`は削除済み。完了件数は`taskIntegrityService.countCompletedInPeriodIncludingDeleted`
+- `task.closure`のモジュール外 import は`module-boundary.guard.test.ts`が禁止
+- 案件読み取りの正本は`caseReadService.findInWorkspace`。`tasks`の`caseRepository`直呼びは解消済み
+- scoped 消化数ページから未選択空状態は削除済み
+
+これに合わせて brief / requirements / design / tasks を更新した。design の旧 Option C（throughput が`leafTaskFilter`を import、`caseService.getById`新設、repository 拡張）は採用しない。

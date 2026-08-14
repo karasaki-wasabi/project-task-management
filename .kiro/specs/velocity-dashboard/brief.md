@@ -9,13 +9,14 @@
 
 ## Current State
 
-- `frontend/pages/workspaces/[workspaceId]/throughput/index.vue`(`workspace-url-routing`により旧`frontend/pages/throughput/index.vue`から移動済み): 期間開始/終了/完了数を並べる表のみ(グラフなし)。`workspace-resource-scope`によりワークスペース未選択時の空状態のみ追加済み
-- `backend/src/modules/throughput/`: `Task.completedAt`を期間集計し、直近4期間の単純移動平均で次期件数を予測。**`/api/throughput`はワークスペーススコープ化されておらず、全ワークスペース横断で集計している**(`isWorkspaceScopedPath`の対象外、リポジトリにも`workspaceId`条件なし)。`workspace-resource-scope`は意図的にここを対象外とし、「選択済みでも集計は当面グローバルのまま残りうる点は`velocity-dashboard`で解消する」と本specへ明示的に申し送っている
+- `frontend/pages/workspaces/[workspaceId]/throughput/index.vue`(`workspace-url-routing`により旧`frontend/pages/throughput/index.vue`から移動済み): 期間開始/終了/完了数を並べる表のみ(グラフなし)。scoped ページのため未選択空状態は出さない（`workspace-url-routing`で削除済み）
+- `backend/src/modules/throughput/`: 期間境界と件数フォーキャストを持ち、完了件数は`taskIntegrityService.countCompletedInPeriodIncludingDeleted`に委譲している（`throughput.repository.ts`は`module-boundary-cleanup`で削除済み）。**`/api/throughput`はワークスペーススコープ化されておらず、全ワークスペース横断で集計している**(`isWorkspaceScopedPath`の対象外、integrity 側にも`workspaceId`条件なし)。`workspace-resource-scope`は意図的にここを対象外とし、「選択済みでも集計は当面グローバルのまま残りうる点は`velocity-dashboard`で解消する」と本specへ明示的に申し送っている
 - `task-status-model`(実装完了)により、`completedAt`の意味が形式化された:「`completedAt`が非nullであることと、タスクが完了種別の開発段階にあることは同値」という不変条件がDB制約と実装の両面で保証されている。同spec設計は「`throughput`は新しい概念に依存させない。同モジュールは`completedAt`のみを見る現在の実装を維持する」と明言しており、本specの集計方針(`completedAt`基準)はそのまま踏襲してよい
-- `Task`モデルに見積もり工数フィールドは存在しない。`task-detail`(実装完了)の承認済み設計・モックは意図的にストーリーポイント入力欄を含んでいない(「ストーリーポイント入力欄は出さない」と明記)ため、本specでは既存の完成画面(タスク作成/編集フォーム)に新規入力欄を追加する形の変更になる
-- `Case.endDate`は**nullable**。「余力ポイント」計算式(後述)は`Case.endDate`の存在を前提にしており、未設定時の扱いが未決定
-- `Case.isCompleted`フラグが存在する(既定false)。完了済み案件を案件フィルタ・見通し表示の対象に含めるか未決定
+- `Task`モデルに見積もり工数フィールドは存在しない。`task-detail`(実装完了)の承認済み設計・モックは意図的にストーリーポイント入力欄を含んでいない(「ストーリーポイント入力欄は出さない」と明記)ため、本specでは既存の完成画面(タスク作成/編集フォーム、詳細の`TaskFieldCard`)に新規入力欄を追加する形の変更になる
+- `Case.endDate`は nullable。未設定時は残期間数・必要期間数・余力を算出不可とし、消化ペース自体は表示する（requirements Requirement 7）
+- `Case.isCompleted`は既定 false。完了済み案件は案件フィルタ・見通しのセレクタから除外する（requirements Requirement 4 / 7）
 - `task-delivery-management` specは実装完了(implementation-complete)として凍結されており、本specでは更新しない
+- `module-boundary-cleanup`は実装完了。後続の集計追加は`taskIntegrityService`、案件参照は`caseReadService`を使う
 
 ## Desired Outcome
 
@@ -28,17 +29,17 @@
 
 ## Approach
 
-既存の`backend/src/modules/throughput/`を拡張する(新規並行モジュールは作らない)。`Task.storyPoints`を追加し、消化数集計にポイント合計・案件フィルタ・案件別残タスク集計・グラフ向けデータを追加する。あわせて`/api/throughput`をワークスペーススコープ化する(Current State参照)。フロントエンドは表主体から推移グラフ主体の画面に作り直す。グラフ描画手段(ライブラリ導入 or 自作SVG)はdesignフェーズで判断する。
+既存の`backend/src/modules/throughput/`を拡張する(新規並行モジュールは作らない)。`Task.storyPoints`を追加し、消化数集計にポイント合計・案件フィルタ・案件別残タスク集計・グラフ向けデータを追加する。タスク行の集計は`taskIntegrityService`を拡張して行い、`throughput.repository.ts`は再導入しない。あわせて`/api/throughput`をワークスペーススコープ化する(Current State参照)。フロントエンドは表主体から推移グラフ主体の画面に作り直す。グラフは自作インラインSVG（design で確定）。
 
-ストーリーポイント入力欄は、`task-detail`が実装済みのタスク作成/編集フォームに追加する形で導入する(意図的に空けられたプレースホルダーではなく、既存の完成画面への変更)。`task-detail`のrequirements/design文書は凍結として更新しないが、実装済みコンポーネントへの改修は本specのタスクとして扱う。
+ストーリーポイント入力欄は、`task-detail`が実装済みのタスク作成フォームと詳細の`TaskFieldCard`、`kanban-ux-redesign`の編集モーダルに追加する。`task-detail`のrequirements/design文書は凍結として更新しないが、実装済みコンポーネントへの改修は本specのタスクとして扱う。
 
 見通しの目安計算(要件で固定する前提):
 
 - 必要期間数 ≈ ceil(残ポイント / 予測ポイント)
-- 残期間数 ≈ 今日から`Case.endDate`までの週/月数(期間種別と揃える)
+- 残期間数 ≈ 今日から`Case.endDate`までの日数を週7日・月30日で割った実数（切り捨てしない。過去なら0）
 - 余力ポイント ≈ 予測ポイント × 残期間 − 残ポイント
 - 進行中期間は既存どおり実績母数から除外する
-- `Case.endDate`が未設定の案件、および`Case.isCompleted=true`の案件の扱いは要件確定時に決める(候補: 案件セレクタから除外、または見通し欄のみ「算出不可」表示にして消化ペース自体は表示する)
+- `Case.endDate`未設定の案件は見通し3項目を算出不可。`Case.isCompleted=true`の案件はセレクタから除外する
 
 ## Scope
 
@@ -54,9 +55,11 @@
   - 見積もり工数の自動算出(手動設定のみ。親への子合算は集計ルールであり工数推定ではない)
   - 優先度別・担当者別の消化数内訳
   - 案件の必須タスク進捗表示そのものの変更(既存Requirement 3の表示ロジックは変更しない、参照のみ)
-  - タスク status と開発段階の整理・再定義(必要なら本機能の前に別作業として扱う。本briefでは保留)
-  - 案件未紐づけタスク専用の見通しUI、開発段階未設定専用の扱い(運用でストーリーポイントは実装・利用時に必ず付与されている前提とし、未設定向けの特別対応は作らない)
+  - タスク status と開発段階の整理・再定義（`task-status-model`が完了済み。本specは変更しない）
+  - 案件未紐づけタスク専用の見通しUI、ストーリーポイント未設定タスク専用の警告UI（未設定は集計上0として扱う。警告は出さない）
+  - 分割ダイアログ・子追加 UI へのポイント欄
   - 認証・通知
+  - `throughput.repository.ts`の再導入、`caseService.getById`の新設
 
 ## Boundary Candidates
 
@@ -79,8 +82,9 @@
   - `task-delivery-management`で実装済みの`Task`/`Case`(案件)モデル、既存`throughput`モジュールの期間境界計算ロジック(週次UTC月曜始まり等)
   - `task-status-model`（`completedAt`⇔完了種別開発段階の不変条件を保証。`throughput`はこの上に乗るだけで概念追加はしない）
   - `workspace-resource-scope`（集計・見通しは現在ワークスペース配下に閉じる。`/api/throughput`の未スコープ化は本specへの明示的な申し送り事項）
-  - `workspace-url-routing`（`throughput`ページは`pages/workspaces/[workspaceId]/throughput/`配下に移動済み）
-  - `task-detail`（ポイント入力欄は実装済みフォームへの追加改修になる。設計時に既存レイアウトとの整合を取る）
+  - `workspace-url-routing`（`throughput`ページは`pages/workspaces/[workspaceId]/throughput/`配下に移動済み。未選択空状態は削除済み）
+  - `task-detail`（ポイント入力欄は実装済みフォームおよび`TaskFieldCard`への追加改修になる）
+  - `module-boundary-cleanup`（集計は`taskIntegrityService`、案件参照は`caseReadService`。`task.closure`のモジュール外 import は禁止）
 - Downstream
   - 特になし。将来的に優先度・担当者別内訳や工数の自動算出が必要になった場合は別specとして切り出す
 
@@ -95,7 +99,7 @@
 ## Constraints
 
 - 既存スタックを踏襲: Nuxt 4 / Fastify 5 / Prisma / MySQL、Zodバリデーション、pinoログ
-- グラフ描画ライブラリは現状未導入(`frontend/package.json`にchart系依存なし)。導入するか自作SVGにするかはdesignフェーズで判断
+- グラフは自作インラインSVG。chart 系ライブラリは導入しない
 - ストーリーポイント単位はフィボナッチ的相対値を想定していたが、requirements確定時に「1以上の整数の自由入力(フィボナッチ数列などへの強制はしない)」で確定した(このbrief記載時点からの変更点。requirements.md Requirement 1が正)
-- 運用前提として、本機能を使うタスクにはストーリーポイントが付与されている。未設定向けの0計上・警告UIは作らない
-- 画面は表からグラフ主体へ作り直すため、requirements確定後〜`/kiro-spec-design`前に`.kiro/steering/ui-design.md`のclaude designゲートを実施し、採用モックを`research.md`に記録してからdesignに進む
+- ストーリーポイント未設定は許容する。集計では0として扱い、未設定向けの警告 UI は作らない
+- 画面は表からグラフ主体へ作り直す。採用モックは`research.md`の「ビジュアルデザイン確定(claude design連携)」に記録済み
