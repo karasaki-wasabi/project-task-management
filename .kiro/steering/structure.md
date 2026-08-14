@@ -79,7 +79,21 @@ import { tasksService } from "./task.service.js";
 
 - 依存方向
   - `routes.ts` → `service.ts` → `repository.ts`の一方向
-  - 他モジュールへ依存する場合はそのモジュールの`service`公開インターフェース経由のみ(例: `cases`→`recurrence`、`recurrence`→`holidays`/`tasks`)で、内部実装やPrismaクエリへ直接アクセスしない
+  - 他モジュールへ依存する場合は、依存先が公開した手続き経由のみ
+    - 通常の `service` 公開インターフェース（例: `cases`→`recurrence`、`recurrence`→`holidays`/`tasks`）
+    - 当該モジュールが明示した読み取り専用／整合専用の公開面
+      - `caseReadService`（案件参照）と `taskIntegrityService`（タスク行の整合・集計）を例とする
+      - 専用面の網羅一覧ではない
+    - repository および他ドメインの永続化実装への直接アクセスは不可
+  - 循環するモジュール依存を導入しない
+    - 公開手続きへの寄せ替えが閉路を生じる場合は、読み取り専用／整合専用の公開面で依存を一方向に保つ
+  - 複数モジュールにまたがる連携書き込み
+    - `DbClient` を渡し、同一の書き込み単位に参加させる
+  - Prisma の where 断片
+    - 所有モジュール外へ直接 export／import しない（例: `task.closure`）
+  - `tasksService` と `taskIntegrityService` を混同しない
+    - `tasksService` は業務検証で他ドメインを参照しうる
+    - `taskIntegrityService` はタスク行の整合・集計のみを公開する
 - 境界(Boundary)の遵守
   - 新しいタスクを実装する際は、design.mdの`Boundary Commitments`とtasks.mdの`_Boundary:_`注記を確認し、他ドメインの責務を無断で肩代わりしない
   - 例

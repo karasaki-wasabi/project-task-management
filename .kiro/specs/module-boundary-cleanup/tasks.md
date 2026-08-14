@@ -91,7 +91,7 @@
   - _Boundary: module-boundary.guard_
   - _Requirements: 1.2, 1.3, 2.1, 2.3, 7.2, 7.4_
 
-- [ ] 5.2 (P) プロジェクト規約に TX 伝播・読み取り／整合専用面を追記する
+- [x] 5.2 (P) プロジェクト規約に TX 伝播・読み取り／整合専用面を追記する
   - 通常 service に加え、読み取り専用／整合専用の公開面も「公開した手続き」として許容することを明記する
   - DbClient 伝播、task.closure 直 import 禁止、tasksService と taskIntegrityService の使い分けを参照可能にする
   - 観測可能: structure.md から循環禁止と専用面のルールを辿れる
