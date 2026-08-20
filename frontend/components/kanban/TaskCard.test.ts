@@ -1,6 +1,3 @@
-// Mount tests for TaskCard terminal-column / progress annotation
-// (task-status-model 5.5; Requirements 4.5, 8.6, 8.9)
-// and UserAvatar assignee display (user-avatar 3.1; Requirements 2.1, 3.1, 4.1).
 import { describe, expect, it } from "vitest";
 import { defineComponent } from "vue";
 import { mount } from "@vue/test-utils";
@@ -65,17 +62,17 @@ function mountCard(
 }
 
 describe("TaskCard (task-status-model 5.5)", () => {
-  it("hides StatusBadge on a terminal column", () => {
+  it("完了・中止の列で StatusBadge を非表示にする", () => {
     const wrapper = mountCard({ isTerminalColumn: true });
     expect(wrapper.find('[data-testid="status-badge"]').exists()).toBe(false);
   });
 
-  it("shows StatusBadge on a normal column", () => {
+  it("通常の列で StatusBadge を表示する", () => {
     const wrapper = mountCard({ isTerminalColumn: false });
     expect(wrapper.find('[data-testid="status-badge"]').exists()).toBe(true);
   });
 
-  it("keeps the assignee avatar in the footer row on terminal columns (aligned with normal columns)", () => {
+  it("完了・中止の列で担当者のアバターをフッター行に表示する（通常の列と揃える）", () => {
     const normal = mountCard({ isTerminalColumn: false });
     const terminal = mountCard({ isTerminalColumn: true });
 
@@ -86,7 +83,7 @@ describe("TaskCard (task-status-model 5.5)", () => {
     expect(terminalAvatar.element.parentElement?.getAttribute("data-testid")).toBe("task-card-footer");
   });
 
-  it("renders UserAvatar with title set to the assignee name", () => {
+  it("担当者の名前をタイトルとして UserAvatar を表示する", () => {
     const wrapper = mountCard({ assigneeId: "u1", assigneeName: "太郎" });
     const avatar = wrapper.getComponent(UserAvatar);
 
@@ -101,7 +98,7 @@ describe("TaskCard (task-status-model 5.5)", () => {
     expect(wrapper.attributes("data-task-id")).toBe("t1");
   });
 
-  it("does not render UserAvatar when there is no assignee", () => {
+  it("担当者が存在しない場合、UserAvatar を表示しない", () => {
     const wrapper = mountCard({ assigneeId: undefined, assigneeName: undefined });
 
     expect(wrapper.findComponent(UserAvatar).exists()).toBe(false);
@@ -109,13 +106,13 @@ describe("TaskCard (task-status-model 5.5)", () => {
     expect(wrapper.find(".bg-primary-100").exists()).toBe(false);
   });
 
-  it("does not render UserAvatar when assigneeId is missing even if a name is present", () => {
+  it("担当者IDが存在しない場合、UserAvatar を表示しない（担当者名が存在する場合）", () => {
     const wrapper = mountCard({ assigneeId: undefined, assigneeName: "太郎" });
 
     expect(wrapper.findComponent(UserAvatar).exists()).toBe(false);
   });
 
-  it("hides progress on a terminal column even when progress is supplied", () => {
+  it("完了・中止の列で progress が提供されている場合、progress を表示しない", () => {
     const wrapper = mountCard({
       isTerminalColumn: true,
       progress: { completed: 1, total: 2, excludedCancelled: 1 },
@@ -125,14 +122,14 @@ describe("TaskCard (task-status-model 5.5)", () => {
     expect(wrapper.text()).not.toContain("中止");
   });
 
-  it("hides progress when the non-cancelled denominator is 0", () => {
+  it("非中止の分母が 0 の場合、progress を表示しない", () => {
     const wrapper = mountCard({
       progress: { completed: 0, total: 0, excludedCancelled: 2 },
     });
     expect(wrapper.find(".task-progress").exists()).toBe(false);
   });
 
-  it("shows progress and the cancelled-exclusion note when cancelled children were excluded", () => {
+  it("中止されたサブタスクが除外されている場合、progress と除外の理由を表示する", () => {
     const wrapper = mountCard({
       progress: { completed: 1, total: 2, excludedCancelled: 1 },
     });
@@ -141,7 +138,7 @@ describe("TaskCard (task-status-model 5.5)", () => {
     expect(wrapper.text()).toContain("中止 1 件を除く");
   });
 
-  it("does not show the exclusion note when no cancelled children were excluded", () => {
+  it("中止されたサブタスクが除外されていない場合、除外の理由を表示しない", () => {
     const wrapper = mountCard({
       progress: { completed: 1, total: 2, excludedCancelled: 0 },
     });

@@ -4,10 +4,6 @@
       <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
         <strong class="text-sm font-semibold tracking-tight text-slate-900">Task Delivery Management</strong>
         <nav class="flex flex-wrap gap-x-1 gap-y-1 text-sm">
-          <!-- Active and inactive nav anchors are separate elements so each
-               class list describes only one state. NuxtLink custom+slot keeps
-               active styling mutually exclusive instead of layering base and
-               active classes on the same node. -->
           <NuxtLink v-for="link in navLinks" :key="link.to" :to="link.to" custom v-slot="{ href, navigate, isActive }">
             <a
               v-if="navIsActive(link.to, isActive)"
@@ -28,7 +24,6 @@
           </NuxtLink>
         </nav>
         <div class="ml-auto flex items-center gap-3 text-sm">
-          <!-- WorkspaceSwitcher sits between nav and display-name/logout (案B). -->
           <WorkspaceSwitcher />
           <div class="flex items-center gap-2">
             <UserAvatar v-if="user" :userId="user.id" :size="28" />
@@ -45,17 +40,6 @@
         </div>
       </div>
     </header>
-    <!-- User feedback: the kanban board previously broke itself out of this
-         max-width cap with a viewport-width hack scoped to just the board
-         div. Two problems with that: (1) 100vw counts the scrollbar's own
-         width in most browsers, so any time the page also has a vertical
-         scrollbar the "full-width" board became wider than the actual
-         visible viewport and produced a faint horizontal scrollbar; (2) it
-         only widened the board itself, leaving the title / workload summary /
-         dialogs above it still capped, an inconsistent width the user also
-         flagged. Route-level page.meta.fullWidth now lets a page opt out of
-         the cap on main itself instead — no viewport units anywhere, and
-         every element on an opted-in page shares one width. -->
     <main
       :class="isAuthScreen
         ? 'p-0'
@@ -79,7 +63,6 @@ const navLinks = computed(() => buildNavLinks(currentId.value));
 const isAuthScreen = computed(() => route.path === "/login" || route.path === "/register");
 const logoutError = ref<string | null>(null);
 
-/** Dashboard `/workspaces/:id` must not stay active on nested business paths. */
 function navIsActive(linkTo: string, nuxtActive: boolean): boolean {
   if (linkTo === "/workspaces") {
     return route.path === "/workspaces";

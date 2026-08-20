@@ -1,15 +1,3 @@
-// CaseService: creation/generic update/progress computation/deletion +
-// RecurrenceService wiring + business event logging (design.md
-// "Backend/cases" CaseService, renamed/extended from the former
-// deliveries/delivery.service.ts, task 4.1/10.1/10.2, Requirements 2.3, 2.4,
-// 2.5, 5.3, 5.4, 6.1, 6.2, 8.1, 8.2).
-//
-// Task 4: date save + template apply run in one Prisma TX. templateOperations
-// omit = full candidates, [] = no apply, non-subset = 400 (Requirements
-// 3.2–3.4, 3.6, 4.3, 4.13; design.md CaseService / Architecture Integration).
-//
-// workspace-resource-scope task 2.1: create/list/get/update/delete are scoped
-// by VerifiedWorkspaceId; cross-workspace access yields notFound (404).
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
@@ -30,10 +18,6 @@ function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
 }
 
-// design.md CaseService Responsibilities & Constraints: startDate/endDate are
-// both optional; the ordering check only applies when both are known
-// (merged with the currently-persisted value on update) — if either is
-// missing, the check is skipped entirely (Requirements 2.4, 2.5, 5.3, 5.4).
 function validateDateRange(startDate: Date | null | undefined, endDate: Date | null | undefined): void {
   if (startDate == null || endDate == null) return;
   if (startDate.getTime() > endDate.getTime()) {
@@ -41,10 +25,6 @@ function validateDateRange(startDate: Date | null | undefined, endDate: Date | n
   }
 }
 
-/**
- * Resolve templateOperations per design.md templateOperations 導出の原則:
- * undefined → full candidates; [] → none; non-subset of candidates → 400.
- */
 function resolveTemplateOperations(
   provided: CaseTemplateApplyOperation[] | undefined,
   oldStart: Date | null | undefined,
@@ -81,9 +61,6 @@ export const caseService = {
       input.endDate ?? null,
     );
 
-    // isCompleted is intentionally not part of CreateCaseInput (Requirement
-    // 2.5): caseRepository.create() always lets the Prisma column default
-    // (false) apply. Date write + apply share one TX (design.md CaseService).
     const caseEntity = await db.$transaction(async (tx) => {
       const created = await caseRepository.create(
         {
@@ -100,8 +77,6 @@ export const caseService = {
       return created;
     });
 
-    // Requirement 10.2: case creation is a broad-impact operation.
-    // Log only after the TX commits so rolled-back creates are not logged.
     businessEventLogger.logBusinessEvent("case.created", { requestId, entityId: caseEntity.id });
     return caseEntity;
   },
@@ -124,10 +99,6 @@ export const caseService = {
       }
     }
 
-    // Merge whichever of startDate/endDate are provided with the
-    // currently-persisted value to detect a resulting startDate > endDate
-    // (Requirement 5.3), independent of which fields this call touches
-    // (Requirement 5.1/5.4).
     const nextStartDate = input.startDate !== undefined ? input.startDate : current.startDate;
     const nextEndDate = input.endDate !== undefined ? input.endDate : current.endDate;
     validateDateRange(nextStartDate, nextEndDate);
@@ -168,9 +139,6 @@ export const caseService = {
       throw notFound(`Case not found: ${id}`);
     }
 
-    // task-status-model 3.4: counts come from the task integrity surface
-    // (same open ∪ completed ≡ not cancelled rules). requiredTotal === 0
-    // means no progress to present (all required cancelled or none exist; 6.6).
     const { requiredTotal, requiredCompleted } = await taskIntegrityService.countRequiredForCaseProgress(
       id,
       workspaceId,
@@ -181,11 +149,6 @@ export const caseService = {
       requiredTotal,
       requiredCompleted,
       requiredIncomplete,
-      // A manually-completed case is never overdue, regardless of endDate
-      // or outstanding required tasks; a case with no endDate at all has
-      // no basis for an overdue judgement either (endDate is optional as
-      // of task 13.1) — this null check is a direct consequence of that
-      // type change, not a preemption of task 13.3's own equivalent coverage.
       isOverdueWithIncomplete:
         !caseEntity.isCompleted &&
         caseEntity.endDate !== null &&

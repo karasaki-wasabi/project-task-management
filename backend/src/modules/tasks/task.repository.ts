@@ -1,11 +1,3 @@
-// Persistence for Tasks (task 3.1, design.md "Backend/tasks"). Soft-delete /
-// audit-column behavior and the default `deletedAt: null` list filter come
-// from the shared `db` client (task 1.4). Optional DbClient supports
-// CaseService same-TX apply (task 4).
-// workspace-resource-scope task 3.1: all queries take VerifiedWorkspaceId and
-// compose where via withWorkspaceScope.
-// module-boundary-cleanup 2.3: integrity-supporting updateMany / count /
-// findMany (ID-only detach/clear, progress counts, soft-delete bypass).
 import type { Prisma } from "@prisma/client";
 import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
@@ -60,13 +52,10 @@ export const taskRepository = {
         priority: input.priority,
         detail: input.detail,
         caseId: input.caseId,
-        // design.md TasksService Implementation Notes: "caseId未指定時は
-        // isRequiredForCaseをfalse固定にする".
         isRequiredForCase: input.caseId ? (input.isRequiredForCase ?? false) : false,
         assigneeUserId: input.assigneeUserId,
         parentTaskId: input.parentTaskId,
         storyPoints: input.storyPoints,
-        // RecurrenceService-only (see task.types.ts CreateTaskInput comment).
         sourceTemplateId: input.sourceTemplateId,
         sourceAnchor: input.sourceAnchor,
         scheduledEndDate: input.scheduledEndDate,
@@ -85,7 +74,6 @@ export const taskRepository = {
     return client.task.findFirst({ where: withWorkspaceScope(where, workspaceId) });
   },
 
-  // task-status-model 3.2: status only — completedAt is owned by updateDevelopmentStage.
   updateStatus(
     id: string,
     workspaceId: VerifiedWorkspaceId,
@@ -134,9 +122,6 @@ export const taskRepository = {
     return db.task.findMany({
       where: withWorkspaceScope(
         {
-          // design.md "Backend/tasks > TasksService.list 未割当フィルタ拡張":
-          // unassignedCase is exclusive and takes priority over any caseId
-          // also present on the filter.
           caseId: filter.unassignedCase ? null : filter.caseId,
           assigneeUserId: filter.assigneeUserId,
           title: filter.titleContains ? { contains: filter.titleContains } : undefined,
@@ -149,15 +134,10 @@ export const taskRepository = {
     });
   },
 
-  // Soft-deleted children are excluded by the shared `db` client's default
-  // filter, so a deleted (rather than closed) child never blocks completion.
-  // Open = not on a completed/cancelled stage (task-status-model 3.1 / 5.1).
   countIncompleteChildren(parentTaskId: string): Promise<number> {
     return db.task.count({ where: { parentTaskId, ...openTaskFilter } });
   },
 
-  // velocity-dashboard 2.2: top-level count so soft-delete extension auto-excludes
-  // deleted children (Requirements 1.5). Distinct from leafTaskFilter aggregation.
   async hasChildren(
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
@@ -169,8 +149,6 @@ export const taskRepository = {
     return count > 0;
   },
 
-  // velocity-dashboard 2.2: walk parentTaskId to root, level-by-level
-  // (Requirements 2.1–2.4). Zero children → null; children all unset → 0.
   async recalculateAncestorStoryPoints(
     startTaskId: string,
     workspaceId: VerifiedWorkspaceId,
@@ -203,8 +181,6 @@ export const taskRepository = {
     }
   },
 
-  // module-boundary-cleanup 2.3: integrity persistence (ID-only updateMany,
-  // progress counts, soft-delete bypass count, generated-task findMany).
   async detachFromCase(caseId: string, client: DbClient = db): Promise<void> {
     await client.task.updateMany({ where: { caseId }, data: { caseId: null } });
   },
@@ -274,8 +250,6 @@ export const taskRepository = {
     workspaceId: VerifiedWorkspaceId,
     caseId: string,
   ): Promise<{ count: number; points: number }> {
-    // deletedAt: null を明示する。soft-delete 拡張は count には効くが
-    // aggregate には効かないため、件数とポイントの母数を揃える。
     const baseWhere = withWorkspaceScope(
       {
         caseId,

@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useApiClient, type Comment } from "../../composables/useApiClient";
-
 const props = defineProps<{
   taskId: string;
   mode: "create" | "edit";
@@ -10,7 +7,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  success: [comment: Comment];
+  success: [comment: TaskComment];
   cancel: [];
 }>();
 
@@ -39,7 +36,7 @@ async function submit() {
 
   submitting.value = true;
   try {
-    let comment: Comment;
+    let comment: TaskComment;
     if (props.mode === "edit") {
       if (!props.commentId) {
         error.value = "編集するコメントを指定してください";

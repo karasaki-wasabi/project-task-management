@@ -41,7 +41,7 @@ afterAll(async () => {
 });
 
 describe("activityLogService", () => {
-  it("records a user field change with before and after values", async () => {
+  it("ユーザーフィールドの変更を、変更前・変更後の値を記録", async () => {
     await db.$transaction((tx) =>
       activityLogService.record(
         {
@@ -71,7 +71,7 @@ describe("activityLogService", () => {
     );
   });
 
-  it("records a system actor with its source label", async () => {
+  it("アクターをシステムにして記録", async () => {
     await db.$transaction((tx) =>
       activityLogService.record(
         {
@@ -94,7 +94,7 @@ describe("activityLogService", () => {
     });
   });
 
-  it("returns only field changes and excludes task and comment operations", async () => {
+  it("フィールド変更のみを記録し、タスクとコメントの操作を除外", async () => {
     const hiddenOperations: Exclude<OperationType, "field_changed">[] = [
       "task_created",
       "task_deleted",
@@ -140,7 +140,7 @@ describe("activityLogService", () => {
     );
   });
 
-  it("rolls back a record when the caller transaction fails", async () => {
+  it("呼び出し元のトランザクションが失敗した場合、レコードをロールバック", async () => {
     const sourceLabel = `rollback-${randomUUID()}`;
 
     await expect(
@@ -160,14 +160,14 @@ describe("activityLogService", () => {
     await expect(db.activityLog.findFirst({ where: { actorSourceLabel: sourceLabel } })).resolves.toBeNull();
   });
 
-  it("does not expose update or delete operations", () => {
+  it("update または delete 操作を公開しない", () => {
     expect(activityLogService).not.toHaveProperty("update");
     expect(activityLogService).not.toHaveProperty("delete");
     expect(activityLogRepository).not.toHaveProperty("update");
     expect(activityLogRepository).not.toHaveProperty("delete");
   });
 
-  it("limits displayable rows when a page take is provided", async () => {
+  it("ページングを提供した場合、表示可能な行数を制限", async () => {
     const task = await db.task.create({
       data: {
         title: `activity-log-page-${randomUUID()}`,

@@ -1,22 +1,22 @@
-// Mount tests for WorkspaceCreateModal (task 6.1):
-// name input, empty-name error, create → refresh → select as current workspace.
-// Requirements 1.1, 1.2, 1.3.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 import WorkspaceCreateModal from "./WorkspaceCreateModal.vue";
 import type { Workspace } from "../../composables/useApiClient";
 
 const createWorkspace = vi.fn();
 const refresh = vi.fn();
 const select = vi.fn();
-const navigateTo = vi.fn();
+const { navigateTo, route } = vi.hoisted(() => ({
+  navigateTo: vi.fn(),
+  route: { path: "/workspaces", query: {} as Record<string, string> },
+}));
 const currentId = ref<string | null>(null);
 const workspaces = ref<Workspace[]>([]);
-const route = { path: "/workspaces", query: {} as Record<string, string> };
 
-vi.stubGlobal("navigateTo", navigateTo);
-vi.stubGlobal("useRoute", () => route);
+mockNuxtImport("navigateTo", () => navigateTo);
+mockNuxtImport("useRoute", () => () => route);
 
 vi.mock("../../composables/useApiClient", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../composables/useApiClient")>();

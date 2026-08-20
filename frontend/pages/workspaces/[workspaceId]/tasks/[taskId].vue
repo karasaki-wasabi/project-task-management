@@ -1,19 +1,4 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import {
-  useApiClient,
-  type Case,
-  type CreateTaskInput,
-  type DevelopmentStage,
-  type Task,
-  type TaskStatus,
-  type UpdateTaskInput,
-  type User,
-} from "../../../../composables/useApiClient";
-import { useAuth } from "../../../../composables/useAuth";
-import InlineEditableField from "../../../../components/tasks/InlineEditableField.vue";
-import { apiErrorMessage } from "../../../../utils/apiErrorMessage";
-
 const api = useApiClient();
 const route = useRoute();
 const { user } = useAuth();

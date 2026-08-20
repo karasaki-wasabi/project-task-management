@@ -41,9 +41,10 @@ Webアプリケーション: Nuxt 4(Vue 3, `ssr: false`の静的SPA)フロント
   - 通常の service 公開インターフェース
   - 当該モジュールが明示した読み取り専用／整合専用の公開面（例: `caseReadService`、`taskIntegrityService`）
   - 他モジュールの Prisma クエリや repository へ直接アクセスしない
+- コードコメント、および`describe`/`it`のテスト説明文は日本語で書く（関数名・変数名など識別子は対象外）
 
 ### Testing
-- Vitest(バックエンド・フロントエンドとも)。バックエンドは実MySQLに対して実行しモックしない。詳細は[[testing]]参照
+- Vitest(バックエンド・フロントエンドとも、フロントエンドは`@nuxt/test-utils`の`nuxt`環境)。バックエンドは実MySQLに対して実行しモックしない。詳細は[[testing]]参照
 
 ## Development Environment
 

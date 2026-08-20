@@ -1,29 +1,3 @@
-<!--
-  Task card (task-status-model 5.5, design.md "Frontend/kanban" → TaskCard,
-  Requirements 4.5, 8.6, 8.9; also carries prior kanban-ux Requirements 5/6.1).
-  Shared between the stage board, AssigneeFocusTray, and the expanded
-  UnassignedBacklogPanel list so status/priority/progress display rules stay
-  centralized in one place (design.md Implementation Notes).
-
-  - Requirement 4.5: terminal columns omit the status badge; the footer row
-    stays so the assignee avatar remains bottom-right and aligned with
-    normal columns.
-  - Requirement 8.6/8.9: progress uses completed-stage / non-cancelled
-    children; when cancelled children were excluded, annotate 「中止 N 件を除く」.
-    Terminal columns and mother-0 (total === 0) hide progress entirely.
-  - Requirement 6.1 (prior): the root element keeps the `class="card"` /
-    `data-task-id` DOM contract used by E2E selectors. Actual drag
-    mechanics are owned by vue-draggable-plus (Sortable.js) at the list
-    level rather than this component.
-
-  Visual layout: title top-left + priority badge top-right on the same row;
-  optional progress; status (optional) + UserAvatar bottom-right.
-
-  Clicking (or Enter/Space when focused) opens the task detail/edit/delete
-  popup — the card just emits `activate`. Pointer down/up (not native
-  `click`) avoids Sortable's intermittent click suppression after a
-  wiggle-then-release gesture.
--->
 <script setup lang="ts">
 import { computed } from "vue";
 import {
@@ -39,7 +13,6 @@ interface TaskCardProps {
   assigneeId?: string;
   assigneeName?: string;
   progress?: TaskProgress;
-  /** True when the card is rendered inside a completed/cancelled stage column. */
   isTerminalColumn?: boolean;
 }
 

@@ -60,7 +60,7 @@ describe("RecurrenceFormModal.helpers", () => {
 });
 
 describe("recurrenceLabels offset (Req 2.3 direction)", () => {
-  it("formats non-negative fixed-direction labels", () => {
+  it("負でない固定方向のラベルをフォーマットする", () => {
     expect(formatOffsetLabel("case_start", 0)).toBe("案件開始日当日");
     expect(formatOffsetLabel("case_start", 3)).toBe("案件開始日の3日後");
     expect(formatOffsetLabel("case_end", 14)).toBe("案件終了日の14日前");
@@ -68,7 +68,7 @@ describe("recurrenceLabels offset (Req 2.3 direction)", () => {
     expect(formatOffsetLabel("period_month_end", 1)).toBe("各月末の1日前");
   });
 
-  it("hints describe fixed direction without signed offset", () => {
+  it("符号付きオフセットなしで固定方向を説明するヒントを提供する", () => {
     expect(offsetDirectionHint("case_end")).toMatch(/指定日数前/);
     expect(offsetDirectionHint("case_start")).toMatch(/指定日数後/);
     expect(offsetDirectionHint("case_end")).not.toMatch(/負の数/);

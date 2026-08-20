@@ -1,15 +1,18 @@
+// @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 
-const refresh = vi.fn();
-const navigateTo = vi.fn();
+const refresh = vi.hoisted(() => vi.fn());
+const navigateTo = vi.hoisted(() => vi.fn());
+
+mockNuxtImport("defineNuxtRouteMiddleware", () => <T>(middleware: T) => middleware);
+mockNuxtImport("navigateTo", () => navigateTo);
+mockNuxtImport("useAuth", () => () => ({ refresh }));
 
 beforeEach(() => {
   vi.resetModules();
   refresh.mockReset();
   navigateTo.mockReset();
-  vi.stubGlobal("defineNuxtRouteMiddleware", <T>(middleware: T) => middleware);
-  vi.stubGlobal("navigateTo", navigateTo);
-  vi.stubGlobal("useAuth", () => ({ refresh }));
 });
 
 describe("auth.global middleware (task 6.2)", () => {

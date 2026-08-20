@@ -1,13 +1,12 @@
-// Mount tests for landing `/` (workspace-url-routing task 3.1).
-// Requirements 2.1, 2.2, 8.1.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 import type { Workspace } from "../composables/useApiClient";
 import LandingPage from "./index.vue";
 
 const refresh = vi.fn();
-const navigateTo = vi.fn();
+const navigateTo = vi.hoisted(() => vi.fn());
 const currentId = ref<string | null>(null);
 const workspaces = ref<Workspace[]>([]);
 
@@ -18,6 +17,8 @@ vi.mock("../composables/useCurrentWorkspace", () => ({
     refresh,
   }),
 }));
+
+mockNuxtImport("navigateTo", () => navigateTo);
 
 const WorkspacePickerPanelStub = defineComponent({
   name: "WorkspacePickerPanel",
@@ -53,12 +54,10 @@ describe("LandingPage (workspace-url-routing task 3.1)", () => {
     refresh.mockImplementation(async () => {
       /* currentId / workspaces set by each test before mount or inside mock */
     });
-    vi.stubGlobal("navigateTo", navigateTo);
   });
 
   afterEach(() => {
     vi.clearAllMocks();
-    vi.unstubAllGlobals();
   });
 
   it("前回利用 WS が有効なときダッシュボードへ navigate する（Req 2.1）", async () => {

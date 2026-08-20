@@ -46,7 +46,7 @@ afterAll(async () => {
 });
 
 describe("requireUser (task 2.3)", () => {
-  it("attaches the public user from a valid session userId", async () => {
+  it("有効なセッションの userId からパブリックユーザーを紐付ける", async () => {
     const uniqueId = randomUUID();
     const user = await authService.register({
       email: `guard-${uniqueId}@example.test`,
@@ -64,10 +64,10 @@ describe("requireUser (task 2.3)", () => {
   });
 
   it.each([
-    ["session is missing", undefined],
-    ["session userId is invalid", 123],
-    ["session user does not exist", randomUUID()],
-  ])("returns 401 when %s", async (_description, userId) => {
+    ["セッションがない", undefined],
+    ["セッションの userId が無効", 123],
+    ["セッションのユーザーが存在しない", randomUUID()],
+  ])("%s の場合、401 を返す", async (_description, userId) => {
     const app = await buildTestApp(userId);
 
     const response = await app.inject({ method: "GET", url: "/protected" });

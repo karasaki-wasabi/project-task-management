@@ -14,7 +14,6 @@ export type WorkspacePageKind =
   | "holidays"
   | "throughput";
 
-/** Longer kinds first so `kanban/stages` wins over `kanban`. */
 const PAGE_KINDS: WorkspacePageKind[] = [
   "kanban/stages",
   "tasks",

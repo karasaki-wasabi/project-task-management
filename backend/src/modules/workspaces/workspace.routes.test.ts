@@ -1,6 +1,3 @@
-// workspaceRoutes inject tests (tasks 4.1–4.2, design.md "Backend/workspaces"
-// API Contract; Requirements 1.1, 1.2, 2.4, 3.1, 3.2, 4.1–4.5, 6.1–6.5,
-// 7.1–7.4). Uses buildApp so requireUser / CSRF from user-auth apply.
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
@@ -84,7 +81,7 @@ afterAll(async () => {
 });
 
 describe("workspaceRoutes CRUD (task 4.1)", () => {
-  it("POST /api/workspaces creates a workspace for the current user and returns 201", async () => {
+  it("workspaceRoutes.create で current user の workspace を作成し、201 を返す", async () => {
     const app = buildApp(env);
     const { user, cookie } = await registerUser(app);
     const csrf = await csrfToken(app, cookie);
@@ -117,7 +114,7 @@ describe("workspaceRoutes CRUD (task 4.1)", () => {
     await app.close();
   });
 
-  it("POST /api/workspaces returns 400 for a blank name", async () => {
+  it("workspaceRoutes.create で blank name を拒否し、400 エラーを返す", async () => {
     const app = buildApp(env);
     const { user, cookie } = await registerUser(app);
     const csrf = await csrfToken(app, cookie);
@@ -139,7 +136,7 @@ describe("workspaceRoutes CRUD (task 4.1)", () => {
     await app.close();
   });
 
-  it("POST /api/workspaces returns 400 when name is missing from the body", async () => {
+  it("workspaceRoutes.create で name が body にない場合、400 エラーを返す", async () => {
     const app = buildApp(env);
     const { user, cookie } = await registerUser(app);
     const csrf = await csrfToken(app, cookie);
@@ -157,7 +154,7 @@ describe("workspaceRoutes CRUD (task 4.1)", () => {
     await app.close();
   });
 
-  it("GET /api/workspaces lists only workspaces the current user belongs to", async () => {
+  it("workspaceRoutes.list で current user が所属する workspace のみを返す", async () => {
     const app = buildApp(env);
     const { user, cookie } = await registerUser(app, "一覧本人");
     const outsider = await db.user.create({ data: createUserData(`ws-route-list-out-${randomUUID()}`) });
@@ -206,7 +203,7 @@ describe("workspaceRoutes CRUD (task 4.1)", () => {
     await app.close();
   });
 
-  it("PATCH /api/workspaces/:id updates name and color for a member", async () => {
+  it("workspaceRoutes.update で member の name と color を更新", async () => {
     const app = buildApp(env);
     const { user, cookie } = await registerUser(app);
     const csrf = await csrfToken(app, cookie);
@@ -248,7 +245,7 @@ describe("workspaceRoutes CRUD (task 4.1)", () => {
     await app.close();
   });
 
-  it("PATCH /api/workspaces/:id returns 400 for blank name or invalid color", async () => {
+  it("workspaceRoutes.update で blank name または invalid color を拒否し、400 エラーを返す", async () => {
     const app = buildApp(env);
     const { user, cookie } = await registerUser(app);
     const csrf = await csrfToken(app, cookie);
@@ -289,7 +286,7 @@ describe("workspaceRoutes CRUD (task 4.1)", () => {
     await app.close();
   });
 
-  it("PATCH /api/workspaces/:id returns 403 for a non-member and 404 for unknown id", async () => {
+  it("workspaceRoutes.update で non-member を拒否し、403 エラーを返す、unknown id を拒否し、404 エラーを返す", async () => {
     const app = buildApp(env);
     const { user: owner, cookie: ownerCookie } = await registerUser(app, "設定オーナー");
     const { user: outsider, cookie: outsiderCookie } = await registerUser(app, "設定部外者");
@@ -337,7 +334,7 @@ describe("workspaceRoutes CRUD (task 4.1)", () => {
     await app.close();
   });
 
-  it("DELETE /api/workspaces/:id allows the creator and returns 204", async () => {
+  it("workspaceRoutes.delete で creator が workspace を削除できる、204 を返す", async () => {
     const app = buildApp(env);
     const { user, cookie } = await registerUser(app);
     const csrf = await csrfToken(app, cookie);
@@ -375,7 +372,7 @@ describe("workspaceRoutes CRUD (task 4.1)", () => {
     await app.close();
   });
 
-  it("DELETE /api/workspaces/:id returns 403 for a non-creator member and 404 for non-member/unknown", async () => {
+  it("workspaceRoutes.delete で non-creator member を拒否し、403 エラーを返す、non-member/unknown を拒否し、404 エラーを返す", async () => {
     const app = buildApp(env);
     const { user: creator, cookie: creatorCookie } = await registerUser(app, "削除作成者");
     const { user: member, cookie: memberCookie } = await registerUser(app, "削除メンバー");
@@ -429,7 +426,7 @@ describe("workspaceRoutes CRUD (task 4.1)", () => {
 });
 
 describe("workspaceRoutes members (task 4.2)", () => {
-  it("GET /api/workspaces/:id/members returns member summaries for a member", async () => {
+  it("workspaceRoutes.listMembers で member のサマリーを返す", async () => {
     const app = buildApp(env);
     const { user: owner, cookie: ownerCookie } = await registerUser(app, "メンバ一覧オーナー");
     const peer = await db.user.create({ data: createUserData(`ws-route-mem-peer-${randomUUID()}`) });
@@ -465,7 +462,7 @@ describe("workspaceRoutes members (task 4.2)", () => {
     await app.close();
   });
 
-  it("GET /api/workspaces/:id/members returns 403 for a non-member and 404 for unknown id", async () => {
+  it("workspaceRoutes.listMembers で non-member を拒斥し、403 エラーを返す、unknown id を拒斥し、404 エラーを返す", async () => {
     const app = buildApp(env);
     const { user: owner, cookie: ownerCookie } = await registerUser(app, "メンバ一覧拒否オーナー");
     const { user: outsider, cookie: outsiderCookie } = await registerUser(app, "メンバ一覧部外者");
@@ -507,7 +504,7 @@ describe("workspaceRoutes members (task 4.2)", () => {
     await app.close();
   });
 
-  it("GET /api/workspaces/:id/searchable-users returns matches excluding existing members", async () => {
+  it("workspaceRoutes.searchAddableUsers で existing members を除外し、matches を返す", async () => {
     const app = buildApp(env);
     const marker = randomUUID().slice(0, 8);
     const { user: owner, cookie: ownerCookie } = await registerUser(app, `検索オーナー${marker}`);
@@ -558,7 +555,7 @@ describe("workspaceRoutes members (task 4.2)", () => {
     await app.close();
   });
 
-  it("GET /api/workspaces/:id/searchable-users returns [] when q is empty or omitted", async () => {
+  it("workspaceRoutes.searchAddableUsers で q が empty または omitted の場合、空配列を返す", async () => {
     const app = buildApp(env);
     const { user, cookie } = await registerUser(app);
     const csrf = await csrfToken(app, cookie);
@@ -599,7 +596,7 @@ describe("workspaceRoutes members (task 4.2)", () => {
     await app.close();
   });
 
-  it("GET /api/workspaces/:id/searchable-users returns 403 for a non-member and 404 for unknown id", async () => {
+  it("workspaceRoutes.searchAddableUsers で non-member を拒斥し、403 エラーを返す、unknown id を拒斥し、404 エラーを返す", async () => {
     const app = buildApp(env);
     const { user: owner, cookie: ownerCookie } = await registerUser(app, "検索拒否オーナー");
     const { user: outsider, cookie: outsiderCookie } = await registerUser(app, "検索部外者");
@@ -644,7 +641,7 @@ describe("workspaceRoutes members (task 4.2)", () => {
     await app.close();
   });
 
-  it("POST /api/workspaces/:id/members adds a user and returns 201", async () => {
+  it("workspaceRoutes.addMember で user を追加し、201 を返す", async () => {
     const app = buildApp(env);
     const { user: owner, cookie: ownerCookie } = await registerUser(app, "追加オーナー");
     const target = await db.user.create({ data: createUserData(`ws-route-add-t-${randomUUID()}`) });
@@ -687,7 +684,7 @@ describe("workspaceRoutes members (task 4.2)", () => {
     await app.close();
   });
 
-  it("POST /api/workspaces/:id/members returns 400 for missing userId or duplicate membership", async () => {
+  it("workspaceRoutes.addMember で missing userId または duplicate membership を拒斥し、400 エラーを返す", async () => {
     const app = buildApp(env);
     const { user: owner, cookie: ownerCookie } = await registerUser(app, "追加400オーナー");
     const target = await db.user.create({ data: createUserData(`ws-route-add-bad-${randomUUID()}`) });
@@ -753,7 +750,7 @@ describe("workspaceRoutes members (task 4.2)", () => {
     await app.close();
   });
 
-  it("POST /api/workspaces/:id/members returns 403 for a non-member and 404 for unknown workspace or user", async () => {
+  it("workspaceRoutes.addMember で non-member を拒斥し、403 エラーを返す、unknown workspace または user を拒斥し、404 エラーを返す", async () => {
     const app = buildApp(env);
     const { user: owner, cookie: ownerCookie } = await registerUser(app, "追加拒否オーナー");
     const { user: outsider, cookie: outsiderCookie } = await registerUser(app, "追加部外者");

@@ -1,11 +1,10 @@
-// task-status-model 4.2 — StageBadge mount behavior (Requirements 8.2, 8.3).
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import StageBadge from "./StageBadge.vue";
 import Badge from "./Badge.vue";
 
 describe("StageBadge (task-status-model 4.2)", () => {
-  it("renders list prefix and stage name for a normal stage", () => {
+  it("list 接頭辞と段階名をレンダリングする", () => {
     const wrapper = mount(StageBadge, {
       props: { kind: "normal", name: "未着手", prefixMode: "list" },
     });
@@ -16,7 +15,7 @@ describe("StageBadge (task-status-model 4.2)", () => {
     expect(wrapper.classes().join(" ")).not.toContain("rounded-full");
   });
 
-  it("uses modal prefix while keeping the same bordered shell", () => {
+  it("modal 接頭辞を使用し、同じbordered のシェルを保持する", () => {
     const wrapper = mount(StageBadge, {
       props: { kind: "normal", name: "未着手", prefixMode: "modal" },
     });
@@ -25,7 +24,7 @@ describe("StageBadge (task-status-model 4.2)", () => {
     expect(wrapper.classes().join(" ")).toContain("border");
   });
 
-  it("styles completed stages with green fill and green border", () => {
+  it("完了の段階を緑のフィルと緑の枠線でスタイリングする", () => {
     const wrapper = mount(StageBadge, {
       props: { kind: "completed", name: "完了", prefixMode: "list" },
     });
@@ -35,7 +34,7 @@ describe("StageBadge (task-status-model 4.2)", () => {
     expect(classes).toContain("border-[#86efac]");
   });
 
-  it("strikes through only the stage name for cancelled stages", () => {
+  it("中止の段階の段階名を取り消し線でスタイリングする", () => {
     const wrapper = mount(StageBadge, {
       props: { kind: "cancelled", name: "中止", prefixMode: "list" },
     });
@@ -47,7 +46,6 @@ describe("StageBadge (task-status-model 4.2)", () => {
 
     const prefix = wrapper.get('[data-testid="stage-badge-prefix"]');
     const name = wrapper.get('[data-testid="stage-badge-name"]');
-    // textContent keeps the trailing space that Vue Test Utils' .text() trims.
     expect(prefix.element.textContent).toBe("段階: ");
     expect(prefix.classes().join(" ")).not.toContain("line-through");
     expect(name.text()).toBe("中止");
@@ -56,7 +54,7 @@ describe("StageBadge (task-status-model 4.2)", () => {
 
   });
 
-  it("renders unset as a dashed badge with 未設定", () => {
+  it("未設定をダッシュ付きのチップとしてレンダリングする", () => {
     const list = mount(StageBadge, {
       props: { kind: null, name: null, prefixMode: "list" },
     });
@@ -71,7 +69,7 @@ describe("StageBadge (task-status-model 4.2)", () => {
     expect(modal.classes().join(" ")).toContain("border-dashed");
   });
 
-  it("stays visually distinct from StatusBadge when the stage name matches a status word", () => {
+  it("段階名がステータスの単語と一致する場合、視覚的にStatusBadge と区別される", () => {
     const stage = mount(StageBadge, {
       props: { kind: "normal", name: "未着手", prefixMode: "list" },
     });

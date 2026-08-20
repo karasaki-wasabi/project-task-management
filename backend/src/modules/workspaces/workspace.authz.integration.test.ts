@@ -1,6 +1,3 @@
-// Cross-cutting authorization for workspace-scoped APIs (task 7.1;
-// Requirements 2.4, 3.2, 4.5, 6.5, 7.2, 7.3). Covers every :id endpoint:
-// members GET, searchable-users GET, members POST, PATCH, DELETE.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
@@ -128,7 +125,7 @@ describe("workspace-scoped API authorization (task 7.1)", () => {
 
   it.each([
     {
-      name: "GET /api/workspaces/:id/members",
+      name: "workspaceRoutes.listMembers",
       requirement: "3.2",
       request: () =>
         withSessionCookie(
@@ -138,7 +135,7 @@ describe("workspace-scoped API authorization (task 7.1)", () => {
       expected: 403,
     },
     {
-      name: "GET /api/workspaces/:id/searchable-users",
+      name: "workspaceRoutes.searchAddableUsers",
       requirement: "4.5",
       request: () =>
         withSessionCookie(
@@ -151,7 +148,7 @@ describe("workspace-scoped API authorization (task 7.1)", () => {
       expected: 403,
     },
     {
-      name: "POST /api/workspaces/:id/members",
+      name: "workspaceRoutes.addMember",
       requirement: "4.5",
       request: () =>
         withCsrfToken(
@@ -168,7 +165,7 @@ describe("workspace-scoped API authorization (task 7.1)", () => {
       expected: 403,
     },
     {
-      name: "PATCH /api/workspaces/:id",
+      name: "workspaceRoutes.update",
       requirement: "6.5",
       request: () =>
         withCsrfToken(
@@ -184,12 +181,12 @@ describe("workspace-scoped API authorization (task 7.1)", () => {
         ),
       expected: 403,
     },
-  ])("rejects a non-member on $name with 403 (Requirement $requirement)", async ({ request, expected }) => {
+  ])("workspaceRoutes.$name で non-member を拒斥し、403 エラーを返す (Requirement $requirement)", async ({ request, expected }) => {
     const response = await app.inject(request());
     expect(response.statusCode).toBe(expected);
   });
 
-  it("rejects a non-creator member DELETE with 403 (Requirement 7.2)", async () => {
+  it("workspaceRoutes.delete で non-creator member を拒斥し、403 エラーを返す (Requirement 7.2)", async () => {
     const response = await app.inject(
       withCsrfToken(
         withSessionCookie(
@@ -203,7 +200,7 @@ describe("workspace-scoped API authorization (task 7.1)", () => {
     expect(await workspaceRepository.findById(workspaceId)).not.toBeNull();
   });
 
-  it("rejects a non-member DELETE with 404 (Requirement 7.3)", async () => {
+  it("workspaceRoutes.delete で non-member を拒斥し、404 エラーを返す (Requirement 7.3)", async () => {
     const response = await app.inject(
       withCsrfToken(
         withSessionCookie(
@@ -268,12 +265,12 @@ describe("workspace-scoped API authorization (task 7.1)", () => {
           creatorCsrf.token,
         ),
     },
-  ])("rejects unknown workspace on $name with 404", async ({ build }) => {
+  ])("workspaceRoutes.$name で unknown workspace を拒斥し、404 エラーを返す", async ({ build }) => {
     const response = await app.inject(build(randomUUID()));
     expect(response.statusCode).toBe(404);
   });
 
-  it("does not list a workspace the user does not belong to (Requirement 2.4)", async () => {
+  it("workspaceRoutes.list で user が所属しない workspace をリストしない (Requirement 2.4)", async () => {
     const listed = await app.inject(
       withSessionCookie({ method: "GET", url: "/api/workspaces" }, outsiderCsrf.cookie),
     );

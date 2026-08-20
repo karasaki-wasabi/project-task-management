@@ -1,18 +1,3 @@
-// Fastify instance creation and route registration (task 10.3, Requirements
-// 10.1, 10.3, 10.5, 10.6).
-//
-// Access logging, business-event logging, and global error handling all go
-// through shared/logger.ts (task 1.5, design.md "Backend/shared(Logging
-// Infrastructure)") rather than Fastify's built-in pino integration, so the
-// log shape stays identical whether it's emitted from this hook, a route, or
-// a Service. Fastify's own logger is disabled (`logger: false`) to avoid
-// double-logging every request; `request.id` (always populated by Fastify
-// core regardless of the logger setting) remains the correlation key.
-//
-// Every module's routes are Fastify plugins with no shared state of their
-// own (task 2.1-9.3 built and tested each in isolation), so registration
-// here is just wiring; `setErrorHandler` below already applies uniformly to
-// every registered route since it is a single Fastify instance.
 import cors from "@fastify/cors";
 import csrfProtection from "@fastify/csrf-protection";
 import secureSession from "@fastify/secure-session";

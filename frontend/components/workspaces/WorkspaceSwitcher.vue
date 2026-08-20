@@ -1,13 +1,3 @@
-<!--
-  Header workspace switcher (task 6.2, design.md WorkspaceSwitcher / 案B,
-  Requirements 1.3, 2.1, 2.2, 2.3). Secondary trigger between nav and
-  display-name/logout: color dot + name + ▼. Empty: muted gray +
-  「ワークスペース未選択」. Dropdown lists workspaces, opens
-  WorkspaceCreateModal, and links to /workspaces management.
-
-  Explicit Vue / composable imports so vitest can mount without Nuxt
-  auto-import runtime (same approach as WorkspaceCreateModal.vue).
--->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
@@ -71,7 +61,6 @@ function choose(id: string) {
   if (route.path === "/") {
     void navigateTo(workspacePath(id, ""));
   }
-  // /workspaces (manage) and auth screens: selection only, stay on path.
 }
 
 function openCreate() {

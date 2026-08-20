@@ -1,5 +1,3 @@
-// RED → GREEN: buildCaseTemplateApplyCandidates pure function
-// (task 3.1, Requirements 4.5–4.12, design.md 適用操作の種類).
 import { describe, expect, it } from "vitest";
 import {
   buildCaseTemplateApplyCandidates,

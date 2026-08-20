@@ -8,15 +8,13 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-// The soft-delete extension redirects `.deleteMany()` to an UPDATE, so test
-// cleanup uses a raw physical DELETE to avoid leaving junk rows behind.
 async function hardDelete(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   await db.$executeRawUnsafe(`DELETE FROM users WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
 describe("usersService", () => {
-  it("lists registered accounts as PublicUser values without passwordHash", async () => {
+  it("usersService.list で registered accounts を PublicUser 値として返す、passwordHash はなし", async () => {
     const data = createUserData(`表示名-${randomUUID()}`);
     const user = await db.user.create({ data });
 
@@ -35,7 +33,7 @@ describe("usersService", () => {
     await hardDelete([user.id]);
   });
 
-  it("searches registered accounts by case-insensitive name or email substring", async () => {
+  it("usersService.search で case-insensitive name または email 部分文字列を検索し、registered accounts を返す", async () => {
     const marker = randomUUID().replace(/-/g, "").slice(0, 12);
     const byName = await db.user.create({
       data: createUserData(`AlphaSearch-${marker}`),

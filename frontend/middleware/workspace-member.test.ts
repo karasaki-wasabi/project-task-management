@@ -1,11 +1,21 @@
+// @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 
-const refresh = vi.fn();
-const syncFromRoute = vi.fn();
-const createError = vi.fn((payload: { statusCode: number }) =>
-  Object.assign(new Error("NuxtError"), payload),
+const refresh = vi.hoisted(() => vi.fn());
+const syncFromRoute = vi.hoisted(() => vi.fn());
+const createError = vi.hoisted(() =>
+  vi.fn((payload: { statusCode: number }) => Object.assign(new Error("NuxtError"), payload)),
 );
-const workspaces = { value: [] as { id: string }[] };
+const workspaces = vi.hoisted(() => ({ value: [] as { id: string }[] }));
+
+mockNuxtImport("defineNuxtRouteMiddleware", () => <T>(middleware: T) => middleware);
+mockNuxtImport("createError", () => createError);
+mockNuxtImport("useCurrentWorkspace", () => () => ({
+  refresh,
+  syncFromRoute,
+  workspaces,
+}));
 
 beforeEach(() => {
   vi.resetModules();
@@ -13,13 +23,6 @@ beforeEach(() => {
   syncFromRoute.mockReset();
   createError.mockClear();
   workspaces.value = [];
-  vi.stubGlobal("defineNuxtRouteMiddleware", <T>(middleware: T) => middleware);
-  vi.stubGlobal("createError", createError);
-  vi.stubGlobal("useCurrentWorkspace", () => ({
-    refresh,
-    syncFromRoute,
-    workspaces,
-  }));
 });
 
 describe("workspace-member middleware", () => {

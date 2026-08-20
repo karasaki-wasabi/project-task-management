@@ -1,8 +1,3 @@
-// Pure logic for CaseTemplateApplyConfirm (task 6.1, design.md
-// CaseTemplateApplyConfirm, research.md「ビジュアルデザイン確定: 案件テンプレート適用確認」).
-// Extracted so screen A/B/C flow and selection → approve can be unit-tested
-// Pure helpers for screen transitions; Vue mount coverage lives in CaseTemplateApplyConfirm.test.ts.
-
 import type { CaseTemplateApplyOperation } from "./caseTemplateApplyCandidates";
 
 export type MissingDates = "start" | "end" | "both";
@@ -116,7 +111,6 @@ export function initConfirmState(input: {
   };
 }
 
-/** Requirement 3.1 / 3.5 — body copy switches on missingDates. */
 export function createMissingBody(missingDates: MissingDates): string {
   switch (missingDates) {
     case "start":
@@ -138,7 +132,6 @@ export function formatDateSummary(value: string | null | undefined): {
   return { text: value.trim().slice(0, 10), unset: false };
 }
 
-/** Screen B date row: strikethrough → new only when the calendar day actually changed. */
 export type DateChangeSummary = {
   changed: boolean;
   oldText: string;
@@ -215,7 +208,6 @@ export function reduceConfirm(
     }
     case "primary": {
       if (state.screen === "A") {
-        // Parent omits templateOperations; server derives from dates.
         return { ...state, outcome: { type: "approve", operations: null } };
       }
       if (state.screen === "B") {

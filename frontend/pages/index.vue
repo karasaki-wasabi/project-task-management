@@ -1,13 +1,4 @@
-<!--
-  Landing `/` (workspace-url-routing task 3.1, Requirements 2.1, 2.2, 8.1).
-  refresh → last-used valid? navigate to scoped dashboard : show WorkspacePickerPanel.
--->
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
-import { useCurrentWorkspace } from "../composables/useCurrentWorkspace";
-import { workspacePath } from "../utils/workspacePath";
-import WorkspacePickerPanel from "../components/workspaces/WorkspacePickerPanel.vue";
-
 const { currentId, refresh } = useCurrentWorkspace();
 const showPicker = ref(false);
 

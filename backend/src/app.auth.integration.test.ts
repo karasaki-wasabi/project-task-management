@@ -57,8 +57,8 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-describe("app authentication integration", () => {
-  it("rejects an unauthenticated business GET", async () => {
+describe("app の認証結合検証", () => {
+  it("認証されていない GET は拒否される", async () => {
     const app = buildApp(env);
 
     const response = await app.inject({ method: "GET", url: "/api/tasks" });
@@ -67,7 +67,7 @@ describe("app authentication integration", () => {
     await app.close();
   });
 
-  it("registers without CSRF, establishes a session, and returns the current public user", async () => {
+  it("CSRF なしで登録し、セッションを確立し、現在の公開ユーザーを返す", async () => {
     const app = buildApp(env);
     let userId: string | undefined;
     try {
@@ -88,7 +88,7 @@ describe("app authentication integration", () => {
     }
   });
 
-  it("logs in without CSRF and exposes a fixed failure message for unknown email and wrong password", async () => {
+  it("CSRF なしでログインし、未知のメールアドレスと間違ったパスワードに対して固定の失敗メッセージを公開する", async () => {
     const app = buildApp(env);
     let userId: string | undefined;
     try {
@@ -142,7 +142,7 @@ describe("app authentication integration", () => {
     }
   });
 
-  it("requires CSRF for logout, then clears the session", async () => {
+  it("ログアウトに CSRF が必要で、セッションをクリアする", async () => {
     const app = buildApp(env);
     let userId: string | undefined;
     try {
@@ -177,7 +177,7 @@ describe("app authentication integration", () => {
     }
   });
 
-  it("issues CSRF tokens publicly but rejects unprotected business and client-error mutations", async () => {
+  it("CSRF トークンを公開して、保護されていないビジネスとクライアントエラーの変更を拒否する", async () => {
     const app = buildApp(env);
     let userId: string | undefined;
     try {
@@ -213,7 +213,7 @@ describe("app authentication integration", () => {
     }
   });
 
-  it("provides users only as an authenticated list and has no create or delete routes", async () => {
+  it("認証されたユーザーのみを認証されたリストとして提供し、create または delete のルートを持たない", async () => {
     const app = buildApp(env);
     let userId: string | undefined;
     try {

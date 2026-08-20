@@ -1,18 +1,3 @@
-// Common soft-delete Repository convention shared by every module (task 1.4,
-// Requirements 9.1-9.5). A Prisma Client Extension is the right layer for this
-// because it applies uniformly to every model without each Service having to
-// remember to filter/redirect calls itself (design.md
-// "共通監査カラムと論理削除規約").
-//
-// - updated_at: Prisma's own `@updatedAt` only fires on single-record update()/
-//   upsert(), not updateMany() (a known Prisma limitation), so both are
-//   overridden here to always stamp `updatedAt` explicitly.
-// - deleted_at: delete()/deleteMany() are redirected to update()/updateMany()
-//   that set `deletedAt`; no model ever receives a physical DELETE through
-//   this client.
-// - default filter: findMany/findFirst(OrThrow)/findUnique(OrThrow)/count
-//   default their `where.deletedAt` to `null` unless the caller explicitly
-//   asks for deleted rows (e.g. `deletedAt: { not: null } `).
 import { Prisma, PrismaClient } from "@prisma/client";
 
 const softDeleteModels = new Set(
@@ -105,9 +90,5 @@ export function withSoftDelete(prisma: PrismaClient) {
 }
 
 export type SoftDeleteClient = ReturnType<typeof withSoftDelete>;
-
-/** Interactive TX client yielded by SoftDeleteClient.$transaction. */
 export type SoftDeleteTx = Parameters<Parameters<SoftDeleteClient["$transaction"]>[0]>[0];
-
-/** Shared db or an interactive transaction client (same-TX writes). */
 export type DbClient = SoftDeleteClient | SoftDeleteTx;

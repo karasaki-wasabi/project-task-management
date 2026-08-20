@@ -49,7 +49,7 @@ afterAll(async () => {
 });
 
 describe("authRoutes (task 2.2)", () => {
-  it("POST /api/auth/register creates a user, returns 201, and establishes a session", async () => {
+  it("POST /api/auth/register でユーザーを作成し、201 を返し、セッションを確立", async () => {
     const app = await buildTestApp();
     const data = createUserData(`登録-${randomUUID()}`);
 
@@ -71,7 +71,7 @@ describe("authRoutes (task 2.2)", () => {
     await app.close();
   });
 
-  it("POST /api/auth/login establishes a session for valid credentials", async () => {
+  it("POST /api/auth/login で有効な認証情報のセッションを確立", async () => {
     const app = await buildTestApp();
     const data = createUserData(`ログイン-${randomUUID()}`);
     const password = "password-123";
@@ -92,7 +92,7 @@ describe("authRoutes (task 2.2)", () => {
     await app.close();
   });
 
-  it("POST /api/auth/logout destroys the current session", async () => {
+  it("POST /api/auth/logout で現在のセッションを破棄", async () => {
     const app = await buildTestApp();
     const data = createUserData(`ログアウト-${randomUUID()}`);
     const registerResponse = await app.inject({
@@ -110,7 +110,7 @@ describe("authRoutes (task 2.2)", () => {
     await app.close();
   });
 
-  it("GET /api/auth/me returns 401 without a session", async () => {
+  it("GET /api/auth/me でセッションがない場合、401 を返す", async () => {
     const app = await buildTestApp();
 
     const response = await app.inject({ method: "GET", url: "/api/auth/me" });
@@ -119,7 +119,7 @@ describe("authRoutes (task 2.2)", () => {
     await app.close();
   });
 
-  it("GET /api/auth/csrf returns a CSRF token without authentication", async () => {
+  it("GET /api/auth/csrf で認証がない場合、CSRF トークンを返す", async () => {
     const app = await buildTestApp();
 
     const response = await app.inject({ method: "GET", url: "/api/auth/csrf" });

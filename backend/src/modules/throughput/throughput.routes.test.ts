@@ -1,7 +1,3 @@
-// throughputRoutes (legacy task 7.1 + velocity-dashboard task 3.4).
-// Registration into main app.ts / WORKSPACE_SCOPED_PATH_PREFIXES is done (task 3.5);
-// this suite mounts the plugin on a throwaway Fastify and decorates
-// currentWorkspaceId the way requireWorkspaceMember would.
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -75,7 +71,7 @@ afterAll(async () => {
 });
 
 describe("throughputRoutes (task 7.1)", () => {
-  it("GET /api/throughput returns a summary for valid query params", async () => {
+  it("throughputRoutes.getSummary で valid query params のサマリを返す", async () => {
     const app = await buildTestApp();
 
     const response = await app.inject({ method: "GET", url: "/api/throughput?periodType=week&rangeCount=2" });
@@ -92,7 +88,7 @@ describe("throughputRoutes (task 7.1)", () => {
     await app.close();
   });
 
-  it("GET /api/throughput returns 400 for an invalid periodType", async () => {
+  it("throughputRoutes.getSummary で invalid periodType を拒否し、400 エラーを返す", async () => {
     const app = await buildTestApp();
 
     const response = await app.inject({ method: "GET", url: "/api/throughput?periodType=day&rangeCount=1" });
@@ -101,7 +97,7 @@ describe("throughputRoutes (task 7.1)", () => {
     await app.close();
   });
 
-  it("GET /api/throughput returns 400 for rangeCount < 1", async () => {
+  it("throughputRoutes.getSummary で rangeCount < 1 を拒否し、400 エラーを返す", async () => {
     const app = await buildTestApp();
 
     const response = await app.inject({ method: "GET", url: "/api/throughput?periodType=week&rangeCount=0" });
@@ -112,7 +108,7 @@ describe("throughputRoutes (task 7.1)", () => {
 });
 
 describe("throughputRoutes caseId / caseOutlook (velocity-dashboard task 3.4)", () => {
-  it("omits caseOutlook when caseId is not provided", async () => {
+  it("throughputRoutes.getSummary で caseId が提供されない場合、caseOutlook を省略", async () => {
     const app = await buildTestApp();
 
     const response = await app.inject({
@@ -125,7 +121,7 @@ describe("throughputRoutes caseId / caseOutlook (velocity-dashboard task 3.4)", 
     await app.close();
   });
 
-  it("includes caseOutlook when caseId is in the current workspace", async () => {
+  it("throughputRoutes.getSummary で caseId が current workspace 内の場合、caseOutlook を含む", async () => {
     const caseRow = await db.case.create({
       data: {
         name: `route-case-${randomUUID()}`,
@@ -167,7 +163,7 @@ describe("throughputRoutes caseId / caseOutlook (velocity-dashboard task 3.4)", 
     await app.close();
   });
 
-  it("returns 400 when caseId belongs to another workspace", async () => {
+  it("throughputRoutes.getSummary で caseId が別の workspace に属する場合、400 エラーを返す", async () => {
     const otherWorkspace = await db.workspace.create({
       data: { name: `throughput-route-other-${randomUUID()}`, createdByUserId: ownerUserId },
     });
@@ -194,7 +190,7 @@ describe("throughputRoutes caseId / caseOutlook (velocity-dashboard task 3.4)", 
     }
   });
 
-  it("filters completed periods to the given caseId (Requirements 4.1, 4.2)", async () => {
+  it("throughputRoutes.getSummary で given caseId の完了期間をフィルタリング (Requirements 4.1, 4.2)", async () => {
     const caseA = await db.case.create({
       data: {
         name: `route-filter-a-${randomUUID()}`,
@@ -211,8 +207,6 @@ describe("throughputRoutes caseId / caseOutlook (velocity-dashboard task 3.4)", 
     });
     createdCaseIds.push(caseA.id, caseB.id);
 
-    // Most recent fully-elapsed Monday-started week relative to real now
-    // (routes pass Date.now() into the service).
     const today = new Date();
     const midnight = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
     const daysSinceMonday = (midnight.getUTCDay() + 6) % 7;

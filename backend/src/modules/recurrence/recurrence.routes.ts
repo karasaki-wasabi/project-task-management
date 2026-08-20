@@ -1,8 +1,3 @@
-// HTTP routes for RecurrenceService template management (task 2.1,
-// design.md API table). Registered into the shared app elsewhere;
-// standalone Fastify plugin here so this module stays testable in isolation.
-// workspace-resource-scope task 4.1: passes request.currentWorkspaceId into
-// RecurrenceService; clients cannot set workspaceId via body.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";

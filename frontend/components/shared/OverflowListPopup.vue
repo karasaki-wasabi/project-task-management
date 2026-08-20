@@ -1,33 +1,3 @@
-<!--
-  Shared "他N件" overflow list popup (task 7.1, design.md "Frontend /
-  shared > OverflowListPopup", Requirements 2.6, 3.6, research.md
-  ビジュアルデザイン確定 / claude design `詳細ポップアップ.dc.html`).
-
-  Common to both the daily task-marker overflow (Requirement 2.6) and the
-  weekly case-lane overflow (Requirement 3.6) — the caller supplies a
-  homogeneous `items` list already labeled with `kind` so this component
-  stays domain-agnostic; it never fetches or knows about Task/Case shapes
-  itself.
-
-  Chrome (overlay, open/close animation, focus trap, background-click/Esc
-  to close, close button) is delegated to shared/Modal.vue, same as
-  TaskDetailModal/CaseDetailModal, per this repo's convention of not
-  building a second overlay implementation. Modal.vue already emits one
-  `close` for backdrop click, Esc, and the X button, so this component
-  only needs to re-emit it.
-
-  Row styling follows the `divide-y divide-slate-100` + `hover:bg-slate-50`
-  list convention already used by pages/calendar/index.vue's day cells and
-  pages/cases|recurrence|users|throughput index.vue's table rows (thin
-  divider between rows, not per-row bordered cards like
-  CaseDetailModal's related-task list) — the closest existing analogue to
-  a plain clickable row list. The trailing "›" chevron is a static visual
-  affordance (not from an icon set already in use elsewhere) indicating
-  the row opens further detail, matching the claude design mockup.
-
-  Task 7.6 (not this task) is responsible for actually wiring this
-  component into calendar/index.vue and reacting to `select`/`close`.
--->
 <script setup lang="ts">
 export type OverflowListPopupItem = {
   id: string;

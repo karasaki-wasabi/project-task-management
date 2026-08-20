@@ -1,15 +1,3 @@
-// ThroughputService period aggregation (legacy Requirements 6.1-6.4 / 9.5)
-// plus task-status-model 7.1 non-regression for completion stamp ↔ digest
-// counts (Requirements 7.1-7.4). Integration against real MySQL via shared/db.ts.
-//
-// Period boundaries: weeks start Monday UTC, months are calendar months UTC
-// (design.md ThroughputService Implementation Notes). Periods returned by
-// getSummary are past, fully-elapsed periods relative to `now` — the
-// in-progress period containing `now` itself is never included (Requirement
-// 6.2 "過去複数期間分" / 6.3 "過去の消化ペースをもとにした今後の目安").
-//
-// task-status-model design: throughput still counts only by completedAt —
-// cancelled tasks stay out via the stamp rule (no stage-kind filter).
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -30,14 +18,9 @@ let ownerUserId: string;
 
 const taskActor = () => ({ type: "user" as const, userId: ownerUserId });
 
-// 共有 DB 上の他テスト／前回失敗の残留 `completedAt` が絶対件数アサートを壊すため、
-// このスイート専用の歴史日付帯だけを beforeEach で物理削除して隔離する。
 const THROUGHPUT_BAND_START = new Date("2023-11-01T00:00:00.000Z");
 const THROUGHPUT_BAND_END_EXCLUSIVE = new Date("2024-04-01T00:00:00.000Z");
 
-// 2024-01-10 is a Wednesday; the Monday-started week containing it is
-// 2024-01-08..2024-01-14, so the most recent COMPLETED week is
-// 2024-01-01..2024-01-07.
 const NOW_MID_WEEK = new Date("2024-01-10T12:00:00.000Z");
 
 async function completedTask(
@@ -80,7 +63,6 @@ async function cleanup(): Promise<void> {
     );
     createdTaskIds.length = 0;
   }
-  // Cases may still have tasks if a prior assertion skipped cleanup; clear by caseId too.
   if (createdCaseIds.length > 0) {
     await db.$executeRawUnsafe(
       `DELETE FROM activity_logs WHERE task_id IN (SELECT id FROM tasks WHERE case_id IN (${createdCaseIds.map(() => "?").join(",")}))`,
@@ -133,7 +115,6 @@ async function openTask(caseId: string, storyPoints: number | null = null): Prom
   return task.id;
 }
 
-/** Completed for openTaskFilter (stage kind) and for throughput periods (completedAt). */
 async function completedTaskForCase(
   caseId: string,
   completedAt: Date,
@@ -185,7 +166,6 @@ async function createStage(kind: "normal" | "completed" | "cancelled", order: nu
   return stage;
 }
 
-/** Stamp via stage move, then place completedAt inside the isolated historical band. */
 async function completeIntoBand(taskId: string, completedStageId: string, completedAt: Date): Promise<void> {
   const moved = await tasksService.updateDevelopmentStage(
     taskId,
@@ -194,7 +174,6 @@ async function completeIntoBand(taskId: string, completedStageId: string, comple
     taskActor(),
   );
   if (!moved.ok) throw new Error(`move to completed failed: ${JSON.stringify(moved.error)}`);
-  // Stamp→throughput chain must fail here if completed-stage move stops stamping.
   expect(moved.value.completedAt).toBeInstanceOf(Date);
   createdTaskIds.push(taskId);
   await db.task.update({ where: { id: taskId }, data: { completedAt } });
@@ -230,10 +209,9 @@ afterAll(async () => {
 });
 
 describe("throughputService (task 7.1)", () => {
-  it("counts completed tasks within the most recent completed week (Requirement 6.1)", async () => {
+  it("throughputService.getSummary で最新の完了した週内の完了したタスクをカウント (Requirement 6.1)", async () => {
     await completedTask(new Date("2024-01-03T09:00:00.000Z"));
     await completedTask(new Date("2024-01-05T18:00:00.000Z"));
-    // Outside the target week (in the in-progress current week) — must not count.
     await completedTask(new Date("2024-01-09T09:00:00.000Z"));
 
     const summary = await getSummary("week", 1);
@@ -246,7 +224,7 @@ describe("throughputService (task 7.1)", () => {
     await cleanup();
   });
 
-  it("returns periods sorted ascending by periodStart (Requirement 6.2)", async () => {
+  it("throughputService.getSummary で periodStart で昇順にソートされた期間を返す (Requirement 6.2)", async () => {
     const summary = await getSummary("week", 3);
 
     expect(summary.periods).toHaveLength(3);
@@ -255,17 +233,17 @@ describe("throughputService (task 7.1)", () => {
     expect(summary.periods[2].periodStart.toISOString()).toBe("2024-01-01T00:00:00.000Z");
   });
 
-  it("rejects rangeCount < 1", async () => {
+  it("throughputService.getSummary で rangeCount < 1 を拒否する", async () => {
     await expect(getSummary("week", 0)).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("returns forecastNextPeriodCount: null when fewer than 2 periods are available (Requirement 6.4)", async () => {
+  it("throughputService.getSummary で forecastNextPeriodCount: null を返す (Requirement 6.4)", async () => {
     const summary = await getSummary("week", 1);
 
     expect(summary.forecastNextPeriodCount).toBeNull();
   });
 
-  it("returns both count and points forecasts as null when fewer than 2 periods are available (Requirements 6.1–6.3)", async () => {
+  it("throughputService.getSummary で count と points の予測を null で返す (Requirements 6.1–6.3)", async () => {
     await completedTask(new Date("2024-01-03T09:00:00.000Z"), { storyPoints: 8 });
 
     const summary = await getSummary("week", 1);
@@ -277,21 +255,19 @@ describe("throughputService (task 7.1)", () => {
     await cleanup();
   });
 
-  it("forecasts as the simple average of up to the last 4 periods once >= 2 are available (Requirement 6.3)", async () => {
-    await completedTask(new Date("2024-01-03T09:00:00.000Z")); // week of 2024-01-01: 1 task
-    await completedTask(new Date("2023-12-26T09:00:00.000Z")); // week of 2023-12-25: 1 task
-    await completedTask(new Date("2023-12-27T09:00:00.000Z")); // week of 2023-12-25: +1 (total 2)
+  it("throughputService.getSummary で last 4 期間の平均を予測 (Requirement 6.3)", async () => {
+    await completedTask(new Date("2024-01-03T09:00:00.000Z"));
+    await completedTask(new Date("2023-12-26T09:00:00.000Z"));
+    await completedTask(new Date("2023-12-27T09:00:00.000Z"));
 
     const summary = await getSummary("week", 2);
 
-    // periods: [2023-12-25 (count 2), 2024-01-01 (count 1)] -> average 1.5 -> rounds to 2
     expect(summary.forecastNextPeriodCount).toBe(2);
 
     await cleanup();
   });
 
-  it("forecasts next-period points as the simple average of completedPoints over the same window (Requirements 6.2, 6.3)", async () => {
-    // week of 2024-01-01: 5 points; week of 2023-12-25: 3+8=11 points
+  it("throughputService.getSummary で next-period points を completedPoints の平均で予測 (Requirements 6.2, 6.3)", async () => {
     await completedTask(new Date("2024-01-03T09:00:00.000Z"), { storyPoints: 5 });
     await completedTask(new Date("2023-12-26T09:00:00.000Z"), { storyPoints: 3 });
     await completedTask(new Date("2023-12-27T09:00:00.000Z"), { storyPoints: 8 });
@@ -306,38 +282,32 @@ describe("throughputService (task 7.1)", () => {
     await cleanup();
   });
 
-  it("uses only the last 4 periods for the forecast even when more periods are requested", async () => {
-    // 6 consecutive Monday-started weeks ending at the most recent completed
-    // week (2024-01-01) relative to NOW_MID_WEEK. The oldest 2 weeks
-    // (2023-11-27, 2023-12-04) get a distinctly large count that must be
-    // excluded once only the last 4 periods are averaged.
+  it("throughputService.getSummary で last 4 期間のみを予測に使用し、期間が多い場合でも使用 (Requirements 6.2, 6.3)", async () => {
     for (let i = 0; i < 9; i += 1) {
-      await completedTask(new Date("2023-11-27T09:00:00.000Z")); // week 0 (oldest): 9
+      await completedTask(new Date("2023-11-27T09:00:00.000Z"));
     }
-    await completedTask(new Date("2023-12-04T09:00:00.000Z")); // week 1: 1 (also outside the last-4 window)
-    await completedTask(new Date("2023-12-11T09:00:00.000Z")); // week 2: 1
+    await completedTask(new Date("2023-12-04T09:00:00.000Z"));
+    await completedTask(new Date("2023-12-11T09:00:00.000Z"));
     await completedTask(new Date("2023-12-18T09:00:00.000Z"));
-    await completedTask(new Date("2023-12-18T15:00:00.000Z")); // week 3: 2
+    await completedTask(new Date("2023-12-18T15:00:00.000Z"));
     await completedTask(new Date("2023-12-25T09:00:00.000Z"));
     await completedTask(new Date("2023-12-25T12:00:00.000Z"));
-    await completedTask(new Date("2023-12-25T15:00:00.000Z")); // week 4: 3
+    await completedTask(new Date("2023-12-25T15:00:00.000Z"));
     await completedTask(new Date("2024-01-01T09:00:00.000Z"));
     await completedTask(new Date("2024-01-01T12:00:00.000Z"));
     await completedTask(new Date("2024-01-01T15:00:00.000Z"));
-    await completedTask(new Date("2024-01-01T18:00:00.000Z")); // week 5 (most recent): 4
+    await completedTask(new Date("2024-01-01T18:00:00.000Z"));
 
     const summary = await getSummary("week", 6);
 
     expect(summary.periods.map((p) => p.completedCount)).toEqual([9, 1, 1, 2, 3, 4]);
     expect(summary.periods[0].periodStart.toISOString()).toBe("2023-11-27T00:00:00.000Z");
-    // last 4 = [1, 2, 3, 4] -> average 2.5 -> rounds to 3; the oldest weeks'
-    // large counts (9 and 1) must NOT pull this average up.
     expect(summary.forecastNextPeriodCount).toBe(3);
 
     await cleanup();
   });
 
-  it("still counts a task toward its historical period after the task is soft-deleted (Requirement 9.5)", async () => {
+  it("throughputService.getSummary で削除されたタスクも歴史的な期間に含める (Requirement 9.5)", async () => {
     const taskId = await completedTask(new Date("2024-01-03T09:00:00.000Z"));
     const before = await getSummary("week", 1);
     expect(before.periods[0].completedCount).toBe(1);
@@ -350,7 +320,7 @@ describe("throughputService (task 7.1)", () => {
     await cleanup();
   });
 
-  it("keeps soft-deleted completions in both count and points (Requirements 3.2, 3.5)", async () => {
+  it("throughputService.getSummary で削除された完了を count と points に含める (Requirements 3.2, 3.5)", async () => {
     const taskId = await completedTask(new Date("2024-01-03T09:00:00.000Z"), { storyPoints: 7 });
     await db.task.delete({ where: { id: taskId } });
 
@@ -361,7 +331,7 @@ describe("throughputService (task 7.1)", () => {
     await cleanup();
   });
 
-  it("counts parent completions but sums leaf points only — no parent/child double count (Requirements 3.3, 3.5)", async () => {
+  it("throughputService.getSummary で parent の完了をカウントし、leaf の points のみを合計 — parent/child の二重カウントはなし (Requirements 3.3, 3.5)", async () => {
     const parent = await db.task.create({
       data: {
         title: `parent-${randomUUID()}`,
@@ -389,20 +359,18 @@ describe("throughputService (task 7.1)", () => {
 
     const summary = await getSummary("week", 1);
 
-    // parent + leaf + unset leaf
     expect(summary.periods[0].completedCount).toBe(3);
-    // leaf(5) + unset(0); parent excluded from points (has active child)
     expect(summary.periods[0].completedPoints).toBe(5);
 
     await cleanup();
   });
 
-  it("filters periods to the given caseId and leaves workspace-wide as default (Requirements 4.1, 4.2)", async () => {
+  it("throughputService.getSummary で given caseId の期間をフィルタリングし、ワークスペース全体をデフォルトとして残す (Requirements 4.1, 4.2)", async () => {
     const caseA = await createCase();
     const caseB = await createCase();
     await completedTaskForCase(caseA, new Date("2024-01-03T09:00:00.000Z"), 5);
     await completedTaskForCase(caseB, new Date("2024-01-04T09:00:00.000Z"), 10);
-    await completedTask(new Date("2024-01-05T09:00:00.000Z"), { storyPoints: 3 }); // no case
+    await completedTask(new Date("2024-01-05T09:00:00.000Z"), { storyPoints: 3 });
 
     try {
       const filtered = await getSummary("week", 1, NOW_MID_WEEK, caseA);
@@ -419,13 +387,11 @@ describe("throughputService (task 7.1)", () => {
     }
   });
 
-  it("aggregates by calendar month when periodType is 'month'", async () => {
-    // 2024-03-15 is mid-March; the most recent completed month is February
-    // 2024 (a leap year, so Feb has 29 days).
+  it("throughputService.getSummary で periodType が 'month' の場合、カレンダー月で集計 (Requirements 4.1, 4.2)", async () => {
     const nowMidMonth = new Date("2024-03-15T12:00:00.000Z");
     await completedTask(new Date("2024-02-01T00:00:00.000Z"));
     await completedTask(new Date("2024-02-29T23:59:59.000Z"));
-    await completedTask(new Date("2024-03-01T00:00:00.000Z")); // in-progress month, excluded
+    await completedTask(new Date("2024-03-01T00:00:00.000Z"));
 
     const summary = await getSummary("month", 1, nowMidMonth);
 
@@ -435,7 +401,7 @@ describe("throughputService (task 7.1)", () => {
     await cleanup();
   });
 
-  it("excludes completions outside the requested workspace and returns completedPoints (Requirements 3.1, 3.2)", async () => {
+  it("throughputService.getSummary で requested workspace 外の完了を除外し、completedPoints を返す (Requirements 3.1, 3.2)", async () => {
     const otherWorkspace = await db.workspace.create({
       data: { name: `throughput-other-${randomUUID()}`, createdByUserId: ownerUserId },
     });
@@ -458,9 +424,8 @@ describe("throughputService (task 7.1)", () => {
   });
 });
 
-// task-status-model 7.1: completion stamp ↔ digest non-regression (7.1–7.4).
 describe("throughputService completion stamp non-regression (task-status-model 7.1)", () => {
-  it("counts after move into completed and drops after move out (7.1, 7.4)", async () => {
+  it("throughputService.getSummary で completed に移動した後、completedAt が null になるとカウントが減る (7.1, 7.4)", async () => {
     const created = await tasksService.create(
       {
         title: `throughput-stage-roundtrip-${randomUUID()}`,
@@ -497,7 +462,7 @@ describe("throughputService completion stamp non-regression (task-status-model 7
     await cleanup();
   });
 
-  it("does not count a cancelled-stage task because completedAt stays null — no stage-kind filter (7.2)", async () => {
+  it("throughputService.getSummary で cancelled-stage のタスクはカウントされない — stage-kind フィルターなし (7.2)", async () => {
     const created = await tasksService.create(
       {
         title: `throughput-cancelled-${randomUUID()}`,
@@ -523,8 +488,6 @@ describe("throughputService completion stamp non-regression (task-status-model 7
     const afterCancel = await getSummary("week", 1);
     expect(afterCancel.periods[0].completedCount).toBe(0);
 
-    // Prove digest still keys only on completedAt: a cancelled-stage row with a
-    // forced stamp would still count. Adding a stage-kind exclusion would break this.
     await db.task.update({
       where: { id: created.value.id },
       data: { completedAt: new Date("2024-01-03T09:00:00.000Z") },
@@ -535,7 +498,7 @@ describe("throughputService completion stamp non-regression (task-status-model 7
     await cleanup();
   });
 
-  it("does not count by status alone when completedAt is null (7.3)", async () => {
+  it("throughputService.getSummary で completedAt が null の場合、status のみではカウントされない (7.3)", async () => {
     const task = await db.task.create({
       data: {
         title: `throughput-status-only-${randomUUID()}`,
@@ -555,7 +518,7 @@ describe("throughputService completion stamp non-regression (task-status-model 7
 });
 
 describe("throughputService module boundary (module-boundary-cleanup task 4.4 / velocity-dashboard 3.1)", () => {
-  it("delegates via countCompletedWithPoints; no task.closure, throughput.repository, or task Prisma", () => {
+  it("throughputService.getSummary で countCompletedWithPoints を委譲; task.closure, throughput.repository, task Prisma なし", () => {
     const dir = dirname(fileURLToPath(import.meta.url));
     const sourcePath = join(dir, "throughput.service.ts");
     const source = readFileSync(sourcePath, "utf8");
@@ -600,13 +563,13 @@ describe("throughputService module boundary (module-boundary-cleanup task 4.4 / 
   });
 });
 
-describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7.5 / task 6.2)", () => {
-  it("omits caseOutlook when caseId is not provided", async () => {
+describe("throughputService.getSummary で caseOutlook を計算 (velocity-dashboard Requirements 7.1–7.5 / task 6.2)", () => {
+  it("throughputService.getSummary で caseId が提供されない場合、caseOutlook を省略", async () => {
     const summary = await getSummary("week", 1);
     expect(summary).not.toHaveProperty("caseOutlook");
   });
 
-  it("rejects caseId that is not in the current workspace with 400 (validation_error)", async () => {
+  it("throughputService.getSummary で current workspace 外の caseId を拒否し、400 エラーを返す (validation_error)", async () => {
     const otherWorkspace = await db.workspace.create({
       data: { name: `throughput-case-other-${randomUUID()}`, createdByUserId: ownerUserId },
     });
@@ -628,12 +591,9 @@ describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7
     }
   });
 
-  // endDate × forecastNextPeriodPoints matrix (Requirements 7.3–7.5):
-  //   forecast: null (実績不足) | 0 | >0
-  //   endDate:  unset            | set
   it.each([
     {
-      name: "endDate unset × forecast null → remaining/required/margin all null (7.4)",
+      name: "endDate 未設定 × forecast null → remaining/required/margin all null (7.4)",
       endDate: null as Date | null,
       rangeCount: 1,
       seedForecast: "none" as const,
@@ -641,7 +601,7 @@ describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7
       expected: { remainingPeriods: null, requiredPeriods: null, marginPoints: null },
     },
     {
-      name: "endDate unset × forecast 0 → remaining/required/margin all null (7.4)",
+      name: "endDate 未設定 × forecast 0 → remaining/required/margin all null (7.4)",
       endDate: null,
       rangeCount: 2,
       seedForecast: "zero" as const,
@@ -649,7 +609,7 @@ describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7
       expected: { remainingPeriods: null, requiredPeriods: null, marginPoints: null },
     },
     {
-      name: "endDate unset × forecast >0 → remaining/required/margin all null (7.4)",
+      name: "endDate 未設定 × forecast >0 → remaining/required/margin all null (7.4)",
       endDate: null,
       rangeCount: 2,
       seedForecast: "positive" as const,
@@ -657,7 +617,7 @@ describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7
       expected: { remainingPeriods: null, requiredPeriods: null, marginPoints: null },
     },
     {
-      name: "endDate set × forecast null → remaining only; required/margin null (7.5)",
+      name: "endDate 設定 × forecast null → remaining only; required/margin null (7.5)",
       endDate: new Date("2024-01-17T00:00:00.000Z"), // 7 days → 1 week
       rangeCount: 1,
       seedForecast: "none" as const,
@@ -665,7 +625,7 @@ describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7
       expected: { remainingPeriods: 1, requiredPeriods: null, marginPoints: null },
     },
     {
-      name: "endDate set × forecast 0 → remaining only; required/margin null (7.5)",
+      name: "endDate 設定 × forecast 0 → remaining only; required/margin null (7.5)",
       endDate: new Date("2024-01-24T00:00:00.000Z"), // 14 days → 2 weeks
       rangeCount: 2,
       seedForecast: "zero" as const,
@@ -673,12 +633,11 @@ describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7
       expected: { remainingPeriods: 2, requiredPeriods: null, marginPoints: null },
     },
     {
-      name: "endDate set × forecast >0 → remaining/required/margin all computed (7.3)",
-      endDate: new Date("2024-01-24T00:00:00.000Z"), // 14 days → 2; open 10; forecast 8
+      name: "endDate 設定 × forecast >0 → remaining/required/margin all computed (7.3)",
+      endDate: new Date("2024-01-24T00:00:00.000Z"),
       rangeCount: 2,
       seedForecast: "positive" as const,
       expectForecast: 8,
-      // required = ceil(10/8)=2; margin = 8*2 - 10 = 6
       expected: { remainingPeriods: 2, requiredPeriods: 2, marginPoints: 6 },
     },
   ])("$name", async ({ endDate, rangeCount, seedForecast, expectForecast, expected }) => {
@@ -708,7 +667,7 @@ describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7
     }
   });
 
-  it("when endDate is in the past: remainingPeriods is 0; required/margin null if forecast unavailable (7.2)", async () => {
+  it("throughputService.getSummary で endDate が過去の場合、remainingPeriods は 0; required/margin null if forecast unavailable (7.2)", async () => {
     try {
       const caseId = await createCase({ endDate: new Date("2024-01-01T00:00:00.000Z") });
       await openTask(caseId, 7);
@@ -727,7 +686,7 @@ describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7
     }
   });
 
-  it("when endDate is today UTC: remainingPeriods is 0 (7.2)", async () => {
+  it("throughputService.getSummary で endDate が今日の UTC の場合、remainingPeriods は 0 (7.2)", async () => {
     try {
       const caseId = await createCase({ endDate: new Date("2024-01-10T00:00:00.000Z") });
       await openTask(caseId, 1);
@@ -740,10 +699,8 @@ describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7
     }
   });
 
-  it("computes requiredPeriods and marginPoints when endDate set and forecast points > 0 (7.3)", async () => {
+  it("throughputService.getSummary で endDate が設定されて forecast points > 0 の場合、requiredPeriods と marginPoints を計算 (7.3)", async () => {
     try {
-      // remaining: 14 days / 7 = 2; open 10 pts; forecast (5+11)/2 = 8
-      // required = ceil(10/8) = 2; margin = 8*2 - 10 = 6
       const caseId = await createCase({ endDate: new Date("2024-01-24T00:00:00.000Z") });
       await openTask(caseId, 10);
       await completedTaskForCase(caseId, new Date("2024-01-03T09:00:00.000Z"), 5);
@@ -765,9 +722,8 @@ describe("throughputService caseOutlook (velocity-dashboard Requirements 7.1–7
     }
   });
 
-  it("returns remainingPeriods as a real number without flooring (week=7, month=30) (7.2)", async () => {
+  it("throughputService.getSummary で remainingPeriods を実数で返す (week=7, month=30) (7.2)", async () => {
     try {
-      // 3 days after 2024-01-10 → 3/7
       const caseId = await createCase({ endDate: new Date("2024-01-13T00:00:00.000Z") });
       await openTask(caseId, 1);
 

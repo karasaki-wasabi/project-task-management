@@ -1,6 +1,3 @@
-// Workspace domain types (task 1.3, design.md WorkspaceService Service
-// Interface; Requirements 1.1, 6.3, 6.4). Domain Workspace omits deletedAt
-// (Prisma model has it; soft-delete stays at the repository boundary).
 
 export const WORKSPACE_COLORS = [
   "#2563eb",

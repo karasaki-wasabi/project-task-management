@@ -15,6 +15,7 @@
     - `vi.mock("../../../../composables/...")` だけ直して `typeof import("../../composables/...")` が旧パスのままだと、Vitest 実行は通っても `nuxt typecheck` が TS2307 で落とす
   - `@vue/test-utils` の `wrapper.get(...)` は要素が無いと例外を投げる前提の API なので、戻り値に `.exists()` を呼ばない
     - 存在確認が必要なら `find(...).exists()`。取得後に内容だけ見るなら `get(...)` のあとで属性・テキストをアサートする
+  - `describe`/`it`の説明文はコードコメントと同様、日本語で書く（[[tech]] Code Quality参照）
 - E2E
   - `frontend/e2e/*.spec.ts`。Playwright
 - 認証済み E2E fixture
@@ -25,6 +26,17 @@
 ### 重要: VitestとPlaywrightの分離
 
 `frontend/vitest.config.ts` で `test.exclude: ["**/e2e/**"]` を必ず設定すること。設定を忘れると `npm run test`（Vitest）がPlaywrightの `test()` を誤って収集し、ロードエラーで失敗する。新しいE2Eディレクトリを追加する場合は同様の除外設定を確認すること。
+
+### フロントエンドVitestの実行環境（`@nuxt/test-utils`の`nuxt`環境）
+
+`frontend/vitest.config.ts` は `@nuxt/test-utils/config` の `defineVitestConfig` を使い、`environment: "nuxt"` でテストごとに実際のNuxtアプリを起動する（`vitest`本体は4系、`@nuxt/test-utils`は4系が必須）。これにより、`.vue`/`.ts`は本番と同じくNuxtの自動インポート（Vueのリアクティビティ API、`composables/`、`utils/`、`components/`）を前提にでき、テスト側だけ明示的な`import`を書き足す必要はない。[[structure]]の「Import Organization」に自動インポート対象外の例外（npmパッケージ、`components/`配下の素の`.ts`ヘルパー、他`.vue`からの型import）が載っているので、そこは変わらず明示`import`が要る。
+
+- **Nuxt組み込み・仮想マクロのモック**: `useRoute`/`navigateTo`/`definePageMeta`/`useRuntimeConfig`/`$fetch`/`createError`/`showError`/`clearError`/`defineNuxtRouteMiddleware`/`defineNuxtPlugin`/`useState`のようなNuxt本体が注入するものは、コンパイル時に実体へ差し替えられるため`vi.stubGlobal`では横取りできない。`@nuxt/test-utils/runtime`の`mockNuxtImport(name, factory)`を使う（`vi.mock`同様ファイル先頭にホイストされる。参考: `frontend/pages/login.test.ts`）
+  - `factory`内で外側の`const`（`vi.fn()`など）を参照する場合は、`vi.mock`と同じホイスト制約を受けるため`vi.hoisted(() => ({ ... }))`でまとめて宣言する
+  - 自プロジェクトの`composables/`配下の関数（`useApiClient`/`useCurrentWorkspace`/`useAuth`等）も同じ理由で`mockNuxtImport`が必要（`vi.mock("../composables/useXxx", ...)`による相対パス指定のモックは従来通り機能する）
+- **コンポーネントを`mount()`しないテストの環境オーバーライド**: 合成関数・middleware・pluginを直接呼ぶだけでコンポーネントを一切マウントしないテストファイルは、`@nuxt/test-utils`の内部セットアップ（ルーター初期化待ち）がハングすることがある。ファイル先頭に`// @vitest-environment happy-dom`を書いて環境を上書きすること（`mockNuxtImport`自体はコンパイル時マクロなので環境に関わらず機能し続ける）。参考: `frontend/composables/useApiClient.test.ts`、`frontend/middleware/auth.global.test.ts`
+- **happy-domの未実装API**: happy-domは`window.confirm`/`alert`/`prompt`を実装していない。`vi.spyOn(window, "confirm")`は「関数ではない」エラーになるので、`vi.stubGlobal("confirm", vi.fn(...))`で代替する
+- **ビルド先の分離**: `.nuxt/`の所有者不一致（[[local-dev-pitfalls]] 項目12）を避けるため、`environmentOptions.nuxt.overrides.buildDir`で`.nuxt-vitest/`という専用ディレクトリへ逃がしている
 
 ## 共有MySQLとテスト種別ごとの干渉リスク
 

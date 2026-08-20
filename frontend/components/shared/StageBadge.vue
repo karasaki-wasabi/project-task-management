@@ -1,7 +1,5 @@
 <!-- Development stage badge (task-status-model 4.2). -->
 <script setup lang="ts">
-import { computed } from "vue";
-import type { DevelopmentStageKind } from "../../composables/useApiClient";
 import {
   STAGE_BADGE_BASE_CLASSES,
   STAGE_BADGE_VARIANT_CLASSES,

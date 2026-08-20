@@ -1,21 +1,4 @@
-<!--
-  Recurring templates index page (task 7.3, design.md RecurrencePage,
-  Requirements 1.3, 7.1, 7.2, 8.1–8.3). Template-only list with Modal
-  create/detail — holidays UI and fixed_interval controls removed.
-  Visual language follows cases/kanban (primary CTA, ring-1 table, row click).
-
-  Explicit Vue / useApiClient / Modal imports so vitest can mount without
-  Nuxt auto-import runtime (same approach as pages/holidays/index.vue).
--->
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import {
-  useApiClient,
-  type RecurringTaskTemplate,
-} from "../../../../composables/useApiClient";
-import { useCurrentWorkspace } from "../../../../composables/useCurrentWorkspace";
-import RecurrenceFormModal from "../../../../components/recurrence/RecurrenceFormModal.vue";
-import RecurrenceDetailModal from "../../../../components/recurrence/RecurrenceDetailModal.vue";
 import {
   templateOffsetLabel,
   templatePolicyLabel,

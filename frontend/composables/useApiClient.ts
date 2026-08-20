@@ -1,9 +1,3 @@
-// Backend API client (task 1.6 scaffold + task 11.x typed domain methods,
-// design.md "composables/useApiClient.ts — バックエンドAPIクライアント").
-// Per design.md File Structure Plan: "各featureディレクトリはAPIクライアン
-// トの型をそのまま利用し、独自の状態管理ライブラリは追加しない" — this one
-// composable is the sole HTTP boundary; pages call these typed methods
-// directly and hold their own local `ref`/`reactive` state.
 export function joinApiUrl(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
@@ -65,7 +59,7 @@ export interface TaskListFilter {
   excludeClosed?: boolean;
 }
 
-export interface Comment {
+export interface TaskComment {
   id: string;
   taskId: string;
   authorUserId: string;
@@ -84,7 +78,7 @@ export interface TaskTimelineOptions {
   limit?: number;
 }
 
-export interface TaskTimelineComment extends Comment {
+export interface TaskTimelineComment extends TaskComment {
   type: "comment";
   occurredAt: string;
 }
@@ -162,14 +156,12 @@ export interface LoginInput {
 
 export type NonBusinessDayPolicy = "as_is" | "skip" | "next_business_day" | "previous_business_day";
 
-/** design.md CaseRelativeAnchor — template schedule origin relative to a case. */
 export type CaseRelativeAnchor =
   | "case_start"
   | "case_end"
   | "period_month_start"
   | "period_month_end";
 
-/** design.md CaseTemplateApplyOperation — carried on case create/update. */
 export type CaseTemplateApplyOperation =
   | "start_generate"
   | "start_regenerate"
@@ -204,7 +196,6 @@ export interface RegisterTemplateInput {
   nonBusinessDayPolicy: NonBusinessDayPolicy;
 }
 
-/** design.md CaseCreateInput (wire: ISO date strings). */
 export interface CreateCaseInput {
   name: string;
   startDate?: string | null;
@@ -212,7 +203,6 @@ export interface CreateCaseInput {
   templateOperations?: CaseTemplateApplyOperation[];
 }
 
-/** design.md CaseUpdateInput (wire: ISO date strings). */
 export interface UpdateCaseInput {
   name?: string;
   startDate?: string | null;
@@ -259,7 +249,6 @@ export interface DevelopmentStage {
   kind: DevelopmentStageKind;
 }
 
-/** design.md WORKSPACE_COLORS — fixed identifier colors for workspaces. */
 export const WORKSPACE_COLORS = [
   "#2563eb",
   "#0f766e",
@@ -271,7 +260,6 @@ export const WORKSPACE_COLORS = [
 
 export type WorkspaceColor = (typeof WORKSPACE_COLORS)[number];
 
-/** Wire shape (ISO date strings), matching other FE entity types. */
 export interface Workspace {
   id: string;
   name: string;
@@ -334,7 +322,6 @@ export function useApiClient() {
       await csrfInitialization;
     }
 
-    // Workspace header merge mirrors csrf-token: only for scoped paths when selected.
     const workspaceId = isWorkspaceScopedPath(path) ? currentId.value : null;
 
     let headers = options?.headers as Record<string, string> | undefined;
@@ -352,7 +339,6 @@ export function useApiClient() {
         ...(headers ? { headers } : {}),
       });
     } catch (error) {
-      // workspace-url-routing 5.2: membership rejection on scoped APIs → refresh + relocate if lost.
       if (
         fetchStatusCode(error) === 403 &&
         isWorkspaceScopedPath(path) &&
@@ -378,13 +364,11 @@ export function useApiClient() {
   return {
     request,
 
-    // Users (design.md "Backend/users" API Contract)
     listUsers: (q?: string) =>
       q === undefined
         ? request<User[]>("/api/users")
         : request<User[]>("/api/users", { query: { q } }),
 
-    // Auth (user-auth design.md API Contract)
     register: async (input: RegisterInput) => {
       const user = await request<PublicUser>("/api/auth/register", { method: "POST", body: input });
       await csrf();
@@ -399,7 +383,6 @@ export function useApiClient() {
     me: () => request<PublicUser>("/api/auth/me"),
     csrf,
 
-    // Tasks (design.md "Backend/tasks" API Contract)
     listTasks: (filter: TaskListFilter = {}) => {
       const { excludeClosed, ...rest } = filter;
       return request<Task[]>("/api/tasks", {
@@ -428,16 +411,15 @@ export function useApiClient() {
       }),
     deleteTask: (id: string) => request<void>(`/api/tasks/${id}`, { method: "DELETE" }),
     createComment: (taskId: string, body: string) =>
-      request<Comment>(`/api/tasks/${taskId}/comments`, { method: "POST", body: { body } }),
+      request<TaskComment>(`/api/tasks/${taskId}/comments`, { method: "POST", body: { body } }),
     updateComment: (taskId: string, commentId: string, body: string) =>
-      request<Comment>(`/api/tasks/${taskId}/comments/${commentId}`, {
+      request<TaskComment>(`/api/tasks/${taskId}/comments/${commentId}`, {
         method: "PATCH",
         body: { body },
       }),
     deleteComment: (taskId: string, commentId: string) =>
       request<void>(`/api/tasks/${taskId}/comments/${commentId}`, { method: "DELETE" }),
 
-    // Cases (design.md "Backend/cases" API Contract + CaseService templateOperations)
     listCases: () => request<Case[]>("/api/cases"),
     createCase: (input: CreateCaseInput) =>
       request<Case>("/api/cases", { method: "POST", body: input }),
@@ -446,7 +428,6 @@ export function useApiClient() {
     getCaseProgress: (id: string) => request<CaseProgress>(`/api/cases/${id}/progress`),
     deleteCase: (id: string) => request<void>(`/api/cases/${id}`, { method: "DELETE" }),
 
-    // Holidays (design.md "Backend/holidays" API Contract)
     listHolidays: () => request<NonBusinessDay[]>("/api/holidays"),
     registerHoliday: (input: { date: string; label?: string }) =>
       request<NonBusinessDay>("/api/holidays", { method: "POST", body: input }),
@@ -454,7 +435,6 @@ export function useApiClient() {
     syncHolidays: () =>
       request<{ added: NonBusinessDay[]; skippedExisting: number }>("/api/holidays/sync", { method: "POST" }),
 
-    // Recurrence (design.md RecurrenceService API — case-relative only)
     listRecurringTemplates: () => request<RecurringTaskTemplate[]>("/api/recurring-templates"),
     registerRecurringTemplate: (input: RegisterTemplateInput) =>
       request<RecurringTaskTemplate>("/api/recurring-templates", { method: "POST", body: input }),
@@ -463,13 +443,11 @@ export function useApiClient() {
       request<void>(`/api/recurring-templates/${id}/resume`, { method: "POST" }),
     deleteRecurringTemplate: (id: string) => request<void>(`/api/recurring-templates/${id}`, { method: "DELETE" }),
 
-    // Throughput (design.md "Backend/throughput" API Contract)
     getThroughput: (periodType: PeriodType, rangeCount: number, caseId?: string) =>
       request<ThroughputSummary>("/api/throughput", {
         query: { periodType, rangeCount, ...(caseId !== undefined ? { caseId } : {}) },
       }),
 
-    // Development Stages (design.md "Backend/development-stages" API Contract)
     listDevelopmentStages: () => request<DevelopmentStage[]>("/api/development-stages"),
     createDevelopmentStage: (name: string) =>
       request<DevelopmentStage>("/api/development-stages", { method: "POST", body: { name } }),
@@ -480,8 +458,6 @@ export function useApiClient() {
     deleteDevelopmentStage: (id: string) =>
       request<void>(`/api/development-stages/${id}`, { method: "DELETE" }),
 
-
-    // Workspaces (workspace-membership design.md API Contract)
     listWorkspaces: () => request<Workspace[]>("/api/workspaces"),
     createWorkspace: (input: CreateWorkspaceInput) =>
       request<Workspace>("/api/workspaces", { method: "POST", body: input }),
@@ -501,7 +477,6 @@ export function useApiClient() {
         body: { userId },
       }),
 
-    // Client errors (design.md "Backend/client-errors" API Contract)
     reportClientError: (input: { message: string; stack?: string; pageUrl: string; occurredAt: string }) =>
       request<void>("/api/client-errors", { method: "POST", body: input }),
   };

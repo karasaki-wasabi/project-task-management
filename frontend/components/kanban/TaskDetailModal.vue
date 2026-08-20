@@ -1,65 +1,4 @@
-<!--
-  Task detail/edit/delete modal (kanban-ux-redesign spec Requirement 8,
-  "実装後の改訂" 4. — supersedes the task-delivery-management task 3.3
-  action-menu entry point). Opens directly from a TaskCard click/activate;
-  the separate keyboard-only "action menu" dialog that used to live in
-  kanban/index.vue has been removed, and this modal absorbs its
-  keyboard-accessible development-stage move (Requirement 8.8) via the
-  edit-mode developmentStage select.
-
-  Chrome (overlay, open/close animation, focus trap, close button) is
-  delegated to the shared `Modal` component (frontend/components/shared/
-  Modal.vue, Requirement 8.9) — this component only supplies domain
-  content via its title/default/actions slots. Always mounted in
-  kanban/index.vue (not v-if-wrapped by the parent) so `Modal`'s internal
-  `useDialogFocusTrap` reliably fires open/close transitions as `taskId`
-  toggles between a value and null.
-
-  Fetches the full task via GET /api/tasks/:id on open rather than trusting
-  the (possibly stale) row from the board's `tasks` list.
-
-  task-status-model 5.3: view-mode stage uses StageBadge (modal prefix);
-  terminal stages omit StatusBadge; badge order keeps StageBadge fixed when
-  status is hidden (Priority → Stage → Status? → assignee → case).
-
-  Starts in read-only "view" mode (Requirement 8.2) and switches to "edit"
-  only via the explicit edit button (Requirement 8.3); saving returns to
-  view mode rather than closing, so the user can see the result in place
-  (Requirement 8.4). `mode` resets to "view" whenever `taskId` changes.
-
-  The title slot shows the live `title` form ref (not just the loaded
-  task's persisted title) so the header stays in sync while editing,
-  rather than only updating on save.
-
-  Saving splits into two API calls: `PATCH /api/tasks/:id` (title/priority/
-  detail/assignee/caseId/isRequiredForCase/storyPoints — task-delivery-management
-  task 3.3, case-management-ux task 7, velocity-dashboard task 5.2) always runs,
-  and `PATCH /api/tasks/:id/development-stage` only runs when the stage field
-  actually changed (that endpoint is otherwise unrelated to this edit and has
-  its own assignee-preserving semantics we don't want to invoke needlessly).
-  `assigneeUserId` is never passed to the stage-update call — the general
-  update already applied it. `caseId`/`isRequiredForCase` follow the same
-  single-generic-update pattern as the rest of that call (case-management-ux
-  design.md TaskDetailModal — 案件セクション追加 explicitly avoids a
-  separate call here, unlike the stage field).
-
-  velocity-dashboard 5.2 / mock 1h-b: edit form story points — leaf tasks get
-  an editable number input; tasks with children show the server-derived sum
-  as read-only with「子の合計(自動計算)」. Child presence is detected via
-  `listTasks()` (`parentTaskId === taskId`); Task itself has no childCount.
-
-  Delete requires an inline confirm step (`confirmingDelete`) rather than
-  `window.confirm`, consistent with this app avoiding native browser
-  dialogs elsewhere on the kanban page. Errors are always caught and shown
-  via ErrorAlert, per .kiro/steering/error-handling.md.
--->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import type { Case, DevelopmentStage, Priority, Task, User } from "../../composables/useApiClient";
-import { useApiClient } from "../../composables/useApiClient";
-import { isTaskClosed } from "../../composables/useTaskClosure";
-import StageBadge from "../shared/StageBadge.vue";
-
 const props = defineProps<{ taskId: string | null; users: User[]; stages: DevelopmentStage[]; cases: Case[] }>();
 const emit = defineEmits<{
   close: [];
@@ -121,9 +60,6 @@ function parseStoryPointsInput(raw: string): number | null {
   return Number.isInteger(parsed) && parsed >= 1 ? parsed : null;
 }
 
-// Requirement 4.6: clearing the case selection resets the required toggle's
-// local UI state immediately, ahead of save — the backend independently
-// enforces this same rule regardless of what's sent.
 watch(caseId, (value) => {
   if (!value) isRequiredForCase.value = false;
 });
@@ -175,7 +111,6 @@ async function save() {
       assigneeUserId: assigneeUserId.value || null,
       caseId: caseId.value || null,
       isRequiredForCase: isRequiredForCase.value,
-      // Parents reject direct storyPoints writes (Req 1.5 / 2.5); omit the field.
       ...(hasChildren.value ? {} : { storyPoints: parseStoryPointsInput(storyPoints.value) }),
     });
     if (developmentStageId.value !== (task.value.developmentStageId ?? "")) {
@@ -228,7 +163,6 @@ async function confirmDelete() {
     <p v-if="loading" class="text-sm text-slate-500">読み込み中…</p>
 
     <template v-else-if="task">
-      <!-- 閲覧モード(既定): 編集不可の表示のみ(Requirement 8.2) -->
       <div v-if="mode === 'view' || deleted" class="space-y-3">
         <div data-testid="task-detail-badges" class="flex flex-wrap items-center gap-2">
           <PriorityBadge :priority="task.priority" />
@@ -251,7 +185,6 @@ async function confirmDelete() {
         </div>
       </div>
 
-      <!-- 編集モード: 編集ボタン経由でのみ到達(Requirement 8.3)。削除済みは到達不可 -->
       <form v-else id="task-detail-form" class="space-y-3" @submit.prevent="save">
         <div class="flex flex-col gap-1">
           <label class="text-xs font-medium text-slate-500" for="task-detail-title">タイトル</label>
@@ -301,7 +234,6 @@ async function confirmDelete() {
             </select>
           </div>
 
-          <!-- velocity-dashboard 5.2 / mock 1h-b: leaf editable, parent readonly sum -->
           <div v-if="!hasChildren" class="flex flex-col gap-1">
             <label class="text-xs font-medium text-slate-500" for="task-detail-story-points">ストーリーポイント</label>
             <input
@@ -329,9 +261,6 @@ async function confirmDelete() {
           </div>
         </div>
 
-        <!-- 案件セクション: 優先度/開発段階/担当者のグリッドとは視覚的に分離
-             した枠線付きブロック(design.md TaskDetailModal — 案件セクション
-             追加、mockup 1g準拠)。 -->
         <div class="flex flex-col gap-2 rounded-md border border-slate-200 p-3">
           <div class="flex flex-col gap-1">
             <label class="text-xs font-medium text-slate-500" for="task-detail-case">案件</label>

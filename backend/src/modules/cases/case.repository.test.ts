@@ -1,5 +1,3 @@
-// caseRepository workspace scope (workspace-resource-scope task 2.1;
-// Requirements 1.1, 1.2, 3.1, 3.2, 3.3). Integration tests against real MySQL.
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -41,7 +39,7 @@ afterAll(async () => {
 });
 
 describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
-  it("creates a case holding name/startDate/endDate/workspaceId, with isCompleted defaulting to false (Requirement 1.1, 2.2, 2.5)", async () => {
+  it("case を作成し、name/startDate/endDate/workspaceId を保持し、isCompleted を false にデフォルト設定 (Requirement 1.1, 2.2, 2.5)", async () => {
     const startDate = new Date("2034-09-01");
     const endDate = new Date("2034-09-30");
     const created = await caseRepository.create({
@@ -59,7 +57,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("creates a case without a startDate (Requirement 2.2)", async () => {
+  it("startDate がない場合、case を作成 (Requirement 2.2)", async () => {
     const endDate = new Date("2034-10-31");
     const created = await caseRepository.create({
       name: `no-start-${randomUUID()}`,
@@ -73,7 +71,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("finds a case by id within the same workspace", async () => {
+  it("id で同一ワークスペースの case を検索", async () => {
     const created = await caseRepository.create({
       name: `find-${randomUUID()}`,
       endDate: new Date("2034-11-01"),
@@ -86,12 +84,12 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("returns null for a non-existent id", async () => {
+  it("存在しない id の場合、null を返す", async () => {
     const found = await caseRepository.findById(randomUUID(), workspaceA);
     expect(found).toBeNull();
   });
 
-  it("returns null when the case belongs to another workspace (Requirement 3.3)", async () => {
+  it("別のワークスペースの case の場合、null を返す (Requirement 3.3)", async () => {
     const created = await caseRepository.create({
       name: `other-ws-${randomUUID()}`,
       endDate: new Date("2034-11-15"),
@@ -104,7 +102,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("lists only cases in the requested workspace (Requirement 3.1)", async () => {
+  it("リクエストされたワークスペースの case のみを返す (Requirement 3.1)", async () => {
     const inA = await caseRepository.create({
       name: `list-a-${randomUUID()}`,
       endDate: new Date("2034-12-01"),
@@ -123,10 +121,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [inA.id, inB.id]);
   });
 
-  it("list uses the provided client instead of always hitting the default db (task 2.1 fix)", async () => {
-    // Create only inside the TX so an uncommitted row is invisible to the
-    // default `db` connection. If list() ignored `client` and always used
-    // `db`, the in-TX list would also miss the row.
+  it("list で提供された client を使用し、常に default db をヒットしない (task 2.1 fix)", async () => {
     await expect(
       db.$transaction(async (tx) => {
         const created = await caseRepository.create(
@@ -149,7 +144,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
     ).rejects.toThrow("rollback-list-client-proof");
   });
 
-  it("updates each field of a case independently within workspace (Requirement 5.1)", async () => {
+  it("workspace 内で各フィールドを独立して更新 (Requirement 5.1)", async () => {
     const created = await caseRepository.create({
       name: `update-${randomUUID()}`,
       startDate: new Date("2035-01-01"),
@@ -178,7 +173,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("update fails when the case belongs to another workspace (Requirement 3.3)", async () => {
+  it("別のワークスペースの case を更新した場合、失敗 (Requirement 3.3)", async () => {
     const created = await caseRepository.create({
       name: `update-other-${randomUUID()}`,
       endDate: new Date("2035-02-01"),
@@ -192,7 +187,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("deletes a case row within workspace (Requirement 4.1 detach is on the integrity surface)", async () => {
+  it("workspace 内で case 行を削除 (Requirement 4.1 detach is on the integrity surface)", async () => {
     const created = await caseRepository.create({
       name: `delete-${randomUUID()}`,
       endDate: new Date("2035-03-01"),
@@ -207,7 +202,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("delete uses the provided client instead of always hitting the default db", async () => {
+  it("delete で提供された client を使用し、常に default db をヒットしない", async () => {
     await expect(
       db.$transaction(async (tx) => {
         const created = await caseRepository.create(
@@ -229,7 +224,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
     ).rejects.toThrow("rollback-delete-client-proof");
   });
 
-  it("delete fails when the case belongs to another workspace (Requirement 3.3)", async () => {
+  it("別のワークスペースの case を削除した場合、失敗 (Requirement 3.3)", async () => {
     const created = await caseRepository.create({
       name: `delete-other-${randomUUID()}`,
       endDate: new Date("2035-03-15"),
@@ -245,7 +240,7 @@ describe("caseRepository (task 3.1 + workspace-resource-scope 2.1)", () => {
 });
 
 describe("caseRepository module boundary (module-boundary-cleanup task 4.1)", () => {
-  it("does not import task.closure or touch task persistence (Requirements 1.1, 1.3, 1.4, 4.6)", () => {
+  it("task.closure や task persistence をインポートしない (Requirements 1.1, 1.3, 1.4, 4.6)", () => {
     const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "case.repository.ts");
     const source = readFileSync(sourcePath, "utf8");
     const importLines = source

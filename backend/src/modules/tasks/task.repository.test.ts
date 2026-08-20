@@ -1,5 +1,3 @@
-// taskRepository workspace scope (workspace-resource-scope task 3.1;
-// Requirements 1.1, 1.2, 3.1, 3.2, 3.3). Integration tests against real MySQL.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
@@ -38,7 +36,7 @@ afterAll(async () => {
 });
 
 describe("taskRepository (workspace-resource-scope 3.1)", () => {
-  it("creates a task with workspaceId (Requirement 1.1, 1.2)", async () => {
+  it("taskRepository.create で workspaceId を指定したタスクを作成 (Requirement 1.1, 1.2)", async () => {
     const created = await taskRepository.create({
       title: "repo task",
       priority: "high",
@@ -51,7 +49,7 @@ describe("taskRepository (workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [created.id]);
   });
 
-  it("finds a task by id within the same workspace", async () => {
+  it("taskRepository.findById で同じワークスペースのタスクを取得", async () => {
     const created = await taskRepository.create({
       title: "findable",
       priority: "low",
@@ -64,7 +62,7 @@ describe("taskRepository (workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [created.id]);
   });
 
-  it("returns null when the task belongs to another workspace (Requirement 3.3)", async () => {
+  it("taskRepository.findById で別のワークスペースのタスクを取得した場合、null を返す (Requirement 3.3)", async () => {
     const created = await taskRepository.create({
       title: "other ws",
       priority: "low",
@@ -77,7 +75,7 @@ describe("taskRepository (workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [created.id]);
   });
 
-  it("lists only tasks in the requested workspace (Requirement 3.1)", async () => {
+  it("taskRepository.list で要求されたワークスペースのタスクのみを取得 (Requirement 3.1)", async () => {
     const inA = await taskRepository.create({
       title: "in-a",
       priority: "low",
@@ -96,7 +94,7 @@ describe("taskRepository (workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [inA.id, inB.id]);
   });
 
-  it("filters parent candidates by title while excluding the selected subtree and closed tasks", async () => {
+  it("taskRepository.list で選択されたサブツリーとクローズされたタスクを除外しながら親候補をフィルタリング", async () => {
     const closedStage = await db.developmentStage.create({
       data: {
         name: `closed-parent-candidate-${randomUUID()}`,
@@ -163,7 +161,7 @@ describe("taskRepository (workspace-resource-scope 3.1)", () => {
     }
   });
 
-  it("update fails when the task belongs to another workspace (Requirement 3.3)", async () => {
+  it("taskRepository.update で別のワークスペースのタスクを更新した場合、エラーを返す (Requirement 3.3)", async () => {
     const created = await taskRepository.create({
       title: "update other",
       priority: "low",
@@ -177,7 +175,7 @@ describe("taskRepository (workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [created.id]);
   });
 
-  it("delete fails when the task belongs to another workspace (Requirement 3.3)", async () => {
+  it("taskRepository.delete で別のワークスペースのタスクを削除した場合、エラーを返す (Requirement 3.3)", async () => {
     const created = await taskRepository.create({
       title: "delete other",
       priority: "low",
@@ -193,7 +191,7 @@ describe("taskRepository (workspace-resource-scope 3.1)", () => {
 });
 
 describe("taskRepository.countIncompleteChildren (task-status-model 3.1)", () => {
-  it("counts a ready_for_handoff child as open when its stage is not closed (5.4)", async () => {
+  it("taskRepository.countIncompleteChildren で ready_for_handoff の子タスクを開としてカウント (5.4)", async () => {
     const parent = await taskRepository.create({
       title: "count parent status",
       priority: "medium",
@@ -214,7 +212,7 @@ describe("taskRepository.countIncompleteChildren (task-status-model 3.1)", () =>
     await hardDelete("tasks", [child.id, parent.id]);
   });
 
-  it("does not count a cancelled-stage child as incomplete (5.2)", async () => {
+  it("taskRepository.countIncompleteChildren でキャンセルされたステージの子タスクを不完全としてカウントしない (5.2)", async () => {
     const parent = await taskRepository.create({
       title: "count parent cancelled",
       priority: "medium",
@@ -248,7 +246,7 @@ describe("taskRepository.countIncompleteChildren (task-status-model 3.1)", () =>
 });
 
 describe("taskRepository.hasChildren / recalculateAncestorStoryPoints (velocity-dashboard 2.2)", () => {
-  it("hasChildren is true for live children and false when only soft-deleted children remain", async () => {
+  it("taskRepository.hasChildren で生きている子タスクは true を返し、削除された子タスクのみが残っている場合は false を返す", async () => {
     const parent = await taskRepository.create({
       title: "has-children parent",
       priority: "medium",
@@ -273,7 +271,7 @@ describe("taskRepository.hasChildren / recalculateAncestorStoryPoints (velocity-
     }
   });
 
-  it("recalculates storyPoints up a 3+ level tree and sets null when children are gone", async () => {
+  it("taskRepository.recalculateAncestorStoryPoints で3階層以上のツリーの storyPoints を再計算し、子タスクがなくなった場合は null を設定", async () => {
     const root = await taskRepository.create({
       title: "sp root",
       priority: "medium",
@@ -331,7 +329,7 @@ describe("taskRepository.hasChildren / recalculateAncestorStoryPoints (velocity-
     }
   });
 
-  it("sets parent storyPoints to 0 when children exist but all are unset", async () => {
+  it("taskRepository.recalculateAncestorStoryPoints で子タスクが存在しているがすべて null の場合、親タスクの storyPoints を 0 に設定", async () => {
     const parent = await taskRepository.create({
       title: "unset-children parent",
       priority: "medium",

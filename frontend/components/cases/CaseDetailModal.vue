@@ -1,28 +1,4 @@
-<!--
-  Case detail/edit/delete popup (task 6.3 + task-status-model 5.6,
-  design.md System Flow「案件編集保存(確認付き)」 / CaseDetailModal;
-  Requirements 4.1–4.13, 6.6, 8.3). Standalone — parent opens by setting
-  `caseId`.
-
-  Chrome (overlay, open/close animation, focus trap, close button) is
-  delegated to shared/Modal.vue. Fetch-on-open: listCases + find(id),
-  getCaseProgress, listTasks({ caseId }), listDevelopmentStages in parallel
-  (stages are needed for isTaskCompleted marks; Task API has no kind).
-
-  Edit save flow:
-    1. validate
-    2. resolveEditApplyCandidates(old, new)
-    3. no candidates → PATCH with templateOperations omitted
-    4. has candidates → CaseTemplateApplyConfirm B→C; cancel = no API;
-     approve → PATCH with selected templateOperations (may be [])
-
-  Explicit Vue / useApiClient imports so vitest can mount without Nuxt
-  auto-import runtime (same approach as CaseFormModal.vue).
--->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useApiClient } from "../../composables/useApiClient";
-import type { DevelopmentStage } from "../../composables/useApiClient";
 import type { CaseTemplateApplyOperation } from "./caseTemplateApplyCandidates";
 import CaseTemplateApplyConfirm from "./CaseTemplateApplyConfirm.vue";
 import {
@@ -226,12 +202,10 @@ async function save() {
 }
 
 function onConfirmClose() {
-  // Req 4.4: abort keeps editing state; no API call.
   confirmOpen.value = false;
 }
 
 async function onConfirmApprove(operations: CaseTemplateApplyOperation[] | null) {
-  // edit-apply always returns selected subset (may be []); null is create-missing only.
   confirmOpen.value = false;
   await performSave(operations ?? []);
 }

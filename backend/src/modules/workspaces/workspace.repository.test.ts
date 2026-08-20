@@ -1,6 +1,3 @@
-// RED: workspaceRepository does not exist yet (task 2.1, design.md
-// "Backend/workspaces" workspace.repository; Requirements 1.1, 2.4, 3.1,
-// 6.1, 6.3, 7.1, 7.4). Integration test against real MySQL via shared/db.ts.
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
@@ -18,7 +15,7 @@ afterAll(async () => {
 });
 
 describe("workspaceRepository (task 2.1)", () => {
-  it("creates a workspace with name, default color, and createdByUserId (Requirement 1.1)", async () => {
+  it("workspaceRepository.createWorkspace で name, default color, and createdByUserId を持つ workspace を作成 (Requirement 1.1)", async () => {
     const user = await db.user.create({ data: createUserData(`ws-create-${randomUUID()}`) });
     const created = await workspaceRepository.createWorkspace({
       name: `ws-${randomUUID()}`,
@@ -33,7 +30,7 @@ describe("workspaceRepository (task 2.1)", () => {
     await hardDelete("users", [user.id]);
   });
 
-  it("creates a workspace with an explicit color", async () => {
+  it("workspaceRepository.createWorkspace で explicit color を持つ workspace を作成", async () => {
     const user = await db.user.create({ data: createUserData(`ws-color-${randomUUID()}`) });
     const created = await workspaceRepository.createWorkspace({
       name: `ws-color-${randomUUID()}`,
@@ -47,7 +44,7 @@ describe("workspaceRepository (task 2.1)", () => {
     await hardDelete("users", [user.id]);
   });
 
-  it("creates a membership that make isMember return true (Requirement 1.1, 2.4)", async () => {
+  it("workspaceRepository.createMember で isMember が true を返すメンバーシップを作成 (Requirement 1.1, 2.4)", async () => {
     const user = await db.user.create({ data: createUserData(`ws-member-${randomUUID()}`) });
     const workspace = await workspaceRepository.createWorkspace({
       name: `ws-member-${randomUUID()}`,
@@ -69,7 +66,7 @@ describe("workspaceRepository (task 2.1)", () => {
     await hardDelete("users", [user.id]);
   });
 
-  it("accepts an optional DbClient for createWorkspace and createMember (same-TX helper)", async () => {
+  it("workspaceRepository.createWorkspace と workspaceRepository.createMember で optional DbClient を受け入れる (same-TX helper)", async () => {
     const user = await db.user.create({ data: createUserData(`ws-tx-${randomUUID()}`) });
 
     const { workspace, member } = await db.$transaction(async (tx) => {
@@ -91,7 +88,7 @@ describe("workspaceRepository (task 2.1)", () => {
     await hardDelete("users", [user.id]);
   });
 
-  it("finds a workspace by id and returns null for a missing id", async () => {
+  it("workspaceRepository.findById で id を持つ workspace を検索し、missing id の場合 null を返す", async () => {
     const user = await db.user.create({ data: createUserData(`ws-find-${randomUUID()}`) });
     const created = await workspaceRepository.createWorkspace({
       name: `ws-find-${randomUUID()}`,
@@ -106,7 +103,7 @@ describe("workspaceRepository (task 2.1)", () => {
     await hardDelete("users", [user.id]);
   });
 
-  it("updates name and color independently (Requirement 6.1, 6.3)", async () => {
+  it("workspaceRepository.update で name と color を独立して更新 (Requirement 6.1, 6.3)", async () => {
     const user = await db.user.create({ data: createUserData(`ws-update-${randomUUID()}`) });
     const created = await workspaceRepository.createWorkspace({
       name: `ws-update-${randomUUID()}`,
@@ -125,7 +122,7 @@ describe("workspaceRepository (task 2.1)", () => {
     await hardDelete("users", [user.id]);
   });
 
-  it("lists only workspaces the user belongs to (Requirement 2.4)", async () => {
+  it("workspaceRepository.listByUserId で user が所属する workspace のみを返す (Requirement 2.4)", async () => {
     const owner = await db.user.create({ data: createUserData(`ws-list-owner-${randomUUID()}`) });
     const outsider = await db.user.create({ data: createUserData(`ws-list-out-${randomUUID()}`) });
 
@@ -156,7 +153,7 @@ describe("workspaceRepository (task 2.1)", () => {
     await hardDelete("users", [owner.id, outsider.id]);
   });
 
-  it("lists members with user name and email (Requirement 3.1)", async () => {
+  it("workspaceRepository.listMembers で user name と email を持つメンバーを返す (Requirement 3.1)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-ml-creator-${randomUUID()}`) });
     const teammate = await db.user.create({ data: createUserData(`ws-ml-mate-${randomUUID()}`) });
     const workspace = await workspaceRepository.createWorkspace({
@@ -182,7 +179,7 @@ describe("workspaceRepository (task 2.1)", () => {
     await hardDelete("users", [creator.id, teammate.id]);
   });
 
-  it("deletes members then the workspace; lists no longer include them (Requirement 7.1, 7.4)", async () => {
+  it("workspaceRepository.delete でメンバーを削除し、workspace を削除; 削除後のリストには含まれない (Requirement 7.1, 7.4)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-del-${randomUUID()}`) });
     const teammate = await db.user.create({ data: createUserData(`ws-del-mate-${randomUUID()}`) });
     const workspace = await workspaceRepository.createWorkspace({

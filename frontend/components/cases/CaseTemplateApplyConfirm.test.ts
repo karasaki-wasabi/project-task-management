@@ -1,6 +1,3 @@
-// Component tests for CaseTemplateApplyConfirm (task 6.1 remediation).
-// Mounts the SFC with @vue/test-utils so screen A/B/C switching and
-// approve/close emits are observable (Requirements 3.1/3.5, 4.1–4.4).
 import { describe, expect, it } from "vitest";
 import { defineComponent } from "vue";
 import { mount, flushPromises } from "@vue/test-utils";
@@ -8,7 +5,6 @@ import CaseTemplateApplyConfirm from "./CaseTemplateApplyConfirm.vue";
 import type { CaseTemplateApplyOperation } from "./caseTemplateApplyCandidates";
 import type { ConfirmMode, MissingDates } from "./CaseTemplateApplyConfirm.helpers";
 
-/** Slot-passthrough Modal stub — keeps close affordance for abort path. */
 const ModalStub = defineComponent({
   name: "Modal",
   props: {
@@ -51,8 +47,8 @@ function buttonByText(wrapper: ReturnType<typeof mountConfirm>, text: string) {
   return match;
 }
 
-describe("CaseTemplateApplyConfirm (mounted)", () => {
-  it("screen A: shows create title and approve(null) on 作成する", async () => {
+describe("CaseTemplateApplyConfirm マウント", () => {
+  it("画面A: 作成タイトルを表示し、作成するで approve(null) を承認する", async () => {
     const wrapper = mountConfirm({
       mode: "create-missing",
       missingDates: "both",
@@ -71,7 +67,7 @@ describe("CaseTemplateApplyConfirm (mounted)", () => {
     expect(wrapper.emitted("close")).toBeUndefined();
   });
 
-  it("screen B → C → approve selected subset", async () => {
+  it("画面B → C → 選択されたサブセットを承認する", async () => {
     const wrapper = mountConfirm({
       mode: "edit-apply",
       candidates: ["start_generate", "end_delete"],
@@ -85,7 +81,6 @@ describe("CaseTemplateApplyConfirm (mounted)", () => {
       "テンプレートタスクへの反映",
     );
 
-    // Uncheck end_delete via its checkbox
     const endDeleteCheckbox = wrapper.get(
       'input[aria-label="案件終了日起点のタスクを削除"]',
     );
@@ -104,7 +99,7 @@ describe("CaseTemplateApplyConfirm (mounted)", () => {
     expect(wrapper.emitted("approve")).toEqual([[["start_generate"]]]);
   });
 
-  it("screen B shows strikethrough only for dates that changed", () => {
+  it("画面B: 変更された日付にのみ取り消し線を表示する", () => {
     const wrapper = mountConfirm({
       mode: "edit-apply",
       candidates: ["start_regenerate", "month_regenerate"],
@@ -126,7 +121,7 @@ describe("CaseTemplateApplyConfirm (mounted)", () => {
     expect(endRow.html()).not.toContain("line-through");
   });
 
-  it("selected candidate rows use border highlight (not overflow-clipped ring)", () => {
+  it("選択された候補行に境界線のハイライトを使用する（オーバーフロークリップされないリングではない）", () => {
     const wrapper = mountConfirm({
       mode: "edit-apply",
       candidates: ["start_regenerate"],
@@ -141,7 +136,7 @@ describe("CaseTemplateApplyConfirm (mounted)", () => {
     expect(selected.classes().join(" ")).not.toMatch(/ring-2/);
   });
 
-  it("screen B → C with empty selection → approve([])", async () => {
+  it("画面B → C → 空の選択で承認([])", async () => {
     const wrapper = mountConfirm({
       mode: "edit-apply",
       candidates: ["start_regenerate"],
@@ -165,7 +160,7 @@ describe("CaseTemplateApplyConfirm (mounted)", () => {
     expect(wrapper.emitted("approve")).toEqual([[[]]]);
   });
 
-  it("cancel on screen B emits close (abort)", async () => {
+  it("画面Bでキャンセルすると close を発行する（abort）", async () => {
     const wrapper = mountConfirm({
       mode: "edit-apply",
       candidates: ["month_generate"],
@@ -182,7 +177,7 @@ describe("CaseTemplateApplyConfirm (mounted)", () => {
     expect(wrapper.emitted("approve")).toBeUndefined();
   });
 
-  it("Modal close (×) emits close (abort)", async () => {
+  it("モーダル閉じる（×）で close を発行する（abort）", async () => {
     const wrapper = mountConfirm({
       mode: "create-missing",
       missingDates: "start",

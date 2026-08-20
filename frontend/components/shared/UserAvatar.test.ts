@@ -7,7 +7,7 @@ import { generateUserAvatarPattern } from "./UserAvatar.helpers";
 const DUMMY_USER_ID = "user-dummy-1";
 
 describe("UserAvatar (user-avatar 2.1)", () => {
-  it("sets role, aria-label, and title when name is provided", () => {
+  it("name が提供された場合、role, aria-label, および title を設定する", () => {
     const wrapper = mount(UserAvatar, {
       props: { userId: DUMMY_USER_ID, name: "山田 太郎" },
     });
@@ -18,7 +18,7 @@ describe("UserAvatar (user-avatar 2.1)", () => {
     expect(wrapper.attributes("aria-hidden")).toBeUndefined();
   });
 
-  it("is decorative when name is omitted", () => {
+  it("name が省略された場合、decorative として扱う", () => {
     const wrapper = mount(UserAvatar, {
       props: { userId: DUMMY_USER_ID },
     });
@@ -30,7 +30,7 @@ describe("UserAvatar (user-avatar 2.1)", () => {
   });
 
   it.each([20, 24, 28, 32, 64] as const)(
-    "applies %spx width/height and size×0.1875 border-radius",
+    "%spx の幅/高さと size×0.1875 の角丸を適用する",
     (size) => {
       const wrapper = mount(UserAvatar, {
         props: { userId: DUMMY_USER_ID, size },
@@ -43,7 +43,7 @@ describe("UserAvatar (user-avatar 2.1)", () => {
     },
   );
 
-  it("defaults size to 24", () => {
+  it("size をデフォルトで 24 に設定する", () => {
     const wrapper = mount(UserAvatar, {
       props: { userId: DUMMY_USER_ID },
     });
@@ -54,7 +54,7 @@ describe("UserAvatar (user-avatar 2.1)", () => {
     expect(svg.element.style.borderRadius).toBe("4.5px");
   });
 
-  it("renders the pattern as an SVG background plus painted cells", () => {
+  it("パターンをSVG 背景と塗り済みセルとしてレンダリングする", () => {
     const expected = generateUserAvatarPattern(DUMMY_USER_ID);
     expect(expected.cells.length).toBeGreaterThan(0);
     const pad = 0.35;

@@ -22,7 +22,7 @@ afterAll(async () => {
 });
 
 describe("authService", () => {
-  it("normalizes email, hashes password, and returns a PublicUser on registration", async () => {
+  it("メールアドレスを正規化し、パスワードをハッシュ化し、登録時に PublicUser を返す", async () => {
     const data = createUserData(`表示名-${randomUUID()}`);
     const password = "password-123";
 
@@ -46,7 +46,7 @@ describe("authService", () => {
     expect(await verify(persisted.passwordHash, password)).toBe(true);
   });
 
-  it("rejects a duplicate normalized email", async () => {
+  it("正規化されたメールアドレスの重複を拒否", async () => {
     const data = createUserData(`重複-${randomUUID()}`);
     const password = "password-123";
     const registered = await authService.register({ ...data, password });
@@ -64,7 +64,7 @@ describe("authService", () => {
     });
   });
 
-  it("rejects an invalid email address", async () => {
+  it("不正なメールアドレスを拒否", async () => {
     const data = createUserData(`不正メール-${randomUUID()}`);
 
     await expect(
@@ -74,7 +74,7 @@ describe("authService", () => {
     });
   });
 
-  it("rejects passwords shorter than eight characters", async () => {
+  it("8文字未満のパスワードを拒否", async () => {
     const data = createUserData(`短いパスワード-${randomUUID()}`);
 
     await expect(authService.register({ ...data, password: "short" })).rejects.toMatchObject({
@@ -82,7 +82,7 @@ describe("authService", () => {
     });
   });
 
-  it("rejects blank display names", async () => {
+  it("空白の表示名を拒否", async () => {
     const data = createUserData(`空白名-${randomUUID()}`);
 
     await expect(authService.register({ ...data, name: " \t " })).rejects.toMatchObject({
@@ -90,7 +90,7 @@ describe("authService", () => {
     });
   });
 
-  it("authenticates a registered user and never exposes passwordHash", async () => {
+  it("登録されたユーザーを認証し、passwordHash を公開しない", async () => {
     const data = createUserData(`ログイン-${randomUUID()}`);
     const password = "password-123";
     const registered = await authService.register({ ...data, password });
@@ -101,7 +101,7 @@ describe("authService", () => {
     ).resolves.toEqual(registered);
   });
 
-  it("returns the same fixed error for unknown email and invalid password", async () => {
+  it("未知のメールアドレスまたは不正なパスワードの場合、同じエラーを返す", async () => {
     const data = createUserData(`失敗-${randomUUID()}`);
     const password = "password-123";
     const registered = await authService.register({ ...data, password });
@@ -126,7 +126,7 @@ describe("authService", () => {
     });
   });
 
-  it("returns a public user by id or null when absent", async () => {
+  it("id または null の場合、公開ユーザーを返す", async () => {
     const data = createUserData(`取得-${randomUUID()}`);
     const registered = await authService.register({ ...data, password: "password-123" });
     createdUserIds.push(registered.id);

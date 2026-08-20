@@ -1,13 +1,4 @@
-<!--
-  Landing `/` workspace picker (workspace-url-routing task 3.1).
-  Lists belonging workspaces (click → dashboard) and opens WorkspaceCreateModal.
-  Reuses empty-state / primary-button styling from pages/workspaces (Req 2.2, 8.1).
--->
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
-import { workspacePath } from "../../utils/workspacePath";
-
 const { workspaces } = useCurrentWorkspace();
 const createOpen = ref(false);
 

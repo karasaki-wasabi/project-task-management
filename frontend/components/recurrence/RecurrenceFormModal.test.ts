@@ -1,6 +1,3 @@
-// Mount tests for RecurrenceFormModal (task 7.1):
-// create-only register with 4 anchors, non-neg offset, no fixed_interval fields.
-// Requirements 1.3, 2.1, 2.2, 2.4, 2.5, 8.2, 8.3.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -86,7 +83,7 @@ describe("RecurrenceFormModal (task 7.1)", () => {
     vi.clearAllMocks();
   });
 
-  it("exposes case-relative fields and no fixed-interval controls (Req 1.3, 2.1, 2.2, 2.4, 2.5)", async () => {
+  it("案件連動フィールドを公開し、固定間隔のコントロールを表示しない（Req 1.3, 2.1, 2.2, 2.4, 2.5）", async () => {
     const wrapper = mountForm();
     await flushPromises();
 
@@ -109,7 +106,7 @@ describe("RecurrenceFormModal (task 7.1)", () => {
     expect(wrapper.find('input[type="number"]').attributes("min")).toBe("0");
   });
 
-  it("registers via registerRecurringTemplate and emits created + close (Req 2.1, 2.2, 2.4, 2.5)", async () => {
+  it("registerRecurringTemplate を介して登録し、created と close を発行する（Req 2.1, 2.2, 2.4, 2.5）", async () => {
     const created = makeTemplate({ id: "rt-new", title: "キックオフ準備" });
     registerRecurringTemplate.mockResolvedValue(created);
     const wrapper = mountForm();
@@ -139,7 +136,7 @@ describe("RecurrenceFormModal (task 7.1)", () => {
     expect(wrapper.emitted("close")).toBeTruthy();
   });
 
-  it("rejects negative offset without calling the API (Req 2.2)", async () => {
+  it("負のオフセットを拒否し、API を呼び出さない（Req 2.2）", async () => {
     const wrapper = mountForm();
     await flushPromises();
 

@@ -1,5 +1,4 @@
-// Mount tests for KanbanPage assignee candidates (workspace-resource-scope task 8.1).
-// Requirement 4.1: reassignment candidates come from current workspace members.
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -84,8 +83,6 @@ const UnassignedBacklogPanelStub = defineComponent({
   },
   emits: ["end", "card-activate"],
   setup(_, { expose }) {
-    // Matches UnassignedBacklogPanel's defineExpose({ resync }) so
-    // revertOptimisticMove() can call it after a rejected stage drop.
     expose({ resync: () => undefined });
   },
   template: `<div data-testid="unassigned-backlog" />`,
@@ -210,7 +207,7 @@ function mountPage() {
   });
 }
 
-describe("KanbanPage assignee candidates (task 8.1, Req 4.1)", () => {
+describe("担当者候補 (task 8.1, Req 4.1)", () => {
   beforeEach(() => {
     listTasks.mockReset();
     listUsers.mockReset();
@@ -237,7 +234,7 @@ describe("KanbanPage assignee candidates (task 8.1, Req 4.1)", () => {
     vi.clearAllMocks();
   });
 
-  it("loads reassignment candidates via listWorkspaceMembers(currentId), not listUsers", async () => {
+  it("担当者候補を読み込み、listWorkspaceMembers(currentId)を使用", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -250,11 +247,10 @@ describe("KanbanPage assignee candidates (task 8.1, Req 4.1)", () => {
     expect(wrapper.text()).not.toContain("外部ユーザー");
   });
 
-  it("assignee-picker options use workspace member userIds for pending reassignment", async () => {
+  it("担当者選択ピッカーのオプションに、ワークスペースメンバーのuserIdsを使用", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
-    // Drop an unassigned task onto a stage column → opens assignee-picker.
     const vm = wrapper.vm as unknown as {
       onDropOnStage: (stageId: string, taskId: string) => Promise<void>;
     };
@@ -276,7 +272,7 @@ describe("KanbanPage assignee candidates (task 8.1, Req 4.1)", () => {
     expect(updateTaskDevelopmentStage).toHaveBeenCalledWith("t1", "s1", "member-2");
   });
 
-  it("does not fetch members when current workspace is unset", async () => {
+  it("current workspaceが未設定の場合、メンバーを読み込まない", async () => {
     currentId.value = null;
     const wrapper = mountPage();
     await flushPromises();
@@ -287,7 +283,7 @@ describe("KanbanPage assignee candidates (task 8.1, Req 4.1)", () => {
   });
 });
 
-describe("KanbanPage stage-drop rejection recovery (task 6.1, Req 5.1)", () => {
+describe("ステージドロップの拒否復旧 (task 6.1, Req 5.1)", () => {
   const normalStage = () => makeStage({ id: "s-normal", name: "実装", order: 1, kind: "normal" });
   const completedStage = () =>
     makeStage({ id: "s-done", name: "完了", order: 2, kind: "completed" });
@@ -322,7 +318,7 @@ describe("KanbanPage stage-drop rejection recovery (task 6.1, Req 5.1)", () => {
     vi.useRealTimers();
   });
 
-  it("reverts optimistic move and keeps ErrorAlert when incomplete_children rejects a drop onto completed", async () => {
+  it("楽観的な移動を元に戻し、ErrorAlertを保持", async () => {
     const rejectionMessage = "Task has incomplete children: parent-1";
     updateTaskDevelopmentStage.mockRejectedValue(new Error(rejectionMessage));
 
@@ -335,7 +331,6 @@ describe("KanbanPage stage-drop rejection recovery (task 6.1, Req 5.1)", () => {
       boardRenderEpoch: number;
     };
 
-    // Simulate Sortable's optimistic DOM/model move into the completed column.
     const parent = parentTask();
     vm.columnTasksByStageId["s-normal"] = [];
     vm.columnTasksByStageId["s-done"] = [parent];
@@ -353,14 +348,13 @@ describe("KanbanPage stage-drop rejection recovery (task 6.1, Req 5.1)", () => {
     expect(alert.exists()).toBe(true);
     expect(alert.text()).toBe(rejectionMessage);
 
-    // Rejection reason must not auto-clear (unlike success toasts).
     vi.useFakeTimers();
     await vi.advanceTimersByTimeAsync(10_000);
     expect(wrapper.find('[data-testid="error-alert"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="error-alert"]').text()).toBe(rejectionMessage);
   });
 
-  it("auto-clears the success moveStatusMessage after a few seconds", async () => {
+  it("成功メッセージを数秒後に自動クリア", async () => {
     updateTaskDevelopmentStage.mockResolvedValue(
       makeTask({
         id: "parent-1",

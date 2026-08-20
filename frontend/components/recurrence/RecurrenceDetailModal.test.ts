@@ -1,6 +1,3 @@
-// Mount tests for RecurrenceDetailModal (task 7.1):
-// view + stop/resume toggle + inline delete confirm (no window.confirm).
-// Requirements 2.6, 2.7, 2.8, 8.2, 8.3.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -102,17 +99,21 @@ describe("RecurrenceDetailModal (task 7.1)", () => {
     stopRecurringTemplate.mockResolvedValue(undefined);
     resumeRecurringTemplate.mockResolvedValue(undefined);
     deleteRecurringTemplate.mockResolvedValue(undefined);
-    vi.spyOn(window, "confirm").mockImplementation(() => {
-      throw new Error("window.confirm must not be used");
-    });
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => {
+        throw new Error("window.confirm must not be used");
+      }),
+    );
   });
 
   afterEach(() => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
-  it("loads template and shows view fields without fixed-interval controls", async () => {
+  it("テンプレートを読み込み、固定間隔のコントロールなしで表示フィールドを表示する", async () => {
     const wrapper = mountDetail();
     await flushPromises();
 
@@ -126,7 +127,7 @@ describe("RecurrenceDetailModal (task 7.1)", () => {
     expect(wrapper.html()).not.toMatch(/fixed_interval|intervalUnit|今すぐ生成|固定間隔/);
   });
 
-  it("stops an active template via toggle (Req 2.6)", async () => {
+  it("有効なテンプレートをトグルで停止する（Req 2.6）", async () => {
     const wrapper = mountDetail();
     await flushPromises();
 
@@ -143,7 +144,7 @@ describe("RecurrenceDetailModal (task 7.1)", () => {
     expect(wrapper.emitted("updated")?.[0]?.[0]).toMatchObject({ id: "rt1", isActive: false });
   });
 
-  it("resumes a stopped template via toggle (Req 2.7)", async () => {
+  it("停止したテンプレートをトグルで再開する（Req 2.7）", async () => {
     listRecurringTemplates.mockResolvedValue([makeTemplate({ isActive: false })]);
     const wrapper = mountDetail();
     await flushPromises();
@@ -159,7 +160,7 @@ describe("RecurrenceDetailModal (task 7.1)", () => {
     expect(wrapper.emitted("updated")?.[0]?.[0]).toMatchObject({ id: "rt1", isActive: true });
   });
 
-  it("deletes with inline confirm step, not window.confirm (Req 2.8)", async () => {
+  it("インライン確認ステップで削除する（window.confirm を使用しない）（Req 2.8）", async () => {
     const wrapper = mountDetail();
     await flushPromises();
 

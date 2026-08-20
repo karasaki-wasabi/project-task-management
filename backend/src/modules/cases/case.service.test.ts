@@ -1,5 +1,3 @@
-// caseService workspace scope (workspace-resource-scope task 2.1;
-// Requirements 1.1, 1.2, 3.1, 3.2, 3.3) plus prior CaseService coverage.
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -14,7 +12,6 @@ import { createUserData } from "../../test/user.fixture.js";
 import { recurrenceService } from "../recurrence/recurrence.service.js";
 import { caseService } from "./case.service.js";
 
-/** Isolate non-apply tests from active templates in the shared DB (omit = full apply). */
 const noApply = { templateOperations: [] as const };
 
 function asVerified(id: string): VerifiedWorkspaceId {
@@ -26,7 +23,6 @@ async function hardDelete(table: string, ids: string[]): Promise<void> {
   await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
-/** Physical delete of all tasks for a case (active + soft-deleted) so RESTRICT FK allows case cleanup. */
 async function hardDeleteTasksForCase(caseId: string): Promise<void> {
   await db.$executeRawUnsafe(`DELETE FROM tasks WHERE case_id = ?`, caseId);
 }
@@ -84,7 +80,7 @@ afterAll(async () => {
 });
 
 describe("caseService.create (task 3.2 + workspace-resource-scope 2.1)", () => {
-  it("creates a case holding name/startDate/endDate in the given workspace (Requirement 1.1, 2.2, 2.3)", async () => {
+  it("指定されたワークスペースに name/startDate/endDate を持つ case を作成 (Requirement 1.1, 2.2, 2.3)", async () => {
     const startDate = new Date("2036-09-01");
     const endDate = new Date("2036-09-30");
     const created = await caseService.create({
@@ -103,7 +99,7 @@ describe("caseService.create (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("rejects an empty name (Requirement 2.3)", async () => {
+  it("空の name を拒否 (Requirement 2.3)", async () => {
     await expect(
       caseService.create({ name: "  ", endDate: new Date("2036-01-01"), workspaceId: workspaceA, ...noApply }),
     ).rejects.toMatchObject({
@@ -111,7 +107,7 @@ describe("caseService.create (task 3.2 + workspace-resource-scope 2.1)", () => {
     });
   });
 
-  it("rejects startDate later than endDate (Requirement 2.4)", async () => {
+  it("startDate が endDate より後の場合、拒否 (Requirement 2.4)", async () => {
     await expect(
       caseService.create({
         name: "bad range",
@@ -123,7 +119,7 @@ describe("caseService.create (task 3.2 + workspace-resource-scope 2.1)", () => {
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("allows creating without a startDate", async () => {
+  it("startDate がない場合、作成を許可", async () => {
     const created = await caseService.create({
       name: "no start",
       endDate: new Date("2036-11-01"),
@@ -136,7 +132,7 @@ describe("caseService.create (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("succeeds with only endDate provided (no startDate)", async () => {
+  it("endDate のみを提供した場合、成功 (startDate なし)", async () => {
     const created = await caseService.create({
       name: "only end",
       endDate: new Date("2036-11-02"),
@@ -150,7 +146,7 @@ describe("caseService.create (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("succeeds with only startDate provided (no endDate)", async () => {
+  it("startDate のみを提供した場合、成功 (endDate なし)", async () => {
     const created = await caseService.create({
       name: "only start",
       startDate: new Date("2036-11-03"),
@@ -164,7 +160,7 @@ describe("caseService.create (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("succeeds with neither startDate nor endDate provided", async () => {
+  it("startDate も endDate も提供しない場合、成功", async () => {
     const created = await caseService.create({ name: "no dates at all", workspaceId: workspaceA, ...noApply });
 
     expect(created.startDate).toBeNull();
@@ -173,7 +169,7 @@ describe("caseService.create (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("defaults isCompleted to false and does not accept it as input (Requirement 2.5)", async () => {
+  it("isCompleted を false にデフォルト設定し、入力として受け付けない (Requirement 2.5)", async () => {
     const created = await caseService.create({
       name: "fresh case",
       endDate: new Date("2036-12-01"),
@@ -186,7 +182,7 @@ describe("caseService.create (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("logs case.created with the requestId and the new case's id (Requirement 10.2 pattern)", async () => {
+  it("requestId と新しい case の id を記録して case.created をログ (Requirement 10.2 pattern)", async () => {
     let caseId: string | undefined;
     try {
       const created = await caseService.create(
@@ -205,7 +201,7 @@ describe("caseService.create (task 3.2 + workspace-resource-scope 2.1)", () => {
 });
 
 describe("caseService.update (task 3.2 + workspace-resource-scope 2.1)", () => {
-  it("updates isCompleted alone without touching dates (Requirement 5.1, 5.4)", async () => {
+  it("isCompleted のみを更新し、日付は変更しない (Requirement 5.1, 5.4)", async () => {
     const startDate = new Date("2036-01-01");
     const endDate = new Date("2036-01-31");
     const created = await caseService.create({
@@ -225,7 +221,7 @@ describe("caseService.update (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("updates name alone", async () => {
+  it("name のみを更新", async () => {
     const created = await caseService.create({
       name: "old name",
       endDate: new Date("2036-02-01"),
@@ -240,7 +236,7 @@ describe("caseService.update (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("clears startDate independently via null", async () => {
+  it("startDate を null で独立してクリア", async () => {
     const created = await caseService.create({
       name: "clearable",
       startDate: new Date("2036-03-01"),
@@ -256,7 +252,7 @@ describe("caseService.update (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("rejects a resulting startDate later than endDate, merging with the currently-persisted value (Requirement 5.3)", async () => {
+  it("resulting startDate が endDate より後の場合、現在の persisted value とマージして拒否 (Requirement 5.3)", async () => {
     const created = await caseService.create({
       name: "merge check",
       startDate: new Date("2036-04-01"),
@@ -274,7 +270,7 @@ describe("caseService.update (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("returns not_found (404) when updating a non-existent case", async () => {
+  it("存在しない case を更新した場合、not_found (404) を返す", async () => {
     await expect(
       caseService.update(randomUUID(), workspaceA, { name: "ghost", ...noApply }),
     ).rejects.toMatchObject({
@@ -282,7 +278,7 @@ describe("caseService.update (task 3.2 + workspace-resource-scope 2.1)", () => {
     });
   });
 
-  it("returns not_found (404) when updating a case in another workspace (Requirement 3.3)", async () => {
+  it("別のワークスペースの case を更新した場合、not_found (404) を返す (Requirement 3.3)", async () => {
     const created = await caseService.create({
       name: "other workspace case",
       endDate: new Date("2036-04-15"),
@@ -299,7 +295,7 @@ describe("caseService.update (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("sets only endDate when the case currently has no startDate, without triggering the ordering check", async () => {
+  it("startDate がない場合、endDate のみを設定し、順序チェックをトリガーしない", async () => {
     const created = await caseService.create({ name: "no start yet", workspaceId: workspaceA, ...noApply });
 
     const updated = await caseService.update(created.id, workspaceA, {
@@ -313,7 +309,7 @@ describe("caseService.update (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("rejects updating endDate to before the persisted startDate even when the case was created without an endDate (merge-validation)", async () => {
+  it("endDate を persisted startDate より前に更新しようとした場合、拒否 (merge-validation)", async () => {
     const created = await caseService.create({
       name: "merge from unset endDate",
       startDate: new Date("2026-01-01"),
@@ -330,7 +326,7 @@ describe("caseService.update (task 3.2 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("clears endDate to null while startDate remains set, without triggering the ordering check", async () => {
+  it("startDate を保持しながら endDate を null にクリアし、順序チェックをトリガーしない", async () => {
     const created = await caseService.create({
       name: "clear end only",
       startDate: new Date("2036-09-10"),
@@ -349,7 +345,7 @@ describe("caseService.update (task 3.2 + workspace-resource-scope 2.1)", () => {
 });
 
 describe("caseService.getProgress (task 3.2 + workspace-resource-scope 2.1)", () => {
-  it("returns isOverdueWithIncomplete=false when isCompleted=true even though endDate is in the past and required tasks are incomplete (Requirement 6.2)", async () => {
+  it("endDate が過去であっても isCompleted=true の場合、isOverdueWithIncomplete=false を返す (Requirement 6.2)", async () => {
     const created = await caseService.create({
       name: "past but done",
       endDate: new Date("2000-01-01"),
@@ -376,7 +372,7 @@ describe("caseService.getProgress (task 3.2 + workspace-resource-scope 2.1)", ()
     await hardDelete("cases", [created.id]);
   });
 
-  it("returns isOverdueWithIncomplete=true when not completed, endDate is past, and required tasks incomplete (Requirement 6.1)", async () => {
+  it("未完了で endDate が過去であり、必要なタスクが不完全な場合、isOverdueWithIncomplete=true を返す (Requirement 6.1)", async () => {
     const created = await caseService.create({
       name: "overdue",
       endDate: new Date("2000-01-01"),
@@ -404,7 +400,7 @@ describe("caseService.getProgress (task 3.2 + workspace-resource-scope 2.1)", ()
     await hardDelete("cases", [created.id]);
   });
 
-  it("returns isOverdueWithIncomplete=false when endDate is unset even though not completed and required tasks are incomplete (Requirement 6.3)", async () => {
+  it("endDate がない場合、未完了で必要なタスクが不完全な場合、isOverdueWithIncomplete=false を返す (Requirement 6.3)", async () => {
     const created = await caseService.create({ name: "no end date", workspaceId: workspaceA, ...noApply });
     const openTask = await db.task.create({
       data: {
@@ -425,11 +421,11 @@ describe("caseService.getProgress (task 3.2 + workspace-resource-scope 2.1)", ()
     await hardDelete("cases", [created.id]);
   });
 
-  it("returns not_found (404) for progress of a non-existent case", async () => {
+  it("存在しない case の progress を取得した場合、not_found (404) を返す", async () => {
     await expect(caseService.getProgress(randomUUID(), workspaceA)).rejects.toMatchObject({ statusCode: 404 });
   });
 
-  it("returns not_found (404) for progress of a case in another workspace (Requirement 3.3)", async () => {
+  it("別のワークスペースの case の progress を取得した場合、not_found (404) を返す (Requirement 3.3)", async () => {
     const created = await caseService.create({
       name: "progress other ws",
       endDate: new Date("2036-05-01"),
@@ -442,7 +438,7 @@ describe("caseService.getProgress (task 3.2 + workspace-resource-scope 2.1)", ()
     await hardDelete("cases", [created.id]);
   });
 
-  it("excludes cancelled required tasks from overdue and denominator (task-status-model 3.4; Requirements 6.2, 6.4, 6.5)", async () => {
+  it("キャンセルされた必要なタスクを遅延と分母から除外 (task-status-model 3.4; Requirements 6.2, 6.4, 6.5)", async () => {
     const created = await caseService.create({
       name: "overdue with cancel",
       endDate: new Date("2000-01-01"),
@@ -467,7 +463,6 @@ describe("caseService.getProgress (task 3.2 + workspace-resource-scope 2.1)", ()
         },
       }),
     ]);
-    // 5 required: 3 completed, 1 open, 1 cancelled → total 4, incomplete 1 → overdue.
     const taskIds: string[] = [];
     const stageIds = [completedStage.id, cancelledStage.id];
     try {
@@ -519,7 +514,7 @@ describe("caseService.getProgress (task 3.2 + workspace-resource-scope 2.1)", ()
     }
   });
 
-  it("does not present progress and is not overdue when all required tasks are cancelled (task-status-model 3.4; Requirements 6.4, 6.5, 6.6)", async () => {
+  it("必要なタスクがすべてキャンセルされた場合、進捗が表示されず、遅延もない (task-status-model 3.4; Requirements 6.4, 6.5, 6.6)", async () => {
     const created = await caseService.create({
       name: "all cancelled",
       endDate: new Date("2000-01-01"),
@@ -552,7 +547,6 @@ describe("caseService.getProgress (task 3.2 + workspace-resource-scope 2.1)", ()
 
       const progress = await caseService.getProgress(created.id, workspaceA);
 
-      // Denominator 0: no progress to present; cancelled cannot trigger overdue (6.4, 6.6).
       expect(progress.requiredTotal).toBe(0);
       expect(progress.requiredCompleted).toBe(0);
       expect(progress.requiredIncomplete).toBe(0);
@@ -566,7 +560,7 @@ describe("caseService.getProgress (task 3.2 + workspace-resource-scope 2.1)", ()
 });
 
 describe("caseService.delete / list (task 3.2 + workspace-resource-scope 2.1)", () => {
-  it("detaches linked tasks and removes the case, logging case.deleted (Requirement 8.1, 8.2)", async () => {
+  it("リンクされたタスクを切り離し、case を削除し、case.deleted をログ (Requirement 8.1, 8.2)", async () => {
     const created = await caseService.create({
       name: "to delete",
       endDate: new Date("2036-06-01"),
@@ -593,11 +587,11 @@ describe("caseService.delete / list (task 3.2 + workspace-resource-scope 2.1)", 
     await hardDelete("cases", [created.id]);
   });
 
-  it("returns not_found (404) when deleting a non-existent case", async () => {
+  it("存在しない case を削除した場合、not_found (404) を返す", async () => {
     await expect(caseService.delete(randomUUID(), workspaceA)).rejects.toMatchObject({ statusCode: 404 });
   });
 
-  it("returns not_found (404) when deleting a case in another workspace (Requirement 3.3)", async () => {
+  it("別のワークスペースの case を削除した場合、not_found (404) を返す (Requirement 3.3)", async () => {
     const created = await caseService.create({
       name: "delete other ws",
       endDate: new Date("2036-06-15"),
@@ -610,7 +604,7 @@ describe("caseService.delete / list (task 3.2 + workspace-resource-scope 2.1)", 
     await hardDelete("cases", [created.id]);
   });
 
-  it("list returns only cases in the current workspace (Requirement 3.1)", async () => {
+  it("list は現在のワークスペースの case のみを返す (Requirement 3.1)", async () => {
     const inA = await caseService.create({
       name: `list-a-${randomUUID()}`,
       workspaceId: workspaceA,
@@ -631,7 +625,7 @@ describe("caseService.delete / list (task 3.2 + workspace-resource-scope 2.1)", 
 });
 
 describe("caseService module boundary (module-boundary-cleanup task 4.1)", () => {
-  it("orchestrates progress and delete via taskIntegrityService (Requirements 1.1, 1.4, 4.1, 4.2, 4.6)", () => {
+  it("progress と delete を taskIntegrityService を介して調整 (Requirements 1.1, 1.4, 4.1, 4.2, 4.6)", () => {
     const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "case.service.ts");
     const source = readFileSync(sourcePath, "utf8");
     const importLines = source
@@ -653,9 +647,7 @@ describe("caseService module boundary (module-boundary-cleanup task 4.1)", () =>
 });
 
 describe("caseService templateOperations + same-TX apply (task 4, Requirements 3.2–3.4, 3.6, 4.3, 4.13)", () => {
-  // Recurrence/Task workspace scoping lands in later tasks; these tests assert
-  // CaseService's orchestration contract (ops resolution + TX) via apply mocks.
-  it("create with both dates (omit templateOperations) calls applyToCase with full generate ops (Requirements 3.4, 3.6)", async () => {
+  it("startDate と endDate を提供しない場合、applyToCase に full generate ops を呼び出す (Requirements 3.4, 3.6)", async () => {
     const spy = vi.spyOn(recurrenceService, "applyToCase").mockResolvedValueOnce(undefined);
     let caseId: string | undefined;
     try {
@@ -682,7 +674,7 @@ describe("caseService templateOperations + same-TX apply (task 4, Requirements 3
     }
   });
 
-  it("create rejects templateOperations that are not a subset of full candidates with 400", async () => {
+  it("templateOperations が full candidates のサブセットでない場合、400 を返す (Requirement 3.4)", async () => {
     await expect(
       caseService.create({
         name: `t4-bad-ops-${randomUUID()}`,
@@ -694,7 +686,7 @@ describe("caseService templateOperations + same-TX apply (task 4, Requirements 3
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("apply failure rolls back the case row (same TX; Requirements 3.6, 4.3)", async () => {
+  it("apply の失敗で case 行をロールバック (same TX; Requirements 3.6, 4.3)", async () => {
     const name = `t4-rollback-${randomUUID()}`;
     const spy = vi.spyOn(recurrenceService, "applyToCase").mockRejectedValueOnce(new Error("forced apply failure"));
     try {
@@ -722,7 +714,7 @@ describe("caseService templateOperations + same-TX apply (task 4, Requirements 3
     }
   });
 
-  it("update with templateOperations: [] changes dates only and calls apply with empty ops (Requirement 4.13)", async () => {
+  it("templateOperations: [] を更新した場合、日付のみを変更し、apply に空の ops を呼び出す (Requirement 4.13)", async () => {
     const spy = vi.spyOn(recurrenceService, "applyToCase").mockResolvedValue(undefined);
     let caseId: string | undefined;
     try {
@@ -751,7 +743,7 @@ describe("caseService templateOperations + same-TX apply (task 4, Requirements 3
     }
   });
 
-  it("create with startDate only (omit) calls applyToCase with start_generate only (Requirement 3.2)", async () => {
+  it("startDate のみを提供した場合、applyToCase に start_generate のみを呼び出す (Requirement 3.2)", async () => {
     const spy = vi.spyOn(recurrenceService, "applyToCase").mockResolvedValueOnce(undefined);
     let caseId: string | undefined;
     try {

@@ -1,8 +1,3 @@
-// Cross-cutting workspace-scope authorization (workspace-resource-scope
-// task 9.1; Requirements 3.1, 3.2, 3.3, 3.4; design.md Testing Strategy
-// Integration Tests). Walks scoped collection domains and
-// asserts missing header → 400, non-member → 403, and other-workspace
-// get/update/delete → 404 (guard / scope leakage detection).
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
@@ -21,7 +16,6 @@ const env = {
 
 type App = ReturnType<typeof buildApp>;
 
-/** Isolate case create from active templates (omit templateOperations = full apply). */
 const noApply = { templateOperations: [] as const };
 
 const SCOPED_COLLECTION_PATHS = [
@@ -110,7 +104,7 @@ function withWorkspace(
   return csrf ? withCsrfToken(withSession, csrf) : withSession;
 }
 
-describe("workspace scope authorization cross-cut (task 9.1)", () => {
+describe("workspace scope 認可の横断 (task 9.1)", () => {
   const app = buildApp(env);
 
   let memberId: string;
@@ -120,7 +114,6 @@ describe("workspace scope authorization cross-cut (task 9.1)", () => {
   let workspaceA: string;
   let workspaceB: string;
 
-  // Resources created in workspace B; accessed with workspace A header → 404.
   let foreignCaseId: string;
   let foreignTaskId: string;
   let foreignTemplateId: string;
@@ -226,7 +219,6 @@ describe("workspace scope authorization cross-cut (task 9.1)", () => {
     await hardDelete("recurring_task_templates", [foreignTemplateId]);
     await hardDelete("non_business_days", [foreignHolidayId]);
     await hardDelete("development_stages", [foreignStageId]);
-    // Soft-deleted leftovers that still hold workspace FK.
     await db.$executeRawUnsafe(
       `DELETE FROM activity_logs WHERE task_id IN (
         SELECT id FROM tasks WHERE workspace_id IN (?, ?)
@@ -272,9 +264,9 @@ describe("workspace scope authorization cross-cut (task 9.1)", () => {
     await db.$disconnect();
   });
 
-  describe("missing X-Workspace-Id → 400 (Requirement 3.1 / 3.2)", () => {
+  describe("X-Workspace-Id がない場合、400 を返す (Requirement 3.1 / 3.2)", () => {
     it.each(SCOPED_COLLECTION_PATHS)(
-      "returns 400 when authenticated GET %s omits X-Workspace-Id",
+      "認証済みの GET %s が X-Workspace-Id を省略している場合、400 を返す",
       async (path) => {
         const response = await app.inject(
           withSessionCookie({ method: "GET", url: path }, memberCsrf.cookie),
@@ -284,9 +276,9 @@ describe("workspace scope authorization cross-cut (task 9.1)", () => {
     );
   });
 
-  describe("non-member X-Workspace-Id → 403 (Requirement 3.4)", () => {
+  describe("非メンバーの X-Workspace-Id の場合、403 を返す (Requirement 3.4)", () => {
     it.each(SCOPED_COLLECTION_PATHS)(
-      "returns 403 when authenticated GET %s uses a non-member workspace",
+      "認証済みの GET %s が非メンバーのワークスペースを使用している場合、403 を返す",
       async (path) => {
         const response = await app.inject(
           withSessionCookie(
@@ -303,8 +295,8 @@ describe("workspace scope authorization cross-cut (task 9.1)", () => {
     );
   });
 
-  describe("other-workspace resource get/update/delete → 404 (Requirement 3.3)", () => {
-    it("cases: GET progress / PATCH / DELETE of workspace-B case via workspace-A header → 404", async () => {
+  describe("他のワークスペースのリソースの GET/PATCH/DELETE は 404 を返す (Requirement 3.3)", () => {
+    it("cases: workspace-B の case を workspace-A のヘッダーで GET progress / PATCH / DELETE すると 404 を返す", async () => {
       const getRes = await app.inject(
         withWorkspace(
           { method: "GET", url: `/api/cases/${foreignCaseId}/progress` },
@@ -340,7 +332,7 @@ describe("workspace scope authorization cross-cut (task 9.1)", () => {
       expect(deleteRes.statusCode).toBe(404);
     });
 
-    it("tasks: GET / PATCH / DELETE of workspace-B task via workspace-A header → 404", async () => {
+    it("tasks: workspace-B の task を workspace-A のヘッダーで GET / PATCH / DELETE すると 404 を返す", async () => {
       const getRes = await app.inject(
         withWorkspace(
           { method: "GET", url: `/api/tasks/${foreignTaskId}` },
@@ -376,8 +368,7 @@ describe("workspace scope authorization cross-cut (task 9.1)", () => {
       expect(deleteRes.statusCode).toBe(404);
     });
 
-    it("recurring-templates: stop (update) / DELETE of workspace-B template via workspace-A header → 404", async () => {
-      // No GET-by-id route; stop/resume are the mutating id-scoped ops.
+    it("recurring-templates: workspace-B の template を workspace-A のヘッダーで stop (update) / DELETE すると 404 を返す", async () => {
       const stopRes = await app.inject(
         withWorkspace(
           { method: "POST", url: `/api/recurring-templates/${foreignTemplateId}/stop` },
@@ -399,8 +390,7 @@ describe("workspace scope authorization cross-cut (task 9.1)", () => {
       expect(deleteRes.statusCode).toBe(404);
     });
 
-    it("holidays: DELETE of workspace-B holiday via workspace-A header → 404", async () => {
-      // Holidays expose no GET-by-id or PATCH; DELETE is the id-scoped op.
+    it("holidays: workspace-B の holiday を workspace-A のヘッダーで DELETE すると 404 を返す", async () => {
       const deleteRes = await app.inject(
         withWorkspace(
           { method: "DELETE", url: `/api/holidays/${foreignHolidayId}` },
@@ -412,8 +402,7 @@ describe("workspace scope authorization cross-cut (task 9.1)", () => {
       expect(deleteRes.statusCode).toBe(404);
     });
 
-    it("development-stages: PATCH / DELETE of workspace-B stage via workspace-A header → 404", async () => {
-      // No GET-by-id route; PATCH rename is the update op.
+    it("development-stages: workspace-B の stage を workspace-A のヘッダーで PATCH / DELETE すると 404 を返す", async () => {
       const patchRes = await app.inject(
         withWorkspace(
           {

@@ -1,6 +1,3 @@
-// HTTP routes for RecurrenceService template management (task 2.1 +
-// workspace-resource-scope task 4.1). Uses buildApp so requireUser / CSRF /
-// requireWorkspaceMember apply; injects X-Workspace-Id.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
@@ -57,8 +54,6 @@ async function csrfToken(app: App, cookie: string): Promise<{ token: string; coo
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  // workspaceService.create provisions terminal development_stages (1.2/1.3);
-  // clear them before removing the workspace row (FK).
   if (table === "workspaces") {
     await db.$executeRawUnsafe(
       `DELETE FROM development_stages WHERE workspace_id IN (${ids.map(() => "?").join(",")})`,

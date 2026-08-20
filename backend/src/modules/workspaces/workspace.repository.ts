@@ -1,8 +1,3 @@
-// Persistence for Workspaces (task 2.1, design.md "Backend/workspaces"
-// workspace.repository; Requirements 1.1, 2.4, 3.1, 6.1, 6.3, 7.1, 7.4).
-// Soft-delete / audit-column behavior comes from the shared `db` client.
-// Optional DbClient lets WorkspaceService create workspace + creator membership
-// in the same TX (task 3.1). Business rules stay in the service layer.
 import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import type { Workspace, WorkspaceColor, WorkspaceUserSummary } from "./workspace.types.js";
@@ -73,12 +68,9 @@ export const workspaceRepository = {
     return client.workspace.update({ where: { id }, data }).then(toWorkspace);
   },
 
-  /** Workspaces the user currently belongs to (active memberships only). */
   listByUserId(userId: string): Promise<Workspace[]> {
     return db.workspace
       .findMany({
-        // Nested relation filters bypass the soft-delete extension's default
-        // filter, so active memberships must be selected explicitly.
         where: { members: { some: { userId, deletedAt: null } } },
         orderBy: { createdAt: "asc" },
       })
@@ -107,8 +99,6 @@ export const workspaceRepository = {
       .then((row) => row !== null);
   },
 
-  // design.md Workspace deletion flow: soft-delete members first, then the
-  // workspace, in one transaction (soft-delete extension converts delete*).
   delete(id: string): Promise<void> {
     return db.$transaction(async (tx) => {
       await tx.workspaceMember.deleteMany({ where: { workspaceId: id } });

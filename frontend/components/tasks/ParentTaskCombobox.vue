@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
-import { useApiClient, type Task } from "../../composables/useApiClient";
-
 const props = defineProps<{
   taskId: string;
   modelValue: string | null;

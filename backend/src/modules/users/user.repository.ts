@@ -19,8 +19,6 @@ export const userRepository = {
     });
   },
 
-  // MySQL utf8mb4_unicode_ci makes contains case-insensitive via collation;
-  // Prisma mode: 'insensitive' is not used (PostgreSQL-oriented).
   search(query: string): Promise<UserListRecord[]> {
     return db.user.findMany({
       where: {

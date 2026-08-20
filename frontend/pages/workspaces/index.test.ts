@@ -1,6 +1,3 @@
-// Mount tests for WorkspacesPage (tasks 6.3–6.6): empty state, member list,
-// inline member-search add panel, settings, and creator-only delete.
-// Requirements 2.3, 3.1, 3.2, 4.1–4.5, 6.1, 7.1–7.4.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -168,7 +165,7 @@ function mountPage() {
   });
 }
 
-describe("WorkspacesPage (task 6.3)", () => {
+describe("全体 (task 6.3)", () => {
   beforeEach(() => {
     refresh.mockReset();
     select.mockReset();
@@ -281,7 +278,7 @@ describe("WorkspacesPage (task 6.3)", () => {
   });
 });
 
-describe("WorkspacesPage settings modal (task 6.5)", () => {
+describe("設定モーダル (task 6.5)", () => {
   beforeEach(() => {
     refresh.mockReset();
     select.mockReset();
@@ -332,7 +329,6 @@ describe("WorkspacesPage settings modal (task 6.5)", () => {
     await buttonByText(wrapper, "設定").trigger("click");
     await nextTick();
 
-    // Simulate WorkspaceSettingsModal save → refresh updating shared state.
     workspaces.value = [
       makeWorkspace({ name: "開発チーム", color: WORKSPACE_COLORS[1] }),
     ];
@@ -348,7 +344,7 @@ describe("WorkspacesPage settings modal (task 6.5)", () => {
   });
 });
 
-describe("WorkspacesPage member search add panel (task 6.4)", () => {
+describe("メンバー検索用パネル (task 6.4)", () => {
   beforeEach(() => {
     refresh.mockReset();
     select.mockReset();
@@ -466,14 +462,13 @@ describe("WorkspacesPage member search add panel (task 6.4)", () => {
     expect(names).toEqual(["山田太郎", "佐藤花子"]);
     expect(wrapper.text()).toContain("メンバー 2人");
 
-    // Same query re-run (or retained query re-search) excludes the added member.
     expect(searchAddableWorkspaceUsers).toHaveBeenCalledTimes(2);
     expect(searchAddableWorkspaceUsers).toHaveBeenLastCalledWith("ws-1", "佐藤");
     expect(wrapper.findAll('[data-testid="search-result-name"]')).toHaveLength(0);
   });
 });
 
-describe("WorkspacesPage creator-only delete (task 6.6)", () => {
+describe("作成者限定の削除 (task 6.6)", () => {
   beforeEach(() => {
     refresh.mockReset();
     select.mockReset();
@@ -517,7 +512,6 @@ describe("WorkspacesPage creator-only delete (task 6.6)", () => {
     const wrapper = mountPage();
     await flushPromises();
 
-    // After delete succeeds, subsequent refresh empties the membership list.
     refresh.mockImplementation(async () => {
       workspaces.value = [];
       if (currentId.value !== null && !workspaces.value.some((w) => w.id === currentId.value)) {
@@ -564,7 +558,7 @@ describe("WorkspacesPage creator-only delete (task 6.6)", () => {
   });
 });
 
-describe("WorkspacesPage member UserAvatar (user-avatar 3.5)", () => {
+describe("メンバーのアバター (user-avatar 3.5)", () => {
   beforeEach(() => {
     refresh.mockReset();
     select.mockReset();

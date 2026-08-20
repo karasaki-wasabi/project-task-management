@@ -1,7 +1,3 @@
-// Cross-cutting business event logging (task 10.2, Requirement 10.2 —
-// "案件作成、繰り返しタスクインスタンス生成、各エンティティの削除など"
-// broad-impact operations must log operation type + target entity ID).
-// Updated for workspace-resource-scope: service calls require VerifiedWorkspaceId.
 import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -69,7 +65,7 @@ function findEvent(event: string): Record<string, unknown> | undefined {
 }
 
 describe("business event logging (task 10.2)", () => {
-  it("logs case.created with the requestId and the new case's id (Requirement 10.2)", async () => {
+  it("case.created を requestId と新しい案件の id でログする (Requirement 10.2)", async () => {
     let caseId: string | undefined;
     try {
       const caseEntity = await caseService.create(
@@ -91,10 +87,7 @@ describe("business event logging (task 10.2)", () => {
     }
   });
 
-  // Cleanup runs in `finally` (not just at the end of the happy path): a
-  // recurring_task_templates row left `isActive=true` by a skipped cleanup
-  // is picked up by later case create/update apply (omit = full candidates).
-  it("logs recurring_task_instance.generated for each instance generated via applyToCase", async () => {
+  it("recurring_task_instance.generated を applyToCase で生成された各インスタンスでログする", async () => {
     let templateId: string | undefined;
     let caseId: string | undefined;
     try {
@@ -108,9 +101,6 @@ describe("business event logging (task 10.2)", () => {
       });
       templateId = template.id;
 
-      // Create without apply first so the case is committed before instance
-      // generation (in-TX apply cannot see the uncommitted case via the
-      // default Prisma client used by TaskService related-resource checks).
       const caseEntity = await caseService.create(
         {
           name: `c-log-${randomUUID()}`,
@@ -145,7 +135,7 @@ describe("business event logging (task 10.2)", () => {
     }
   });
 
-  it("logs task.deleted with the deleted task's id", async () => {
+  it("task.deleted を削除されたタスクの id でログする", async () => {
     let taskId: string | undefined;
     try {
       const created = await tasksService.create(
@@ -175,7 +165,7 @@ describe("business event logging (task 10.2)", () => {
     }
   });
 
-  it("logs case.deleted with the deleted case's id", async () => {
+  it("case.deleted を削除された案件の id でログする", async () => {
     let caseId: string | undefined;
     try {
       const caseEntity = await db.case.create({
@@ -193,7 +183,7 @@ describe("business event logging (task 10.2)", () => {
     }
   });
 
-  it("logs recurring_task_template.deleted with the deleted template's id", async () => {
+  it("recurring_task_template.deleted を削除されたテンプレートの id でログする", async () => {
     let templateId: string | undefined;
     try {
       const template = await recurrenceService.registerTemplate({
@@ -216,7 +206,7 @@ describe("business event logging (task 10.2)", () => {
     }
   });
 
-  it("logs non_business_day.deleted with the deleted record's id", async () => {
+  it("non_business_day.deleted を削除されたレコードの id でログする", async () => {
     let holidayId: string | undefined;
     try {
       const holiday = await holidaysService.register({

@@ -1,8 +1,3 @@
-// Integration / schema tests for domain Prisma models.
-// Task 1.1 (recurrence-holidays-ux): case-relative-only RecurringTaskTemplate + Task.sourceAnchor
-// and active-row uniqueness expressed as Unsupported generated column (SQL hand-edit in task 1.2).
-// Run inside the backend container so DATABASE_URL resolves to the mysql
-// service: `docker compose run --rm backend npx vitest run src/prisma/schema.integration.test.ts`.
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
@@ -23,7 +18,7 @@ afterAll(async () => {
 });
 
 describe("recurrence schema shape (task 1.1)", () => {
-  it("exposes CaseRelativeAnchor and case-relative-only template/task fields", () => {
+  it("CaseRelativeAnchor と case-relative-only の template/task フィールドを公開する", () => {
     expect(CaseRelativeAnchor).toEqual({
       case_start: "case_start",
       case_end: "case_end",
@@ -57,13 +52,10 @@ describe("recurrence schema shape (task 1.1)", () => {
     });
     expect(templateFields).not.toHaveProperty("defaultMemo");
 
-    // fixed_interval / interval enums must be gone from the generated client
     expect(PrismaClientModule).not.toHaveProperty("RecurrenceKind");
     expect(PrismaClientModule).not.toHaveProperty("IntervalUnit");
     expect(PrismaClientModule).toHaveProperty("CaseRelativeAnchor");
 
-    // Unsupported generated columns are omitted from ScalarFieldEnum (same as
-    // NonBusinessDay.dateActiveKey). Assert they remain in the Prisma schema text.
     const schemaPath = resolve(__dirname, "schema.prisma");
     const schema = readFileSync(schemaPath, "utf8");
     expect(schema).toMatch(/templateCaseDateActiveKey\s+Unsupported\(/);
@@ -82,7 +74,7 @@ describe("recurrence schema shape (task 1.1)", () => {
 });
 
 describe("task-detail persistence schema (task 1)", () => {
-  it("exposes Comment and append-only ActivityLog models with the designed enums", () => {
+  it("Comment と append-only ActivityLog models を公開する", () => {
     expect(Prisma).toHaveProperty("CommentScalarFieldEnum");
     expect(Prisma).toHaveProperty("ActivityLogScalarFieldEnum");
 
@@ -133,7 +125,7 @@ describe("task-detail persistence schema (task 1)", () => {
     });
   });
 
-  it("creates comments and activity_logs with the required columns and indexes", async () => {
+  it("comments と activity_logs を作成する", async () => {
     const commentColumns = await prisma.$queryRaw<Array<{ Field: string }>>`
       SHOW COLUMNS FROM comments
     `;
@@ -184,7 +176,7 @@ describe("task-detail persistence schema (task 1)", () => {
     ).toEqual(["task_id", "occurred_at"]);
   });
 
-  it("retains comments and activity logs when their task is soft-deleted", async () => {
+  it("soft-deleted されたタスクの comments と activity logs を保持する", async () => {
     const suffix = randomUUID();
     const user = await prisma.user.create({
       data: {
@@ -239,7 +231,7 @@ describe("task-detail persistence schema (task 1)", () => {
   });
 });
 
-describe("physical schema (task 1.2)", () => {
+describe("物理スキーマ (task 1.2)", () => {
   async function createOwnedWorkspace(suffix: string) {
     const user = await prisma.user.create({
       data: {
@@ -257,7 +249,7 @@ describe("physical schema (task 1.2)", () => {
     return { user, workspace };
   }
 
-  it("provides email and password_hash columns and enforces unique email", async () => {
+  it("email と password_hash フィールドを提供し、ユニークな email を強制する", async () => {
     const columns = await prisma.$queryRaw<Array<{ Field: string }>>`SHOW COLUMNS FROM users`;
     const columnNames = columns.map((column) => column.Field);
 
@@ -278,7 +270,7 @@ describe("physical schema (task 1.2)", () => {
     await prisma.user.delete({ where: { id: user.id } });
   });
 
-  it("round-trips user, case, template, task, and non_business_day", async () => {
+  it("user、case、template、task、non_business_day を round-trip する", async () => {
     const suffix = randomUUID();
     const { user, workspace } = await createOwnedWorkspace(suffix);
     const caseEntity = await prisma.case.create({
@@ -333,7 +325,7 @@ describe("physical schema (task 1.2)", () => {
     await prisma.user.delete({ where: { id: user.id } });
   });
 
-  it("enforces created_at/updated_at/deleted_at on every table", async () => {
+  it("すべてのテーブルに created_at/updated_at/deleted_at を強制する", async () => {
     const userId = randomUUID();
     const user = await prisma.user.create({
       data: {
@@ -348,7 +340,7 @@ describe("physical schema (task 1.2)", () => {
     await prisma.user.delete({ where: { id: user.id } });
   });
 
-  it("rejects two active non_business_days on the same date via date_active_key, but allows re-registration after soft delete", async () => {
+  it("date_active_key で同じ日に2つの active non_business_days を拒否するが、論理削除後に再登録を許可する", async () => {
     const suffix = randomUUID();
     const { user, workspace } = await createOwnedWorkspace(`nbd-${suffix}`);
     const date = new Date("2031-05-05");
@@ -376,7 +368,7 @@ describe("physical schema (task 1.2)", () => {
     await prisma.user.delete({ where: { id: user.id } });
   });
 
-  it("rejects two active template tasks on the same (template, case, scheduledEndDate), but allows recreate after soft delete", async () => {
+  it("同じ (template, case, scheduledEndDate) で2つの active template tasks を拒否するが、論理削除後に再作成を許可する", async () => {
     const suffix = randomUUID();
     const { user, workspace } = await createOwnedWorkspace(`tpl-${suffix}`);
     const caseEntity = await prisma.case.create({
@@ -423,7 +415,7 @@ describe("physical schema (task 1.2)", () => {
     await prisma.user.delete({ where: { id: user.id } });
   });
 
-  it("round-trips a development stage linked from a task", async () => {
+  it("task からリンクされた development stage を round-trip する", async () => {
     const suffix = randomUUID();
     const { user, workspace } = await createOwnedWorkspace(`stage-${suffix}`);
     const stage = await prisma.developmentStage.create({
@@ -452,7 +444,7 @@ describe("physical schema (task 1.2)", () => {
 });
 
 describe("workspace membership schema (task 1.1)", () => {
-  it("exposes Workspace and WorkspaceMember models with expected scalar fields", () => {
+  it("Workspace と WorkspaceMember models を公開し、期待されるスカラーフィールドを持つ", () => {
     expect(Prisma).toHaveProperty("WorkspaceScalarFieldEnum");
     expect(Prisma).toHaveProperty("WorkspaceMemberScalarFieldEnum");
 
@@ -484,7 +476,7 @@ describe("workspace membership schema (task 1.1)", () => {
     expect(schema).toMatch(/@@map\("workspace_members"\)/);
   });
 
-  it("provides workspaces and workspace_members tables with audit columns", async () => {
+  it("workspaces と workspace_members テーブルを提供し、audit カラムを持つ", async () => {
     const workspaceColumns = await prisma.$queryRaw<Array<{ Field: string }>>`
       SHOW COLUMNS FROM workspaces
     `;
@@ -515,7 +507,7 @@ describe("workspace membership schema (task 1.1)", () => {
     );
   });
 
-  it("round-trips Workspace with creator and WorkspaceMember relations", async () => {
+  it("Workspace を creator と WorkspaceMember の関係を持つものと round-trip する", async () => {
     const suffix = randomUUID();
     const creator = await prisma.user.create({
       data: {
@@ -570,7 +562,7 @@ describe("workspace membership schema (task 1.1)", () => {
     await prisma.user.delete({ where: { id: creator.id } });
   });
 
-  it("rejects duplicate (workspace_id, user_id) membership via unique constraint", async () => {
+  it("unique 制約で (workspace_id, user_id) の重複メンバーシップを拒否する", async () => {
     const suffix = randomUUID();
     const creator = await prisma.user.create({
       data: {
@@ -610,7 +602,7 @@ describe("workspace membership schema (task 1.1)", () => {
   });
 });
 
-describe("workspace resource scope schema (task 1.5)", () => {
+describe("workspace リソーススコープスキーマ (task 1.5)", () => {
   async function createWorkspaceFixture(suffix: string) {
     const creator = await prisma.user.create({
       data: {
@@ -628,7 +620,7 @@ describe("workspace resource scope schema (task 1.5)", () => {
     return { creator, workspace };
   }
 
-  it("exposes required workspaceId on Case/Task/RecurringTaskTemplate/NonBusinessDay/DevelopmentStage", () => {
+  it("Case/Task/RecurringTaskTemplate/NonBusinessDay/DevelopmentStage に必要な workspaceId を公開する", () => {
     expect(Prisma.CaseScalarFieldEnum).toMatchObject({ workspaceId: "workspaceId" });
     expect(Prisma.TaskScalarFieldEnum).toMatchObject({ workspaceId: "workspaceId" });
     expect(Prisma.RecurringTaskTemplateScalarFieldEnum).toMatchObject({
@@ -650,7 +642,7 @@ describe("workspace resource scope schema (task 1.5)", () => {
     expect(schema).toMatch(/model Workspace \{[\s\S]*developmentStages\s+DevelopmentStage\[\]/);
   });
 
-  it("provides workspace_id NOT NULL columns and workspace-scoped holiday unique index", async () => {
+  it("workspace_id NOT NULL カラムと workspace-scoped holiday unique index を提供する", async () => {
     for (const table of [
       "cases",
       "tasks",
@@ -678,7 +670,7 @@ describe("workspace resource scope schema (task 1.5)", () => {
     expect(scopedUniqueCols).toEqual(["workspace_id", "date_active_key"]);
   });
 
-  it("rejects creating scoped resources without a workspace_id at the database", async () => {
+  it("データベースで workspace_id がないスコープリソースの作成を拒否する", async () => {
     const suffix = randomUUID();
     await expect(
       prisma.$executeRaw`
@@ -790,7 +782,7 @@ describe("workspace resource scope schema (task 1.5)", () => {
   });
 });
 
-describe("task-status-model schema (task 1.1)", () => {
+describe("task-status-model スキーマ (task 1.1)", () => {
   async function createWorkspaceFixture(suffix: string) {
     const creator = await prisma.user.create({
       data: {
@@ -808,7 +800,7 @@ describe("task-status-model schema (task 1.1)", () => {
     return { creator, workspace };
   }
 
-  it("exposes DevelopmentStageKind and renames TaskStatus.done to ready_for_handoff", () => {
+  it("DevelopmentStageKind を公開し、TaskStatus.done を ready_for_handoff にリネームする", () => {
     expect(DevelopmentStageKind).toEqual({
       normal: "normal",
       completed: "completed",
@@ -836,7 +828,7 @@ describe("task-status-model schema (task 1.1)", () => {
     expect(schema).not.toMatch(/cancelledAt|cancelled_at/);
   });
 
-  it("provides development_stages.kind and omits cancelled-at on tasks", async () => {
+  it("development_stages.kind を提供し、tasks の cancelled-at を省略する", async () => {
     const stageColumns = await prisma.$queryRaw<
       Array<{ Field: string; Type: string; Default: string | null }>
     >`SHOW COLUMNS FROM development_stages LIKE 'kind'`;
@@ -856,7 +848,7 @@ describe("task-status-model schema (task 1.1)", () => {
     expect(statusColumn[0]?.Type).not.toContain("'done'");
   });
 
-  it("keeps generate-column hand-edit and migrate-dev warning in the single init SQL", () => {
+  it("single init SQL で generate-column hand-edit と migrate-dev の警告を保持する", () => {
     const migrationPath = resolve(
       __dirname,
       "migrations/20260805030211_init_domain_schema/migration.sql",
@@ -868,7 +860,7 @@ describe("task-status-model schema (task 1.1)", () => {
     expect(sql).toMatch(/`kind` ENUM\('normal', 'completed', 'cancelled'\)/);
   });
 
-  it("ensures each workspace has one completed and one cancelled stage; completedAt tasks sit on completed", async () => {
+  it("各ワークスペースに1つの completed と1つの cancelled の stage を持つことを確認する。completedAt tasks は completed に配置される", async () => {
     const suffix = randomUUID();
     const a = await createWorkspaceFixture(`a-${suffix}`);
     const b = await createWorkspaceFixture(`b-${suffix}`);
@@ -983,8 +975,8 @@ describe("task-status-model schema (task 1.1)", () => {
 
 });
 
-describe("task-field-rename schema (task 1.1)", () => {
-  it("maps renamed Prisma fields to detail / scheduled_end_date / default_detail", () => {
+describe("task-field-rename スキーマ (task 1.1)", () => {
+  it("リネームされた Prisma フィールドを detail / scheduled_end_date / default_detail にマッピングする", () => {
     expect(Prisma.TaskScalarFieldEnum).toMatchObject({
       detail: "detail",
       scheduledEndDate: "scheduledEndDate",
@@ -1006,7 +998,7 @@ describe("task-field-rename schema (task 1.1)", () => {
     expect(schema).not.toMatch(/scheduledStartDate|scheduled_start_date/);
   });
 
-  it("keeps renamed columns and generated key over scheduled_end_date in the single init SQL", () => {
+  it("single init SQL でリネームされたカラムと scheduled_end_date の generated key を保持する", () => {
     const migrationPath = resolve(
       __dirname,
       "migrations/20260805030211_init_domain_schema/migration.sql",
@@ -1028,7 +1020,7 @@ describe("task-field-rename schema (task 1.1)", () => {
     expect(sql).not.toMatch(/RENAME COLUMN/);
   });
 
-  it("provides renamed physical columns and generated key over scheduled_end_date", async () => {
+  it("リネームされた物理カラムと scheduled_end_date の generated key を提供する", async () => {
     const taskColumns = await prisma.$queryRaw<Array<{ Field: string }>>`SHOW COLUMNS FROM tasks`;
     const taskColumnNames = taskColumns.map((column) => column.Field);
     expect(taskColumnNames).toEqual(

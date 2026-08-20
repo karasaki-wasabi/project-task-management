@@ -145,7 +145,7 @@ const StageBadgeStub = defineComponent({
 
 function mountCard(
   task: Task = makeTask(),
-  onUpdate?: ReturnType<typeof vi.fn>,
+  onUpdate?: (field: string, value: unknown) => Promise<void>,
   editable = true,
   extras: { parentTask?: Task | null; childTasks?: Task[] } = {},
 ) {

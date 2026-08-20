@@ -1,6 +1,3 @@
-// caseReadService (module-boundary-cleanup task 2.1; design.md Backend/cases
-// caseReadService; Requirements 1.1, 1.4, 2.1, 2.2, 3.2).
-// Integration tests: workspace scope, TX client visibility, requireById notFound.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
@@ -40,7 +37,7 @@ afterAll(async () => {
 });
 
 describe("caseReadService (module-boundary-cleanup 2.1)", () => {
-  it("findInWorkspace returns the case when id is in the workspace", async () => {
+  it("findInWorkspace で id が workspace 内にある case を返す", async () => {
     const created = await caseRepository.create({
       name: `read-ok-${randomUUID()}`,
       endDate: new Date("2036-01-15"),
@@ -54,12 +51,12 @@ describe("caseReadService (module-boundary-cleanup 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("findInWorkspace returns null for a non-existent id", async () => {
+  it("findInWorkspace で存在しない id の場合、null を返す", async () => {
     const found = await caseReadService.findInWorkspace(randomUUID(), workspaceA);
     expect(found).toBeNull();
   });
 
-  it("findInWorkspace returns null when the case belongs to another workspace (Requirement 1.1, 2.2)", async () => {
+  it("findInWorkspace で別のワークスペースの case の場合、null を返す (Requirement 1.1, 2.2)", async () => {
     const created = await caseRepository.create({
       name: `other-ws-${randomUUID()}`,
       endDate: new Date("2036-02-01"),
@@ -72,7 +69,7 @@ describe("caseReadService (module-boundary-cleanup 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("findInWorkspace sees uncommitted rows via the TX client (Requirement 3.2)", async () => {
+  it("findInWorkspace で未コミットの行を TX client で見えるように (Requirement 3.2)", async () => {
     await expect(
       db.$transaction(async (tx) => {
         const created = await caseRepository.create(
@@ -95,7 +92,7 @@ describe("caseReadService (module-boundary-cleanup 2.1)", () => {
     ).rejects.toThrow("rollback-findInWorkspace-tx-proof");
   });
 
-  it("requireById returns the case by id without workspace filter", async () => {
+  it("requireById で workspace フィルターなしで id で case を返す", async () => {
     const created = await caseRepository.create({
       name: `req-ok-${randomUUID()}`,
       endDate: new Date("2036-04-01"),
@@ -109,7 +106,7 @@ describe("caseReadService (module-boundary-cleanup 2.1)", () => {
     await hardDelete("cases", [created.id]);
   });
 
-  it("requireById throws notFound when missing (same message as recurrence)", async () => {
+  it("requireById で存在しない場合、notFound を投げる (same message as recurrence)", async () => {
     const missingId = randomUUID();
     await expect(caseReadService.requireById(missingId)).rejects.toMatchObject({
       statusCode: 404,
@@ -117,7 +114,7 @@ describe("caseReadService (module-boundary-cleanup 2.1)", () => {
     });
   });
 
-  it("requireById sees uncommitted rows via the TX client (Requirement 3.2)", async () => {
+  it("requireById で未コミットの行を TX client で見えるように (Requirement 3.2)", async () => {
     await expect(
       db.$transaction(async (tx) => {
         const created = await caseRepository.create(

@@ -1,13 +1,3 @@
-// Frontend error reporting plugin (task 11.7, design.md
-// "Frontend/plugins/error-reporter.client プラグイン", Requirement 10.4).
-// Subscribes to Vue's global error handler and window.onerror, and POSTs
-// uncaught errors to the backend's ClientErrorsService. `.client.ts` suffix
-// (Nuxt convention) ensures this only runs in the browser, matching
-// `ssr: false`.
-//
-// Task 2.2 additionally triggers the Error Page (`showError`) independently
-// of reporting. Window listeners may run outside Nuxt context, so display
-// goes through `nuxtApp.runWithContext`.
 type ErrorReporterNuxtApp = {
   runWithContext: (fn: () => void) => void;
 };
@@ -29,10 +19,9 @@ export function createErrorReporter(nuxtApp: ErrorReporterNuxtApp) {
           pageUrl: window.location.href,
           occurredAt: new Date().toISOString(),
         },
-        // A broken error-reporting call must never itself throw and loop.
       }).catch(() => {});
     } catch {
-      // Reporting failure must not block error page display.
+      // レポート失敗はエラーページ表示をブロックしない
     }
   }
 
@@ -40,7 +29,7 @@ export function createErrorReporter(nuxtApp: ErrorReporterNuxtApp) {
     try {
       nuxtApp.runWithContext(() => showError(error));
     } catch {
-      // Display failure must not block reporting.
+      // 表示失敗はレポートをブロックしない
     }
   }
 

@@ -1,29 +1,4 @@
-<!--
-  Development stage master management, relocated out of `/kanban` into its
-  own screen (task 3, design.md "stages.vue + DevelopmentStageManager"
-  component detail block, Requirement 7.1/7.3).
-
-  This is a straight relocation of the `stages`/`newStageName` state and the
-  `loadStages`/`createStage`/`renameStage`/`moveStage`/`deleteStage`
-  functions that used to live inline in `frontend/pages/kanban/index.vue`
-  (task 17.2) — behavior is unchanged, only the reorder array-swap decision
-  was extracted into the pure helper `swapStageOrder`
-  (./DevelopmentStageManager.helpers.ts) so it can be unit-tested. The
-  `.stage-list` class name is preserved as an E2E test hook (see
-  frontend/e2e/kanban.spec.ts, to be updated in a later task to navigate
-  here).
-
-  task-status-model 5.1: terminal stages show kind and keep delete visible
-  but disabled with 「この段階は削除できません」(Requirements 1.5, 1.8).
--->
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import {
-  useApiClient,
-  type DevelopmentStage,
-  type DevelopmentStageKind,
-} from "../../composables/useApiClient";
-import StageBadge from "../shared/StageBadge.vue";
 import { swapStageOrder } from "./DevelopmentStageManager.helpers";
 
 const api = useApiClient();

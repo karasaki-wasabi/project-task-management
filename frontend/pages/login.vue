@@ -1,8 +1,4 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { useApiClient } from "../composables/useApiClient";
-import { useAuth } from "../composables/useAuth";
-
 const api = useApiClient();
 const { user } = useAuth();
 const route = useRoute();
@@ -56,9 +52,7 @@ async function submit(): Promise<void> {
     </aside>
     <main class="flex items-center justify-center p-8 max-[899px]:min-h-[calc(100vh-56px)] max-[899px]:px-6">
       <div class="w-full max-w-[360px]">
-        <p class="text-sm font-medium text-slate-500">おかえりなさい</p>
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">ログイン</h1>
-        <p class="mt-2 text-sm leading-6 text-slate-600">アカウントにログインして作業を続けます。</p>
 
         <form class="mt-8 space-y-5" @submit.prevent="submit">
           <ErrorAlert v-if="error" :message="error" />

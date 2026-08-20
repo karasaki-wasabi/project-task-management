@@ -1,9 +1,3 @@
-// HTTP routes for Tasks (task 3.1 core + task 3.2 hierarchy/split,
-// design.md "Backend/tasks" API Contract). Registered into the shared app in
-// task 10.3; standalone Fastify plugin here so this module stays testable in
-// isolation.
-// workspace-resource-scope task 3.1: passes request.currentWorkspaceId into
-// TasksService; clients cannot set workspaceId via body.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
@@ -62,9 +56,6 @@ const listQuerySchema = z.object({
   titleContains: z.string().optional(),
   excludeSubtreeOf: z.string().optional(),
   excludeClosed: z.literal("true").optional(),
-  // design.md "Backend/tasks > TasksService.list 未割当フィルタ拡張":
-  // z.literal("true") rather than z.coerce.boolean(), since z.coerce.boolean()
-  // treats the string "false" as truthy.
   unassignedCase: z.literal("true").optional(),
 });
 

@@ -88,6 +88,8 @@ MySQLの`STORED GENERATED COLUMN`+`UNIQUE INDEX`のように、Prismaスキー�
 `docker compose` の frontend サービス（しばしば root）と `docker compose run ... frontend`（イメージ既定の `node`）が同じ bind-mount の `frontend/.nuxt/` を共有する。どちらかが `nuxt prepare` / `nuxt typecheck` / `nuxt dev` で再生成すると、もう一方のユーザーから書き込めず `EACCES` や `tsconfig.json` 欠落で失敗する。ホストから直接 `npm run typecheck` しても同様に起きうる。
 → 型チェックは原則 `docker compose run --rm --no-deps -T frontend npm run typecheck` で実行する。壊れたら常駐 frontend 側で `docker compose exec frontend npx nuxt prepare` し、所有者を揃えてから再実行する。
 
+Vitestの`environment: "nuxt"`（[[testing]]参照）も内部でNuxtのビルド成果物を生成するため、同じ所有者不一致の影響を受けうる。`frontend/vitest.config.ts`では`environmentOptions.nuxt.overrides.buildDir`で`.nuxt-vitest/`という別ディレクトリへ逃がし、`nuxt dev`/`nuxt build`が使う`.nuxt/`と衝突しないようにしている。
+
 ## Playwright(E2E)実行時の注意
 
 `docker compose run` はコマンドごとに使い捨てコンテナを作るため、あるコマンドで `npx playwright install --with-deps chromium` してブラウザバイナリを入れても、**次の `docker compose run` invocationには一切残らない**。実行のたびに毎回インストールするコストを避けたい場合は、ホストにNode.jsがあれば `frontend/node_modules`/`package-lock.json` を汚さないスクラッチディレクトリ(例: `/tmp/.../scratchpad/pw`)に `@playwright/test` を単独インストールし、公開済みポート(`http://localhost:<FRONTEND_PORT>`)に対してホスト側から実行するのが安定する。

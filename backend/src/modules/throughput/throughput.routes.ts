@@ -1,9 +1,3 @@
-// HTTP routes for Throughput (task 7.1, design.md "Backend/throughput" API
-// Contract; velocity-dashboard task 3.4 extends query + response).
-// Registered into the shared app in task 10.3; standalone Fastify plugin
-// here so this module stays testable in isolation.
-// WORKSPACE_SCOPED_PATH_PREFIXES includes /api/throughput (task 3.5);
-// this module forwards request.currentWorkspaceId into ThroughputService.
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
@@ -25,7 +19,6 @@ function parseOrBadRequest<T>(schema: z.ZodType<T>, data: unknown): T {
   return result.data;
 }
 
-/** API Contract: period boundaries as ISO 8601 strings (design.md ThroughputRoutes). */
 function serializeSummary(summary: ThroughputSummary) {
   const body = {
     periods: summary.periods.map((period) => ({

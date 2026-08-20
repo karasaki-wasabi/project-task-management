@@ -1,18 +1,4 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import CommentComposer from "../comments/CommentComposer.vue";
-import UserAvatar from "../shared/UserAvatar.vue";
-import {
-  useApiClient,
-  type Case,
-  type Comment,
-  type DevelopmentStage,
-  type Task,
-  type TaskTimelineChange,
-  type TaskTimelineEntry,
-  type TaskTimelineFilter,
-  type User,
-} from "../../composables/useApiClient";
 import {
   changeMessageSegments,
   formatTimelineTime,
@@ -177,12 +163,12 @@ function cancelEditing() {
   editingCommentId.value = null;
 }
 
-async function onEditSuccess(_comment: Comment) {
+async function onEditSuccess(_comment: TaskComment) {
   editingCommentId.value = null;
   await loadTimeline();
 }
 
-async function onCreateSuccess(_comment: Comment) {
+async function onCreateSuccess(_comment: TaskComment) {
   await loadTimeline();
 }
 

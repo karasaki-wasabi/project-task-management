@@ -7,7 +7,7 @@ describe("createErrorReportRateLimiter (task 11.7)", () => {
     expect(shouldReport("boom")).toBe(true);
   });
 
-  it("suppresses a repeat of the same message within the window", () => {
+  it("同じメッセージがウィンドウ内で繰り返される場合、抑制", () => {
     let now = 0;
     const shouldReport = createErrorReportRateLimiter(10_000, () => now);
 
@@ -16,7 +16,7 @@ describe("createErrorReportRateLimiter (task 11.7)", () => {
     expect(shouldReport("boom")).toBe(false);
   });
 
-  it("allows the same message again once the window has elapsed", () => {
+  it("ウィンドウが経過した後、同じメッセージを再度許可", () => {
     let now = 0;
     const shouldReport = createErrorReportRateLimiter(10_000, () => now);
 
@@ -25,7 +25,7 @@ describe("createErrorReportRateLimiter (task 11.7)", () => {
     expect(shouldReport("boom")).toBe(true);
   });
 
-  it("does not rate-limit distinct messages against each other", () => {
+  it("異なるメッセージは互いにレート制限されない", () => {
     const shouldReport = createErrorReportRateLimiter(10_000, () => 0);
 
     expect(shouldReport("boom")).toBe(true);

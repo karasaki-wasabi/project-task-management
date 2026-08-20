@@ -1,4 +1,3 @@
-// task-status-model 4.3 — client-side closure predicates (Requirements 8.4, 8.5).
 import { describe, expect, it } from "vitest";
 import type { DevelopmentStage, Task } from "./useApiClient";
 import {
@@ -20,20 +19,20 @@ function taskWithStage(
 }
 
 describe("resolveTaskClosureState (task-status-model 4.3)", () => {
-  it("treats unset developmentStageId as open (Requirement 8.4)", () => {
+  it("設定されていない developmentStageId は「open」として扱う (Requirement 8.4)", () => {
     expect(resolveTaskClosureState(taskWithStage(null), stages)).toBe("open");
     expect(resolveTaskClosureState(taskWithStage(undefined), stages)).toBe(
       "open",
     );
   });
 
-  it("treats unknown stage ids as open (Requirement 8.4)", () => {
+  it("不明な developmentStageId は「open」として扱う (Requirement 8.4)", () => {
     expect(
       resolveTaskClosureState(taskWithStage("stage-missing"), stages),
     ).toBe("open");
   });
 
-  it("maps known stage kinds to closure states matching backend semantics", () => {
+  it("既知の developmentStageId は backend のセマンティクスに一致する閉じ状態にマップ", () => {
     expect(
       resolveTaskClosureState(taskWithStage("stage-normal"), stages),
     ).toBe("open");
@@ -47,7 +46,7 @@ describe("resolveTaskClosureState (task-status-model 4.3)", () => {
 });
 
 describe("isTaskClosed / isTaskCompleted (task-status-model 4.3)", () => {
-  it("treats completed and cancelled as closed, and only completed as completed", () => {
+  it("完了と中止は閉じ、完了のみ完了として扱う", () => {
     expect(isTaskClosed(taskWithStage("stage-completed"), stages)).toBe(true);
     expect(isTaskCompleted(taskWithStage("stage-completed"), stages)).toBe(
       true,

@@ -1,5 +1,3 @@
-// Mount tests for DevelopmentStageManager kind display / terminal delete
-// (task-status-model 5.1, Requirements 1.5, 1.8; design.md stages.vue).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import type { DevelopmentStage } from "../../composables/useApiClient";
@@ -71,7 +69,7 @@ describe("DevelopmentStageManager (task-status-model 5.1)", () => {
     vi.clearAllMocks();
   });
 
-  it("shows kind only on terminal stages and leaves normal stages unmarked", async () => {
+  it("完了・中止の段階にのみ種類を表示し、通常の段階には表示しない", async () => {
     const wrapper = await mountManager();
 
     const normal = rowFor(wrapper, "s1");
@@ -87,7 +85,7 @@ describe("DevelopmentStageManager (task-status-model 5.1)", () => {
     expect(cancelledBadge.text()).toContain("中止");
   });
 
-  it("disables delete on terminal stages and shows why", async () => {
+  it("完了・中止の段階で削除を無効化し、その理由を表示する", async () => {
     const wrapper = await mountManager();
 
     const normalDelete = rowFor(wrapper, "s1").get('[data-testid="stage-delete"]');
@@ -108,7 +106,7 @@ describe("DevelopmentStageManager (task-status-model 5.1)", () => {
     expect(deleteDevelopmentStage).not.toHaveBeenCalled();
   });
 
-  it("keeps rename and reorder available on terminal stages", async () => {
+  it("完了・中止の段階でリネームと並び替えを有効化する", async () => {
     const wrapper = await mountManager();
     const completed = rowFor(wrapper, "s-done");
 
@@ -118,7 +116,6 @@ describe("DevelopmentStageManager (task-status-model 5.1)", () => {
     const moveUp = completed.get('[data-testid="stage-move-up"]');
     const moveDown = completed.get('[data-testid="stage-move-down"]');
     expect(moveUp.attributes("disabled")).toBeUndefined();
-    // Completed is second-to-last; move down stays enabled.
     expect(moveDown.attributes("disabled")).toBeUndefined();
 
     const cancelled = rowFor(wrapper, "s-cancel");

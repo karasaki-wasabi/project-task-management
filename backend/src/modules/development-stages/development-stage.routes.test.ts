@@ -1,6 +1,3 @@
-// developmentStageRoutes workspace scope (workspace-resource-scope task 6.1;
-// Requirements 1.1, 1.2, 3.1, 3.2, 3.3). Uses buildApp so requireUser /
-// CSRF / requireWorkspaceMember apply; injects X-Workspace-Id.
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
@@ -90,7 +87,7 @@ function withWorkspace(
   return csrf ? withCsrfToken(withSession, csrf) : withSession;
 }
 
-describe("developmentStageRoutes (task 14.1 + workspace-resource-scope 6.1)", () => {
+describe("developmentStageRoutes ワークスペーススコープ (task 14.1 + workspace-resource-scope 6.1)", () => {
   const app = buildApp(env);
 
   let memberId: string;
@@ -132,7 +129,7 @@ describe("developmentStageRoutes (task 14.1 + workspace-resource-scope 6.1)", ()
     await db.$disconnect();
   });
 
-  it("POST /api/development-stages registers a stage in the current workspace and returns 201", async () => {
+  it("POST /api/development-stages で現在のワークスペースに development stage を登録し、201 を返す", async () => {
     const response = await app.inject(
       withWorkspace(
         { method: "POST", url: "/api/development-stages", payload: { name: "spec-tbd" } },
@@ -148,7 +145,7 @@ describe("developmentStageRoutes (task 14.1 + workspace-resource-scope 6.1)", ()
     stageIds.push(response.json().id);
   });
 
-  it("POST /api/development-stages returns 400 for an empty name", async () => {
+  it("POST /api/development-stages で空の name を受け取った場合、400 を返す", async () => {
     const response = await app.inject(
       withWorkspace(
         { method: "POST", url: "/api/development-stages", payload: { name: "" } },
@@ -161,7 +158,7 @@ describe("developmentStageRoutes (task 14.1 + workspace-resource-scope 6.1)", ()
     expect(response.statusCode).toBe(400);
   });
 
-  it("PATCH /api/development-stages/:id renames a stage in the current workspace", async () => {
+  it("PATCH /api/development-stages/:id で現在のワークスペースの development stage をリネーム", async () => {
     const created = await app.inject(
       withWorkspace(
         { method: "POST", url: "/api/development-stages", payload: { name: "before" } },
@@ -187,7 +184,7 @@ describe("developmentStageRoutes (task 14.1 + workspace-resource-scope 6.1)", ()
     expect(response.json().name).toBe("after");
   });
 
-  it("PATCH /api/development-stages/:id returns 404 for a stage in another workspace (Requirement 3.3)", async () => {
+  it("PATCH /api/development-stages/:id で別のワークスペースの development stage をリネームした場合、404 を返す (Requirement 3.3)", async () => {
     const foreign = await app.inject(
       withWorkspace(
         { method: "POST", url: "/api/development-stages", payload: { name: "foreign-rename" } },
@@ -212,7 +209,7 @@ describe("developmentStageRoutes (task 14.1 + workspace-resource-scope 6.1)", ()
     expect(response.statusCode).toBe(404);
   });
 
-  it("POST /api/development-stages/reorder updates the order within the current workspace", async () => {
+  it("POST /api/development-stages/reorder で現在のワークスペースの order を更新", async () => {
     const a = (
       await app.inject(
         withWorkspace(
@@ -267,7 +264,7 @@ describe("developmentStageRoutes (task 14.1 + workspace-resource-scope 6.1)", ()
     expect(response.json().slice(0, 2).map((s: { id: string }) => s.id)).toEqual([b.id, a.id]);
   });
 
-  it("GET /api/development-stages lists only current-workspace stages and excludes removed ones", async () => {
+  it("GET /api/development-stages で現在のワークスペースの development stage のみを返し、削除されたものを除外", async () => {
     const created = await app.inject(
       withWorkspace(
         { method: "POST", url: "/api/development-stages", payload: { name: "removable" } },
@@ -310,7 +307,7 @@ describe("developmentStageRoutes (task 14.1 + workspace-resource-scope 6.1)", ()
     expect(list.some((s) => s.id === foreign.json().id)).toBe(false);
   });
 
-  it("GET /api/development-stages includes kind on each stage (task-status-model 2.1, Requirement 1.8)", async () => {
+  it("GET /api/development-stages で各 development stage に kind を含む (task-status-model 2.1, Requirement 1.8)", async () => {
     const created = await app.inject(
       withWorkspace(
         { method: "POST", url: "/api/development-stages", payload: { name: `kind-api-${randomUUID()}` } },
@@ -334,7 +331,7 @@ describe("developmentStageRoutes (task 14.1 + workspace-resource-scope 6.1)", ()
     expect(list.find((s) => s.id === createdBody.id)?.kind).toBe("normal");
   });
 
-  it("DELETE /api/development-stages/:id returns 404 for a non-existent stage", async () => {
+  it("DELETE /api/development-stages/:id で存在しない development stage を削除した場合、404 を返す", async () => {
     const response = await app.inject(
       withWorkspace(
         { method: "DELETE", url: `/api/development-stages/${randomUUID()}` },
@@ -347,7 +344,7 @@ describe("developmentStageRoutes (task 14.1 + workspace-resource-scope 6.1)", ()
     expect(response.statusCode).toBe(404);
   });
 
-  it("DELETE /api/development-stages/:id returns 404 for a stage in another workspace (Requirement 3.3)", async () => {
+  it("DELETE /api/development-stages/:id で別のワークスペースの development stage を削除した場合、404 を返す (Requirement 3.3)", async () => {
     const foreign = await app.inject(
       withWorkspace(
         { method: "POST", url: "/api/development-stages", payload: { name: "foreign-delete" } },

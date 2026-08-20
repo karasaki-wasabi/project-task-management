@@ -1,5 +1,3 @@
-// RED→GREEN: TaskClosure single definition (task 1.3; Requirements 3.1, 3.2, 3.3)
-// leafTaskFilter (velocity-dashboard task 1.2; Requirement 3.3)
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { DevelopmentStageKind } from "@prisma/client";
@@ -42,14 +40,14 @@ function isCompleted(state: TaskClosureState): boolean {
 }
 
 describe("resolveClosureState (task 1.3)", () => {
-  it("maps stage kinds to closure states", () => {
+  it("resolveClosureState で段階の種別からクローズ状態を求める", () => {
     expect(resolveClosureState(null)).toBe("open");
     expect(resolveClosureState("normal")).toBe("open");
     expect(resolveClosureState("completed")).toBe("completed");
     expect(resolveClosureState("cancelled")).toBe("cancelled");
   });
 
-  it("treats unset stage as always open (Requirement 3.3)", () => {
+  it("resolveClosureState で段階未設定は常に open として扱う (Requirement 3.3)", () => {
     const state = resolveClosureState(null);
     expect(isOpen(state)).toBe(true);
     expect(isClosed(state)).toBe(false);
@@ -58,7 +56,7 @@ describe("resolveClosureState (task 1.3)", () => {
 });
 
 describe("open / closed / completed predicates (task 1.3)", () => {
-  it("treats completed and cancelled as closed, and only completed as completed (Requirements 3.1, 3.2)", () => {
+  it("isClosed で completed と cancelled は closed として扱い、completed のみが completed として扱う (Requirements 3.1, 3.2)", () => {
     expect(isClosed(resolveClosureState("completed"))).toBe(true);
     expect(isCompleted(resolveClosureState("completed"))).toBe(true);
 
@@ -70,14 +68,14 @@ describe("open / closed / completed predicates (task 1.3)", () => {
     expect(isOpen(resolveClosureState("normal"))).toBe(true);
   });
 
-  it("keeps open and closed as complementary sets for every kind including unset", () => {
+  it("isOpen と isClosed はすべての段階の種別に対して補完的な関係を保つ", () => {
     for (const kind of ALL_KINDS) {
       const state = resolveClosureState(kind);
       expect(isOpen(state)).toBe(!isClosed(state));
     }
   });
 
-  it("matches unset-stage tasks only on the open side", () => {
+  it("isOpen で段階未設定のタスクのみをマッチング", () => {
     const openMatches = ALL_KINDS.filter((kind) =>
       isOpen(resolveClosureState(kind)),
     );
@@ -91,7 +89,7 @@ describe("open / closed / completed predicates (task 1.3)", () => {
 });
 
 describe("Prisma filter helpers (task 1.3)", () => {
-  it("defines completed filter as completed-kind stages only", () => {
+  it("completedTaskFilter で completed の段階の種別のみをマッチング", () => {
     expect(completedTaskFilter).toEqual({
       developmentStage: {
         kind: "completed",
@@ -99,7 +97,7 @@ describe("Prisma filter helpers (task 1.3)", () => {
     });
   });
 
-  it("defines closed filter as completed or cancelled stages", () => {
+  it("closedTaskFilter で completed または cancelled の段階の種別をマッチング", () => {
     expect(closedTaskFilter).toEqual({
       developmentStage: {
         kind: { in: ["completed", "cancelled"] },
@@ -107,14 +105,13 @@ describe("Prisma filter helpers (task 1.3)", () => {
     });
   });
 
-  it("defines open filter as the structural complement of closed filter", () => {
+  it("openTaskFilter で closedTaskFilter の補完的な関係を保つ", () => {
     expect(openTaskFilter).toEqual({
       NOT: closedTaskFilter,
     });
   });
 
-  it("does not classify unset stages as closed in filter structure", () => {
-    // Relation filter requires a related stage; null developmentStageId never matches.
+  it("closedTaskFilter で段階未設定は closed として扱わない", () => {
     expect(closedTaskFilter).toEqual(
       expect.objectContaining({
         developmentStage: expect.anything(),
@@ -128,14 +125,14 @@ describe("Prisma filter helpers (task 1.3)", () => {
     expect(openTaskFilter).toEqual({ NOT: closedTaskFilter });
   });
 
-  it("defines leaf filter as no non-deleted direct children (velocity-dashboard 1.2; Requirement 3.3)", () => {
+  it("leafTaskFilter で削除されていない直接の子タスクが 0 件のタスクをマッチング", () => {
     expect(leafTaskFilter).toEqual({
       childTasks: { none: { deletedAt: null } },
     });
   });
 });
 
-describe("leafTaskFilter behavior (velocity-dashboard 1.2; Requirement 3.3)", () => {
+describe("leafTaskFilter の動作 (Requirement 3.3)", () => {
   let workspaceId: string;
   let userId: string;
 
@@ -154,7 +151,7 @@ describe("leafTaskFilter behavior (velocity-dashboard 1.2; Requirement 3.3)", ()
     await db.$disconnect();
   });
 
-  it("matches a task whose children are all soft-deleted", async () => {
+  it("leafTaskFilter で削除されている直接の子タスクが 0 件のタスクをマッチング", async () => {
     const parent = await db.task.create({
       data: {
         title: `leaf-parent-${randomUUID()}`,

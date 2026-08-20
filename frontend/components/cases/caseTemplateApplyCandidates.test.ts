@@ -1,7 +1,3 @@
-// RED → GREEN: frontend buildCaseTemplateApplyCandidates parity with backend
-// (task 5.2, Requirements 4.1/4.5–4.12, design.md templateOperations 導出の原則).
-// Fixtures and expected operation-key order match
-// backend/src/modules/cases/caseTemplateApplyCandidates.test.ts.
 import { describe, expect, it } from "vitest";
 import {
   buildCaseTemplateApplyCandidates,
@@ -19,9 +15,7 @@ type Fixture = {
   expected: CaseTemplateApplyOperation[];
 };
 
-/** Canonical fixtures shared with backend task 3.1 expectations. */
 const PARITY_FIXTURES: Fixture[] = [
-  // start transitions (Requirements 4.5–4.7)
   {
     name: "start_generate when start goes null → value",
     oldStart: null,
@@ -46,7 +40,6 @@ const PARITY_FIXTURES: Fixture[] = [
     newEnd: null,
     expected: ["start_delete"],
   },
-  // end transitions (Requirement 4.8)
   {
     name: "end_generate when end goes null → value",
     oldStart: null,
@@ -71,7 +64,6 @@ const PARITY_FIXTURES: Fixture[] = [
     newEnd: null,
     expected: ["end_delete"],
   },
-  // month transitions (Requirements 4.9–4.11)
   {
     name: "month_generate on create with both dates",
     oldStart: null,
@@ -144,7 +136,6 @@ const PARITY_FIXTURES: Fixture[] = [
     newEnd: null,
     expected: ["start_delete", "end_delete", "month_delete"],
   },
-  // zero-candidate transitions (Requirement 4.12)
   {
     name: "[] when create has no dates",
     oldStart: null,
@@ -179,9 +170,9 @@ const PARITY_FIXTURES: Fixture[] = [
   },
 ];
 
-describe("buildCaseTemplateApplyCandidates frontend/backend parity (task 5.2)", () => {
+describe("buildCaseTemplateApplyCandidates frontend/backend のパリティ（task 5.2）", () => {
   it.each(PARITY_FIXTURES)(
-    "matches backend keys and order: $name",
+    "backend のキーと順序が一致する: $name",
     ({ oldStart, oldEnd, newStart, newEnd, expected }) => {
       expect(
         buildCaseTemplateApplyCandidates(oldStart, oldEnd, newStart, newEnd),
@@ -189,8 +180,8 @@ describe("buildCaseTemplateApplyCandidates frontend/backend parity (task 5.2)", 
     },
   );
 
-  describe("Date input normalization (same as backend)", () => {
-    it("treats equivalent Date and YYYY-MM-DD string as the same calendar day", () => {
+  describe("日付入力の正規化（backend と同じ）", () => {
+    it("同等の Date と YYYY-MM-DD 文字列を同じカレンダー日として扱う", () => {
       expect(
         buildCaseTemplateApplyCandidates(
           new Date("2026-04-01T00:00:00.000Z"),
@@ -201,7 +192,7 @@ describe("buildCaseTemplateApplyCandidates frontend/backend parity (task 5.2)", 
       ).toEqual([]);
     });
 
-    it("treats undefined like null", () => {
+    it("undefined を null として扱う", () => {
       expect(
         buildCaseTemplateApplyCandidates(undefined, undefined, "2026-04-01", undefined),
       ).toEqual(["start_generate"]);

@@ -1,6 +1,3 @@
-// caseRoutes workspace scope (workspace-resource-scope task 2.1;
-// Requirements 1.1, 1.2, 3.1, 3.2, 3.3). Uses buildApp so requireUser /
-// CSRF / requireWorkspaceMember apply; injects X-Workspace-Id.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
@@ -19,7 +16,6 @@ const env = {
 
 type App = ReturnType<typeof buildApp>;
 
-/** Isolate route tests from active templates (omit templateOperations = full apply). */
 const noApply = { templateOperations: [] as const };
 
 function sessionCookie(response: { headers: Record<string, string | string[] | undefined> }): string {
@@ -60,8 +56,6 @@ async function csrfToken(app: App, cookie: string): Promise<{ token: string; coo
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  // workspaceService.create provisions terminal development_stages (1.2/1.3);
-  // clear them before removing the workspace row (FK).
   if (table === "workspaces") {
     await db.$executeRawUnsafe(
       `DELETE FROM development_stages WHERE workspace_id IN (${ids.map(() => "?").join(",")})`,
@@ -134,7 +128,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     await db.$disconnect();
   });
 
-  it("POST /api/cases creates a case in the current workspace and returns 201 (Requirement 1.1)", async () => {
+  it("POST /api/cases で現在のワークスペースに case を作成し、201 を返す (Requirement 1.1)", async () => {
     const response = await app.inject(
       withWorkspace(
         {
@@ -157,7 +151,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [body.id]);
   });
 
-  it("POST /api/cases returns 400 when startDate is later than endDate", async () => {
+  it("POST /api/cases で startDate が endDate より後の場合、400 を返す", async () => {
     const response = await app.inject(
       withWorkspace(
         {
@@ -179,7 +173,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it("PATCH /api/cases/:id updates isCompleted independently, and returns 404 for unknown id", async () => {
+  it("PATCH /api/cases/:id で isCompleted を独立して更新し、存在しない id の場合、404 を返す", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -228,7 +222,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [id]);
   });
 
-  it("PATCH /api/cases/:id returns 404 for a case in another workspace (Requirement 3.3)", async () => {
+  it("PATCH /api/cases/:id で別のワークスペースの case を更新した場合、404 を返す (Requirement 3.3)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -260,7 +254,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [id]);
   });
 
-  it("PATCH /api/cases/:id updates name, startDate, and endDate each independently (Requirement 2.5)", async () => {
+  it("PATCH /api/cases/:id で name, startDate, endDate を独立して更新 (Requirement 2.5)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -340,7 +334,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [id]);
   });
 
-  it("DELETE /api/cases/:id detaches linked Task caseId to null (Requirements 8.1, 8.2)", async () => {
+  it("DELETE /api/cases/:id でリンクされた Task caseId を null に切り離す (Requirements 8.1, 8.2)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -375,7 +369,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [id]);
   });
 
-  it("DELETE /api/cases/:id returns 404 for a case in another workspace (Requirement 3.3)", async () => {
+  it("DELETE /api/cases/:id で別のワークスペースの case を削除した場合、404 を返す (Requirement 3.3)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -403,7 +397,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [id]);
   });
 
-  it("GET /api/cases/:id/progress returns progress, and 404 for unknown id", async () => {
+  it("GET /api/cases/:id/progress で progress を返し、存在しない id の場合、404 を返す", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -447,7 +441,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [id]);
   });
 
-  it("GET /api/cases/:id/progress returns 404 for a case in another workspace (Requirement 3.3)", async () => {
+  it("GET /api/cases/:id/progress で別のワークスペースの case を取得した場合、404 を返す (Requirement 3.3)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -475,7 +469,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [id]);
   });
 
-  it("GET /api/cases lists only current-workspace cases and excludes deleted ones (Requirement 3.1)", async () => {
+  it("GET /api/cases で現在のワークスペースの case のみを返し、削除された case を除外 (Requirement 3.1)", async () => {
     const createdA = await app.inject(
       withWorkspace(
         {
@@ -530,7 +524,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [idA, idB]);
   });
 
-  it("DELETE /api/cases/:id returns 404 for a non-existent case", async () => {
+  it("DELETE /api/cases/:id で存在しない case を削除した場合、404 を返す", async () => {
     const response = await app.inject(
       withWorkspace(
         { method: "DELETE", url: `/api/cases/${randomUUID()}` },
@@ -543,7 +537,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     expect(response.statusCode).toBe(404);
   });
 
-  it("POST /api/cases with startDate and endDate both omitted returns 201 with endDate null (task 15.1)", async () => {
+  it("POST /api/cases で startDate と endDate を省略した場合、201 を返し、endDate を null に設定 (task 15.1)", async () => {
     const response = await app.inject(
       withWorkspace(
         {
@@ -566,7 +560,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [body.id]);
   });
 
-  it("PATCH /api/cases/:id with endDate null unsets a previously set endDate (task 15.1)", async () => {
+  it("PATCH /api/cases/:id で endDate null を設定すると、以前に設定された endDate を解除 (task 15.1)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -602,7 +596,7 @@ describe("caseRoutes (task 3.3 + workspace-resource-scope 2.1)", () => {
     await hardDelete("cases", [id]);
   });
 
-  it("PATCH /api/cases/:id with startDate null unsets a previously set startDate (task 15.1)", async () => {
+  it("PATCH /api/cases/:id で startDate null を設定すると、以前に設定された startDate を解除 (task 15.1)", async () => {
     const created = await app.inject(
       withWorkspace(
         {

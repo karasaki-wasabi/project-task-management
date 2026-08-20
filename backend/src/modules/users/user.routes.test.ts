@@ -25,7 +25,7 @@ afterAll(async () => {
 });
 
 describe("userRoutes", () => {
-  it("requires login and lists accounts as PublicUser values", async () => {
+  it("userRoutes.list で login が必要で、accounts を PublicUser 値としてリスト", async () => {
     const app = await buildTestApp();
     const data = createUserData(`候補-${randomUUID()}`);
     const candidate = await db.user.create({ data });
@@ -66,7 +66,7 @@ describe("userRoutes", () => {
     await app.close();
   });
 
-  it("lists all users without q and filters by name or email when q is provided", async () => {
+  it("userRoutes.list で q がない場合、すべてのユーザーをリストし、q が提供された場合、name または email でフィルタリング", async () => {
     const app = await buildTestApp();
     const marker = randomUUID().replace(/-/g, "").slice(0, 12);
     const byNameData = createUserData(`RouteAlpha-${marker}`);
@@ -123,7 +123,7 @@ describe("userRoutes", () => {
     await app.close();
   });
 
-  it("does not register the legacy create and delete routes", async () => {
+  it("userRoutes.list で legacy create と delete のルートを登録しない", async () => {
     const app = await buildTestApp();
     const registerResponse = await app.inject({
       method: "POST",

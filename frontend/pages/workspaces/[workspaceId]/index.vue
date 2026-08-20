@@ -1,14 +1,4 @@
-<!--
-  Scoped dashboard (workspace-url-routing task 3.1). Overdue-cases body moved
-  from pages/index.vue. Membership is guaranteed by workspace-member middleware;
-  the currentId === null empty-state is intentionally omitted.
--->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useApiClient, type Case, type CaseProgress } from "../../../composables/useApiClient";
-import { useCurrentWorkspace } from "../../../composables/useCurrentWorkspace";
-import { workspacePath } from "../../../utils/workspacePath";
-
 interface CaseRow extends Case {
   progress: CaseProgress | null;
 }
@@ -23,7 +13,7 @@ const visibleOverdueCases = computed(() => overdueCases.value.slice(0, DISPLAY_L
 
 const casesPath = computed(() => {
   const id = currentId.value;
-  // Middleware guarantees membership; currentId is synced from the route.
+  // ミドルウェアがメンバーシップを保証。 currentId はルートから同期される。
   return id ? workspacePath(id, "cases") : "#";
 });
 

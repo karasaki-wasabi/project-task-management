@@ -1,5 +1,3 @@
-// Mount tests for ThroughputPage (velocity-dashboard 4.5).
-// Requirements 4.1-4.3, 5.1-5.2, 6.3, 7.1-7.6. No workspace-empty-state.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -94,7 +92,7 @@ function mountPage() {
   });
 }
 
-describe("ThroughputPage (velocity-dashboard 4.5)", () => {
+describe("消化数ダッシュボード (velocity-dashboard 4.5)", () => {
   beforeEach(() => {
     getThroughput.mockReset();
     listCases.mockReset();
@@ -120,7 +118,7 @@ describe("ThroughputPage (velocity-dashboard 4.5)", () => {
     expect(wrapper.find('[data-testid="case-outlook-panel"]').exists()).toBe(false);
   });
 
-  it("scoped 配下では未選択空状態を出さない（workspace-url-routing 3.2）", async () => {
+  it("スコープ配下では未選択空状態を出さない（workspace-url-routing 3.2）", async () => {
     currentId.value = null;
     const mod = await import("./index.vue");
     const wrapper = mount(mod.default, {

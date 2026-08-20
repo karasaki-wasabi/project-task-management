@@ -1,7 +1,3 @@
-// Display labels for case-relative recurring templates (task 7.1,
-// research.md「ビジュアルデザイン確定」, Requirements 2.1–2.5).
-// Shared by Form/Detail modals and (later) the recurrence list page.
-
 import type { CaseRelativeAnchor, NonBusinessDayPolicy, Priority } from "../../composables/useApiClient";
 
 export const CASE_ANCHOR_OPTIONS: ReadonlyArray<{ value: CaseRelativeAnchor; label: string }> = [
@@ -34,7 +30,6 @@ const ANCHOR_LABEL: Record<CaseRelativeAnchor, string> = {
   period_month_end: "各月末",
 };
 
-/** Req 2.3: direction is fixed per anchor; offset is a non-negative distance. */
 const ANCHOR_DIRECTION_AFTER: Record<CaseRelativeAnchor, boolean> = {
   case_start: true,
   case_end: false,
@@ -61,7 +56,6 @@ export function formatOffsetLabel(anchor: CaseRelativeAnchor, offsetDays: number
   return `${base}の${offsetDays}${unit}`;
 }
 
-/** Hint under the offset field — non-negative only (signed mock rejected). */
 export function offsetDirectionHint(anchor: CaseRelativeAnchor): string {
   switch (anchor) {
     case "case_start":

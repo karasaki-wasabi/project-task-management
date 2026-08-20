@@ -128,14 +128,13 @@ async function setDates(
   await endInput.setValue(end);
 }
 
-/** happy-dom may not associate form= id submit buttons; submit the form node. */
 async function submitForm(wrapper: ReturnType<typeof mountForm>) {
   await wrapper.get("#case-form").trigger("submit");
   await flushPromises();
   await nextTick();
 }
 
-describe("CaseFormModal create + missing-dates confirm (task 6.2)", () => {
+describe("CaseFormModal 新規作成 + 日付未設定確認（task 6.2）", () => {
   beforeEach(() => {
     listTasks.mockReset();
     createCase.mockReset();
@@ -149,7 +148,7 @@ describe("CaseFormModal create + missing-dates confirm (task 6.2)", () => {
     vi.clearAllMocks();
   });
 
-  it("both dates set: skips confirm, createCase omits templateOperations (Req 3.4, 3.6)", async () => {
+  it("両方の日付が設定されている場合、確認画面をスキップし、createCase で templateOperations を省略する（Req 3.4, 3.6）", async () => {
     const wrapper = mountForm();
     await flushPromises();
 
@@ -167,7 +166,7 @@ describe("CaseFormModal create + missing-dates confirm (task 6.2)", () => {
     expect(wrapper.text()).not.toContain("案件を作成しますか?");
   });
 
-  it("missing dates: cancel on screen A does not call createCase (Req 3.1, 3.5)", async () => {
+  it("日付未設定: 画面Aでキャンセルすると createCase が呼ばれない（Req 3.1, 3.5）", async () => {
     const wrapper = mountForm();
     await flushPromises();
 
@@ -185,7 +184,7 @@ describe("CaseFormModal create + missing-dates confirm (task 6.2)", () => {
     expect(wrapper.emitted("created")).toBeUndefined();
   });
 
-  it("missing start only: approve then createCase with ops omitted (Req 3.2, 3.5)", async () => {
+  it("開始日のみ未設定: 承認して createCase を呼び出し、ops を省略する（Req 3.2, 3.5）", async () => {
     createCase.mockResolvedValue(
       makeCase({ startDate: null, endDate: "2026-08-10" }),
     );
@@ -214,7 +213,7 @@ describe("CaseFormModal create + missing-dates confirm (task 6.2)", () => {
     ]);
   });
 
-  it("after create, association failure keeps case and allows retry (Req 3.x + existing retry)", async () => {
+  it("作成後、連携失敗で案件を保持し、再試行を許可する（Req 3.x + 既存の再試行）", async () => {
     const task = makeTask({ id: "t-fail", title: "失敗タスク" });
     listTasks.mockResolvedValue([task]);
     createCase.mockResolvedValue(makeCase());
@@ -226,7 +225,7 @@ describe("CaseFormModal create + missing-dates confirm (task 6.2)", () => {
     await fillName(wrapper, "案件A");
     await setDates(wrapper, "2026-08-01", "2026-08-10");
 
-    // select the task
+    // タスクを選択
     await wrapper.get('button[aria-label="失敗タスク を選択"]').trigger("click");
     await submitForm(wrapper);
 

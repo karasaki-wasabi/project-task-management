@@ -165,9 +165,9 @@ function loadProductionModuleFiles(): SourceFiles {
   return files;
 }
 
-describe("module-boundary.guard (design.md ### Verification / module-boundary.guard.test.ts)", () => {
-  describe("cross-module repository imports (Requirements 1.2, 1.3, 7.2)", () => {
-    it("fails when a production file imports another module's repository", () => {
+describe("module-boundary.guard ", () => {
+  describe("異なるモジュールのリポジトリのインポート (Requirements 1.2, 1.3, 7.2)", () => {
+    it("本番ファイルが別のモジュールのリポジトリをインポートすると失敗する", () => {
       const findings = analyzeModuleBoundary({
         "modules/cases/case.service.ts":
           'import { taskRepository } from "../tasks/task.repository.js";\n',
@@ -180,7 +180,7 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
       ]);
     });
 
-    it("fails when a type-only import points at another module's repository", () => {
+    it("型のみのインポートが別のモジュールのリポジトリを指すと失敗する", () => {
       const findings = analyzeModuleBoundary({
         "modules/recurrence/recurrence.service.ts":
           'import type { TaskRow } from "../tasks/task.repository.js";\n',
@@ -193,7 +193,7 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
       ]);
     });
 
-    it("does not flag same-module repository imports", () => {
+    it("同じモジュールのリポジトリのインポートはフラグ付けしない", () => {
       const findings = analyzeModuleBoundary({
         "modules/cases/case.service.ts":
           'import { caseRepository } from "./case.repository.js";\n',
@@ -201,7 +201,7 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
       expect(findings.crossModuleRepositoryImports).toEqual([]);
     });
 
-    it("does not flag shared/soft-delete.repository imports", () => {
+    it("shared/soft-delete.repository のインポートはフラグ付けしない", () => {
       const findings = analyzeModuleBoundary({
         "modules/cases/case.service.ts":
           'import type { DbClient } from "../../shared/soft-delete.repository.js";\n',
@@ -209,7 +209,7 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
       expect(findings.crossModuleRepositoryImports).toEqual([]);
     });
 
-    it("does not treat commented-out repository imports as violations", () => {
+    it("コメントアウトされたリポジトリのインポートは違反として扱わない", () => {
       const findings = analyzeModuleBoundary({
         "modules/cases/case.service.ts":
           '// import { taskRepository } from "../tasks/task.repository.js";\n',
@@ -218,8 +218,8 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
     });
   });
 
-  describe("inter-module service cycles (Requirements 2.1, 2.3)", () => {
-    it("fails on a two-module service cycle", () => {
+  describe("異なるモジュールのサービスの循環 (Requirements 2.1, 2.3)", () => {
+    it("2つのモジュールのサービスの循環が失敗する", () => {
       const findings = analyzeModuleBoundary({
         "modules/tasks/task.service.ts":
           'import { developmentStagesService } from "../development-stages/development-stage.service.js";\n',
@@ -233,7 +233,7 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
       );
     });
 
-    it("fails on a longer inter-module service cycle", () => {
+    it("より長い異なるモジュールのサービスの循環が失敗する", () => {
       const findings = analyzeModuleBoundary({
         "modules/tasks/task.service.ts": 'import { caseService } from "../cases/case.service.js";\n',
         "modules/cases/case.service.ts":
@@ -244,7 +244,7 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
       expect(findings.serviceCycles.length).toBeGreaterThan(0);
     });
 
-    it("does not flag same-module service imports as a cycle", () => {
+    it("同じモジュールのサービスのインポートは循環としてフラグ付けしない", () => {
       const findings = analyzeModuleBoundary({
         "modules/tasks/task.service.ts":
           'import { taskIntegrityService } from "./task-integrity.service.js";\n',
@@ -254,7 +254,7 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
       expect(findings.serviceCycles).toEqual([]);
     });
 
-    it("allows case-read and task-integrity as acyclic public faces", () => {
+    it("case-read と task-integrity を非循環な公開面として許可", () => {
       const findings = analyzeModuleBoundary({
         "modules/cases/case.service.ts": [
           'import { recurrenceService } from "../recurrence/recurrence.service.js";',
@@ -279,8 +279,8 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
     });
   });
 
-  describe("task.closure leakage (Requirements 1.3, 7.2)", () => {
-    it("fails when task.closure is imported from outside tasks", () => {
+  describe("task.closure (Requirements 1.3, 7.2)", () => {
+    it("task.closure が tasks 以外からインポートされると失敗する", () => {
       const findings = analyzeModuleBoundary({
         "modules/cases/case.repository.ts":
           'import { openTaskFilter } from "../tasks/task.closure.js";\n',
@@ -293,7 +293,7 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
       ]);
     });
 
-    it("allows task.closure imports inside tasks", () => {
+    it("task.closure が tasks 内部からインポートされると許可される", () => {
       const findings = analyzeModuleBoundary({
         "modules/tasks/task-integrity.service.ts":
           'import { completedTaskFilter } from "./task.closure.js";\n',
@@ -302,8 +302,8 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
     });
   });
 
-  describe("development-stages must not import task.service (Requirements 2.1, 2.3)", () => {
-    it("fails when development-stages imports task.service.js", () => {
+  describe("development-stages は task.service をインポートしてはいけない (Requirements 2.1, 2.3)", () => {
+    it("development-stages が task.service.js をインポートすると失敗する", () => {
       const findings = analyzeModuleBoundary({
         "modules/development-stages/development-stage.service.ts":
           'import { tasksService } from "../tasks/task.service.js";\n',
@@ -316,7 +316,7 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
       ]);
     });
 
-    it("allows development-stages to import task-integrity.service.js", () => {
+    it("development-stages が task-integrity.service.js をインポートすると許可される", () => {
       const findings = analyzeModuleBoundary({
         "modules/development-stages/development-stage.service.ts":
           'import { taskIntegrityService } from "../tasks/task-integrity.service.js";\n',
@@ -326,7 +326,7 @@ describe("module-boundary.guard (design.md ### Verification / module-boundary.gu
   });
 
   describe("production modules (Requirements 1.2, 1.3, 2.1, 2.3, 7.2)", () => {
-    it("has no Requirement 1 direct refs or inter-module service cycles", () => {
+    it("Requirement 1 の直接参照も異なるモジュールのサービスの循環もない", () => {
       const findings = analyzeModuleBoundary(loadProductionModuleFiles());
       expect(findings.crossModuleRepositoryImports).toEqual([]);
       expect(findings.serviceCycles).toEqual([]);

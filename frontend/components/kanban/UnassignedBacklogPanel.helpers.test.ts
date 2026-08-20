@@ -15,17 +15,17 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 }
 
 describe("filterTasksByTitle (task 2.3, Requirement 3.4)", () => {
-  it("returns all tasks when the query is empty", () => {
+  it("クエリが空の場合、すべてのタスクを返す", () => {
     const tasks = [makeTask({ id: "a", title: "Alpha" }), makeTask({ id: "b", title: "Beta" })];
     expect(filterTasksByTitle(tasks, "")).toEqual(tasks);
   });
 
-  it("returns all tasks when the query is whitespace-only", () => {
+  it("クエリが空白の場合、すべてのタスクを返す", () => {
     const tasks = [makeTask({ id: "a", title: "Alpha" })];
     expect(filterTasksByTitle(tasks, "   ")).toEqual(tasks);
   });
 
-  it("returns tasks whose title contains the query as a substring", () => {
+  it("タイトルにクエリが部分文字列として含まれるタスクを返す", () => {
     const tasks = [
       makeTask({ id: "a", title: "Fix login bug" }),
       makeTask({ id: "b", title: "Write docs" }),
@@ -33,17 +33,17 @@ describe("filterTasksByTitle (task 2.3, Requirement 3.4)", () => {
     expect(filterTasksByTitle(tasks, "login")).toEqual([tasks[0]]);
   });
 
-  it("matches case-insensitively", () => {
+  it("大文字小文字を区別しない", () => {
     const tasks = [makeTask({ id: "a", title: "Fix Login Bug" })];
     expect(filterTasksByTitle(tasks, "LOGIN")).toEqual(tasks);
   });
 
-  it("returns an empty array when nothing matches", () => {
+  it("何も一致しない場合、空の配列を返す", () => {
     const tasks = [makeTask({ id: "a", title: "Alpha" })];
     expect(filterTasksByTitle(tasks, "zzz")).toEqual([]);
   });
 
-  it("does not mutate the input array", () => {
+  it("入力配列を変更しない", () => {
     const tasks = [makeTask({ id: "a", title: "Alpha" })];
     const result = filterTasksByTitle(tasks, "alpha");
     expect(result).not.toBe(tasks);
@@ -51,7 +51,7 @@ describe("filterTasksByTitle (task 2.3, Requirement 3.4)", () => {
 });
 
 describe("sortTasks (task 2.3, Requirement 3.5)", () => {
-  it("sorts by priority high -> medium -> low", () => {
+  it("優先度高 -> 中 -> 低の順でソートする", () => {
     const low = makeTask({ id: "low", priority: "low" });
     const high = makeTask({ id: "high", priority: "high" });
     const medium = makeTask({ id: "medium", priority: "medium" });
@@ -59,7 +59,7 @@ describe("sortTasks (task 2.3, Requirement 3.5)", () => {
     expect(result.map((t) => t.id)).toEqual(["high", "medium", "low"]);
   });
 
-  it("preserves relative order for tied priorities (stable sort)", () => {
+  it("優先度が同じ場合、相対的な順序を保持する（安定ソート）", () => {
     const a = makeTask({ id: "a", priority: "high" });
     const b = makeTask({ id: "b", priority: "high" });
     const c = makeTask({ id: "c", priority: "high" });
@@ -67,28 +67,28 @@ describe("sortTasks (task 2.3, Requirement 3.5)", () => {
     expect(result.map((t) => t.id)).toEqual(["a", "b", "c"]);
   });
 
-  it("sorts by createdAt newest-first (descending)", () => {
+  it("createdAt が新しい順（降順）でソートする", () => {
     const older = makeTask({ id: "older", createdAt: "2026-01-01T00:00:00.000Z" });
     const newer = makeTask({ id: "newer", createdAt: "2026-06-01T00:00:00.000Z" });
     const result = sortTasks([older, newer], "createdAt");
     expect(result.map((t) => t.id)).toEqual(["newer", "older"]);
   });
 
-  it("preserves relative order for tied createdAt (stable sort)", () => {
+  it("createdAt が同じ場合、相対的な順序を保持する（安定ソート）", () => {
     const a = makeTask({ id: "a", createdAt: "2026-01-01T00:00:00.000Z" });
     const b = makeTask({ id: "b", createdAt: "2026-01-01T00:00:00.000Z" });
     const result = sortTasks([a, b], "createdAt");
     expect(result.map((t) => t.id)).toEqual(["a", "b"]);
   });
 
-  it("does not mutate the input array", () => {
+  it("入力配列を変更しない", () => {
     const tasks = [makeTask({ id: "a", priority: "low" }), makeTask({ id: "b", priority: "high" })];
     const original = [...tasks];
     sortTasks(tasks, "priority");
     expect(tasks).toEqual(original);
   });
 
-  it("returns a new array reference", () => {
+  it("新しい配列の参照を返す", () => {
     const tasks = [makeTask({ id: "a" })];
     const result = sortTasks(tasks, "priority");
     expect(result).not.toBe(tasks);

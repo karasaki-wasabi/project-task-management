@@ -1,13 +1,3 @@
-// RecurrenceService: case-relative template management (task 2.1) +
-// schedule calculation / generation helpers (task 2.2, design.md
-// "予定日計算", Requirements 2.3, 5.1, 5.6–5.8, 6.1–6.3) +
-// applyToCase (task 3.2, Requirements 3.2–3.4, 5.1–5.5).
-//
-// Task 4: CaseService passes a DbClient (interactive TX) through
-// applyToCase → generateForAnchor / tryCreateInstance /
-// deleteGeneratedForAnchors → tasksService.create|delete.
-// workspace-resource-scope task 4.1: template CRUD takes VerifiedWorkspaceId;
-// applyToCase filters templates by case.workspaceId.
 import { randomUUID } from "node:crypto";
 import type { Case } from "@prisma/client";
 import { Prisma } from "@prisma/client";
@@ -74,10 +64,6 @@ function isWithinPeriod(date: string, start: string, end: string): boolean {
   return date >= start && date <= end;
 }
 
-// design.md 予定日計算 / Requirements 2.3, 6.1–6.3:
-// - case_start: start + offset; case_end: end − offset
-// - period_month_*: per calendar month in [start, end]'s months; period check
-//   on the raw (pre-NBD) date; missing start or end → no dates
 export function computeRawScheduledDates(
   anchor: CaseRelativeAnchor,
   offsetDays: number,
@@ -122,8 +108,6 @@ export function computeRawScheduledDates(
   }
 }
 
-// Requirements 5.7 / holidays policy: apply NBD after the raw period check.
-// Returns null when policy=skip and the raw date is a non-business day.
 async function resolveScheduledDate(
   date: Date,
   policy: NonBusinessDayPolicy,
@@ -153,10 +137,6 @@ function logInstanceGenerated(instance: Task, requestId: string): void {
   });
 }
 
-// design.md tryCreateInstance pattern: TasksService.create with caseId,
-// defaultDetail → detail, sourceTemplateId, sourceAnchor, scheduledEndDate.
-// Active unique collision → idempotent null. Generated tasks inherit the case
-// workspace (Requirement 1.3 / workspace-resource-scope 4.1).
 async function tryCreateInstance(
   template: RecurringTaskTemplate,
   scheduledEndDate: Date,
@@ -193,9 +173,6 @@ async function tryCreateInstance(
   return result.value;
 }
 
-// Requirements 5.2–5.5: delete by caseId + sourceAnchor (includes completed),
-// exclude manual (null sourceAnchor), soft-delete via tasksService.delete.
-// Template activity / existence does not affect delete targeting (5.3).
 async function deleteGeneratedForAnchors(
   caseId: string,
   anchors: CaseRelativeAnchor[],
@@ -234,7 +211,6 @@ export const recurrenceService = {
     }
   },
 
-  // Requirement 2.7: isActive=true only; does not scan or backfill cases.
   async resumeTemplate(templateId: string, workspaceId: VerifiedWorkspaceId): Promise<void> {
     try {
       await recurrenceRepository.resume(templateId, workspaceId);
@@ -266,10 +242,6 @@ export const recurrenceService = {
     return recurrenceRepository.list(workspaceId);
   },
 
-  // Internal helper for applyToCase. Active templates with the given
-  // caseAnchor only (Requirement 5.1), limited to the case's workspace
-  // (Requirement 1.3 / design.md recurrence applyToCase). Period check on
-  // raw dates, then NBD; skip → no instance (design.md 予定日計算).
   async generateForAnchor(
     caseEntity: Pick<Case, "id" | "startDate" | "endDate" | "workspaceId">,
     anchor: CaseRelativeAnchor,
@@ -304,11 +276,6 @@ export const recurrenceService = {
     return created;
   },
 
-  /**
-   * Execute selected template-apply operations for a case.
-   * Called only from CaseService in the same TX (task 4); no public HTTP.
-   * design.md CaseTemplateApplyOperation / Requirements 3.2–3.4, 5.1–5.5.
-   */
   async applyToCase(
     caseId: string,
     operations: CaseTemplateApplyOperation[],

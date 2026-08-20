@@ -73,7 +73,14 @@
 import { badRequest } from "../../shared/http-errors.js";
 import { tasksService } from "./task.service.js";
 ```
-パスエイリアス(`@/`等)は使用していない。フロントエンドはNuxtの自動インポート(`composables/`配下の関数、`components/`配下のコンポーネント)を前提とし、明示的な`import`を書かない。
+パスエイリアス(`@/`等)は使用していない。フロントエンドはNuxtの自動インポート(Vueのリアクティビティ API、`composables/`配下の関数、`utils/`配下の関数、`components/`配下のコンポーネント)を前提とし、明示的な`import`を書かない。Vitestも`@nuxt/test-utils`の`nuxt`環境([[testing]]参照)を使うため、この前提はテストコードにも同様に当てはまる。
+
+**例外(自動インポート対象外、明示的な`import`が必要)**:
+- npmパッケージ(例: `vue-draggable-plus`の`VueDraggable`/`DraggableEvent`)
+- `components/`配下にある、コンポーネントではない素の`.ts`ヘルパー(例: `StatusBadge.helpers.ts`、`inlineEditableFieldSelection.ts`) — Nuxtのコンポーネント自動登録は`.vue`ファイルのみが対象
+- 別の`.vue`ファイルが`export`する型(例: `OverflowListPopup.vue`の`OverflowListPopupItem`) — コンポーネントとして自動登録されるのみで、型は自動インポートされない
+
+これらを見誤ってimportを消すと、ビルド/型チェックはエラーにならずに実行時にのみ壊れる(ブラウザで500エラー等)。
 
 ## Code Organization Principles
 

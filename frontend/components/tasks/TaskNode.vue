@@ -1,19 +1,4 @@
-<!--
-  Recursive task-hierarchy node (task 11.1, design.md "Frontend/tasks",
-  Requirements 1.1-1.5, 2.1-2.2). Renders one task plus its children
-  (collapsible), status/priority at a glance, and a split action.
-
-  task-status-model 5.2: StageBadge after priority; hide status/select/split
-  on terminal stages; title+badges / spacer / actions layout locks actions right.
--->
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import type { DevelopmentStage, Task, TaskStatus } from "../../composables/useApiClient";
-import { isTaskClosed } from "../../composables/useTaskClosure";
-import PriorityBadge from "../shared/PriorityBadge.vue";
-import StageBadge from "../shared/StageBadge.vue";
-import StatusBadge from "../shared/StatusBadge.vue";
-
 const props = defineProps<{
   task: Task;
   children: Task[];

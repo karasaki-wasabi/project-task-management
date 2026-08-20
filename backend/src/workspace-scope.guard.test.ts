@@ -27,7 +27,7 @@ describe("requireWorkspaceMember (task 1.3)", () => {
     vi.mocked(workspaceService.isMember).mockReset();
   });
 
-  it("returns 400 when X-Workspace-Id header is missing", async () => {
+  it("X-Workspace-Id ヘッダーがない場合、400 を返す", async () => {
     const request = buildRequest({
       currentUser: { id: "user-1" },
       headers: {},
@@ -40,7 +40,7 @@ describe("requireWorkspaceMember (task 1.3)", () => {
     expect(request.currentWorkspaceId).toBeUndefined();
   });
 
-  it("returns 400 when X-Workspace-Id header is empty", async () => {
+  it("X-Workspace-Id ヘッダーが空の場合、400 を返す", async () => {
     const request = buildRequest({
       currentUser: { id: "user-1" },
       headers: { [WORKSPACE_HEADER_NAME]: "" },
@@ -53,7 +53,7 @@ describe("requireWorkspaceMember (task 1.3)", () => {
     expect(request.currentWorkspaceId).toBeUndefined();
   });
 
-  it("returns 403 when the current user is not a workspace member", async () => {
+  it("現在のユーザーがワークスペースメンバーでない場合、403 を返す", async () => {
     vi.mocked(workspaceService.isMember).mockResolvedValue(false);
     const request = buildRequest({
       currentUser: { id: "user-1" },
@@ -67,7 +67,7 @@ describe("requireWorkspaceMember (task 1.3)", () => {
     expect(request.currentWorkspaceId).toBeUndefined();
   });
 
-  it("attaches VerifiedWorkspaceId when the current user is a member", async () => {
+  it("現在のユーザーがワークスペースメンバーの場合、VerifiedWorkspaceId を添付", async () => {
     vi.mocked(workspaceService.isMember).mockResolvedValue(true);
     const request = buildRequest({
       currentUser: { id: "user-1" },
@@ -77,12 +77,11 @@ describe("requireWorkspaceMember (task 1.3)", () => {
     await expect(requireWorkspaceMember(request)).resolves.toBeUndefined();
     expect(workspaceService.isMember).toHaveBeenCalledWith("ws-1", "user-1");
     expect(request.currentWorkspaceId).toBe("ws-1");
-    // Branded type must be usable as VerifiedWorkspaceId at the type level.
     const verified: VerifiedWorkspaceId | undefined = request.currentWorkspaceId;
     expect(verified).toBe("ws-1");
   });
 
-  it("returns 401 when currentUser is not set (requireUser precondition)", async () => {
+  it("currentUser が設定されていない場合、401 を返す (requireUser の前提条件)", async () => {
     const request = buildRequest({
       headers: { [WORKSPACE_HEADER_NAME]: "ws-1" },
     });
@@ -93,7 +92,7 @@ describe("requireWorkspaceMember (task 1.3)", () => {
     expect(workspaceService.isMember).not.toHaveBeenCalled();
   });
 
-  it("re-checks membership on every request (no cache)", async () => {
+  it("すべてのリクエストでメンバーシップを再確認する (キャッシュなし)", async () => {
     vi.mocked(workspaceService.isMember)
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false);

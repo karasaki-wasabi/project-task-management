@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { CSRF_HEADER_NAME, withCsrfToken, withSessionCookie } from "./auth.fixture.js";
 
-describe("auth inject helpers", () => {
-  it("adds a secure-session cookie without discarding existing cookies", () => {
+describe("auth ヘルパー", () => {
+  it("既存のクッキーを破棄せずに secure-session クッキーを追加する", () => {
     const options = withSessionCookie(
       { method: "GET", url: "/api/tasks", headers: { cookie: "theme=dark" } },
       "session=encrypted-session-value",
@@ -11,7 +11,7 @@ describe("auth inject helpers", () => {
     expect(options.headers?.cookie).toBe("theme=dark; session=encrypted-session-value");
   });
 
-  it("adds the CSRF token using the configured header convention", () => {
+  it("設定されたヘッダー規約を使用して CSRF トークンを追加する", () => {
     const options = withCsrfToken(
       { method: "POST", url: "/api/tasks", headers: { cookie: "session=encrypted-session-value" } },
       "csrf-token-value",

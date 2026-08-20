@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import CommentComposer from "./CommentComposer.vue";
-import type { Comment } from "../../composables/useApiClient";
+import type { TaskComment } from "../../composables/useApiClient";
 
-const createComment = vi.fn<(taskId: string, body: string) => Promise<Comment>>();
+const createComment = vi.fn<(taskId: string, body: string) => Promise<TaskComment>>();
 const updateComment =
-  vi.fn<(taskId: string, commentId: string, body: string) => Promise<Comment>>();
+  vi.fn<(taskId: string, commentId: string, body: string) => Promise<TaskComment>>();
 
 vi.mock("../../composables/useApiClient", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../composables/useApiClient")>();
@@ -15,7 +15,7 @@ vi.mock("../../composables/useApiClient", async (importOriginal) => {
   };
 });
 
-function makeComment(overrides: Partial<Comment> = {}): Comment {
+function makeComment(overrides: Partial<TaskComment> = {}): TaskComment {
   return {
     id: "comment-1",
     taskId: "task-1",
