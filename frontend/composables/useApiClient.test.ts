@@ -51,25 +51,25 @@ beforeEach(() => {
 });
 
 describe("joinApiUrl (task 1.6)", () => {
-  it("joins a base URL without a trailing slash and a path without a leading slash", () => {
+  it("末尾にスラッシュのないベースURLと、先頭にスラッシュのないパスを正規化", () => {
     expect(joinApiUrl("http://backend:3000", "api/tasks")).toBe("http://backend:3000/api/tasks");
   });
 
-  it("normalizes a trailing slash on the base URL", () => {
+  it("ベースURLの末尾にスラッシュを正規化", () => {
     expect(joinApiUrl("http://backend:3000/", "api/tasks")).toBe("http://backend:3000/api/tasks");
   });
 
-  it("normalizes a leading slash on the path", () => {
+  it("パスの先頭にスラッシュを正規化", () => {
     expect(joinApiUrl("http://backend:3000", "/api/tasks")).toBe("http://backend:3000/api/tasks");
   });
 
-  it("normalizes both a trailing slash and a leading slash at once", () => {
+  it("ベースURLの末尾にスラッシュと、パスの先頭にスラッシュを正規化", () => {
     expect(joinApiUrl("http://backend:3000/", "/api/tasks")).toBe("http://backend:3000/api/tasks");
   });
 });
 
-describe("useApiClient auth and CSRF contract (task 6.1)", () => {
-  it("initializes CSRF with credentials and exposes typed auth methods without legacy user mutations", async () => {
+describe("useApiClient の認証および CSRF (task 6.1)", () => {
+  it("CSRFを初期化し、認証メソッドを公開し、古いユーザーの変更を排除", async () => {
     fetchMock.mockResolvedValueOnce({ token: "initial-csrf-token" });
 
     const api = useApiClient();
@@ -87,7 +87,7 @@ describe("useApiClient auth and CSRF contract (task 6.1)", () => {
     expect(api).not.toHaveProperty("deleteUser");
   });
 
-  it("attaches the initialized CSRF token and credentials to mutating requests", async () => {
+  it("初期化されたCSRFトークンと認証情報を変更要求に添付", async () => {
     fetchMock.mockResolvedValueOnce({ token: "csrf-token" });
     fetchMock.mockResolvedValueOnce({ id: "task-1" });
     const api = useApiClient();
@@ -103,7 +103,7 @@ describe("useApiClient auth and CSRF contract (task 6.1)", () => {
     });
   });
 
-  it("refreshes CSRF after successful registration and login", async () => {
+  it("登録とログインが成功した後にCSRFを更新", async () => {
     const user = {
       id: "user-1",
       email: "member@example.com",
@@ -131,8 +131,8 @@ describe("useApiClient auth and CSRF contract (task 6.1)", () => {
   });
 });
 
-describe("useApiClient task-field-rename contract (task-field-rename 5.1)", () => {
-  it("client types use detail / scheduledEndDate / defaultDetail and drop old names", () => {
+describe("useApiClient のタスクフィールド名変更 (task-field-rename 5.1)", () => {
+  it("クライアントの型で detail / scheduledEndDate / defaultDetail を使用し、古い名前を削除", () => {
     expect(clientSource).toMatch(/\bdetail\??:/);
     expect(clientSource).toMatch(/\bscheduledEndDate\??:/);
     expect(clientSource).toMatch(/\bdefaultDetail\??:/);
@@ -142,8 +142,8 @@ describe("useApiClient task-field-rename contract (task-field-rename 5.1)", () =
   });
 });
 
-describe("useApiClient task detail contract (task-detail 8)", () => {
-  it("types task create/update fields and deleted task responses", () => {
+describe("useApiClient のタスク詳細 (task-detail 8)", () => {
+  it("タスクの作成/更新フィールドと削除されたタスクの応答を型付け", () => {
     const createInput: CreateTaskInput = {
       title: "終了予定日付きタスク",
       priority: "high",
@@ -169,7 +169,7 @@ describe("useApiClient task detail contract (task-detail 8)", () => {
     expect(deletedTask.deletedAt).toBe("2026-08-13T00:00:00.000Z");
   });
 
-  it("passes parent candidate filters to listTasks", async () => {
+  it("親候補フィルターを listTasks に渡す", async () => {
     const api = useApiClient();
 
     await api.listTasks({
@@ -189,7 +189,7 @@ describe("useApiClient task detail contract (task-detail 8)", () => {
     });
   });
 
-  it("gets a typed task timeline with filter, cursor, and limit", async () => {
+  it("フィルター、カーソル、および制限を指定して型付けされたタスクタイムラインを取得", async () => {
     const page: TaskTimelinePage = { items: [], nextCursor: null };
     fetchMock.mockResolvedValueOnce({ token: "csrf" }).mockResolvedValueOnce(page);
     const api = useApiClient();
@@ -210,7 +210,7 @@ describe("useApiClient task detail contract (task-detail 8)", () => {
     );
   });
 
-  it("creates, updates, and deletes comments", async () => {
+  it("コメントを作成、更新、および削除", async () => {
     const comment: Comment = {
       id: "comment-1",
       taskId: "task-1",
@@ -248,8 +248,8 @@ describe("useApiClient task detail contract (task-detail 8)", () => {
   });
 });
 
-describe("useApiClient recurrence + case templateOperations contract (task 5.1)", () => {
-  it("client source drops fixed_interval / generate-due and types caseAnchor + templateOperations", () => {
+describe("useApiClient の再発行および案件テンプレート操作 (task 5.1)", () => {
+  it("クライアントのソースで fixed_interval / generate-due を削除し、caseAnchor + templateOperations を型付け", () => {
     expect(clientSource).not.toMatch(/fixed_interval/);
     expect(clientSource).not.toMatch(/generateDueInstances|generate-due/);
     expect(clientSource).not.toMatch(/\bRecurrenceKind\b|\bIntervalUnit\b/);
@@ -259,7 +259,6 @@ describe("useApiClient recurrence + case templateOperations contract (task 5.1)"
     expect(clientSource).toMatch(/templateOperations/);
     expect(clientSource).toMatch(/resumeRecurringTemplate/);
 
-    // Compile-time contract samples (vue-tsc / IDE); runtime value unused.
     const registerInput: RegisterTemplateInput = {
       title: "月末確認",
       priority: "medium",
@@ -289,7 +288,7 @@ describe("useApiClient recurrence + case templateOperations contract (task 5.1)"
     expect(updateInput.templateOperations).toEqual([]);
   });
 
-  it("registerRecurringTemplate posts case-relative RegisterTemplateInput", async () => {
+  it("registerRecurringTemplate は case-relative RegisterTemplateInput を POST", async () => {
     const api = useApiClient();
     const input: RegisterTemplateInput = {
       title: "月末確認",
@@ -307,7 +306,7 @@ describe("useApiClient recurrence + case templateOperations contract (task 5.1)"
     );
   });
 
-  it("resumeRecurringTemplate POSTs .../resume and exposes no generateDueInstances", async () => {
+  it("resumeRecurringTemplate は .../resume を POST し、generateDueInstances を公開しない", async () => {
     const api = useApiClient();
     expect(api).not.toHaveProperty("generateDueInstances");
     expect(typeof api.resumeRecurringTemplate).toBe("function");
@@ -319,7 +318,7 @@ describe("useApiClient recurrence + case templateOperations contract (task 5.1)"
     );
   });
 
-  it("createCase / updateCase accept optional templateOperations", async () => {
+  it("createCase / updateCase はオプションの templateOperations を受け入れる", async () => {
     const api = useApiClient();
     const ops: CaseTemplateApplyOperation[] = ["start_generate", "end_generate"];
 
@@ -356,8 +355,8 @@ describe("useApiClient recurrence + case templateOperations contract (task 5.1)"
   });
 });
 
-describe("useApiClient workspace contract (task 5.1)", () => {
-  it("exposes Workspace types and workspace API methods", () => {
+describe("useApiClient のワークスペース (task 5.1)", () => {
+  it("Workspace 型とワークスペース API メソッドを公開", () => {
     expect(clientSource).toMatch(/export const WORKSPACE_COLORS/);
     expect(clientSource).toMatch(/export type WorkspaceColor/);
     expect(clientSource).toMatch(/export interface Workspace\b/);
@@ -371,7 +370,7 @@ describe("useApiClient workspace contract (task 5.1)", () => {
     expect(clientSource).toMatch(/addWorkspaceMember/);
   });
 
-  it("listWorkspaces GETs /api/workspaces", async () => {
+  it("listWorkspaces は /api/workspaces を GET", async () => {
     const api = useApiClient();
     await api.listWorkspaces();
     expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/workspaces", {
@@ -379,7 +378,7 @@ describe("useApiClient workspace contract (task 5.1)", () => {
     });
   });
 
-  it("createWorkspace POSTs { name } to /api/workspaces", async () => {
+  it("createWorkspace は { name } を /api/workspaces に POST", async () => {
     const api = useApiClient();
     await api.createWorkspace({ name: "Team" });
     expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/workspaces", {
@@ -389,7 +388,7 @@ describe("useApiClient workspace contract (task 5.1)", () => {
     });
   });
 
-  it("updateWorkspace PATCHes name/color and deleteWorkspace DELETEs", async () => {
+  it("updateWorkspace は name/color を PATCH し、deleteWorkspace は DELETE", async () => {
     const api = useApiClient();
     await api.updateWorkspace("ws-1", { name: "Renamed" });
     expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/workspaces/ws-1", {
@@ -406,7 +405,7 @@ describe("useApiClient workspace contract (task 5.1)", () => {
     });
   });
 
-  it("member endpoints call members and searchable-users contracts", async () => {
+  it("メンバーエンドポイントは members と searchable-users を呼び出す", async () => {
     const api = useApiClient();
 
     await api.listWorkspaceMembers("ws-1");
@@ -430,7 +429,7 @@ describe("useApiClient workspace contract (task 5.1)", () => {
     });
   });
 
-  it("listUsers accepts optional q query for search", async () => {
+  it("listUsers はオプションの q クエリを受け入れる", async () => {
     const api = useApiClient();
     await api.listUsers();
     expect(fetchMock).toHaveBeenLastCalledWith("http://backend:3000/api/users", {
@@ -446,8 +445,8 @@ describe("useApiClient workspace contract (task 5.1)", () => {
   });
 });
 
-describe("useApiClient workspace scope header (task 7.1)", () => {
-  it("attaches x-workspace-id to scoped paths when currentId is set", async () => {
+describe("useApiClient のワークスペーススコープヘッダ (task 7.1)", () => {
+  it("currentId が設定されている場合、x-workspace-id をスコープ付きパスに添付", async () => {
     currentId.value = "ws-1";
     const api = useApiClient();
 
@@ -495,7 +494,7 @@ describe("useApiClient workspace scope header (task 7.1)", () => {
     });
   });
 
-  it("omits x-workspace-id when currentId is null", async () => {
+  it("currentId が null の場合、x-workspace-id を省略", async () => {
     currentId.value = null;
     const api = useApiClient();
 
@@ -505,7 +504,7 @@ describe("useApiClient workspace scope header (task 7.1)", () => {
     });
   });
 
-  it("attaches x-workspace-id to /api/throughput and omits it for /api/workspaces (velocity-dashboard 4.1)", async () => {
+  it("x-workspace-id を /api/throughput に添付し、/api/workspaces には省略 (velocity-dashboard 4.1)", async () => {
     currentId.value = "ws-1";
     const api = useApiClient();
 
@@ -531,7 +530,7 @@ describe("useApiClient workspace scope header (task 7.1)", () => {
     });
   });
 
-  it("exposes storyPoints and throughput point/outlook types (velocity-dashboard 4.1)", () => {
+  it("storyPoints と throughput point/outlook 型を公開 (velocity-dashboard 4.1)", () => {
     expect(clientSource).toMatch(/storyPoints\??:/);
     expect(clientSource).toMatch(/completedPoints:/);
     expect(clientSource).toMatch(/forecastNextPeriodPoints:/);
@@ -582,7 +581,7 @@ describe("useApiClient workspace scope header (task 7.1)", () => {
     expect(summary.caseOutlook?.openPoints).toBe(12);
   });
 
-  it("merges x-workspace-id with csrf-token on mutating scoped requests", async () => {
+  it("変更要求のスコープ付きリクエストに x-workspace-id と csrf-token をマージ", async () => {
     currentId.value = "ws-1";
     fetchMock.mockResolvedValueOnce({ token: "csrf-token" });
     fetchMock.mockResolvedValueOnce({ id: "task-1" });
@@ -599,7 +598,7 @@ describe("useApiClient workspace scope header (task 7.1)", () => {
     });
   });
 
-  it("scoped 403 で所属から消えていれば refresh 後に退避する（workspace-url-routing 5.2）", async () => {
+  it("スコープ付き 403 で所属から消えていれば refresh 後に退避する（workspace-url-routing 5.2）", async () => {
     currentId.value = "ws-lost";
     workspaces.value = [{ id: "ws-lost" }];
     refresh.mockImplementation(async () => {
@@ -620,7 +619,7 @@ describe("useApiClient workspace scope header (task 7.1)", () => {
     expect(relocateAfterWorkspaceLost).toHaveBeenCalledWith("ws-lost");
   });
 
-  it("scoped 403 でも所属に残っていれば退避しない", async () => {
+  it("スコープ付き 403 でも所属に残っていれば退避しない", async () => {
     currentId.value = "ws-1";
     workspaces.value = [{ id: "ws-1" }];
     refresh.mockImplementation(async () => {

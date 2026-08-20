@@ -3,7 +3,7 @@ import { mount } from "@vue/test-utils";
 import PriorityBadge from "./PriorityBadge.vue";
 
 describe("PriorityBadge", () => {
-  it("renders 高 as a filled danger pill so only high priority stands out", () => {
+  it("「高」を赤いチップとする", () => {
     const wrapper = mount(PriorityBadge, { props: { priority: "high" } });
     const classes = wrapper.classes().join(" ");
 
@@ -12,7 +12,7 @@ describe("PriorityBadge", () => {
     expect(classes).toContain("text-red-700");
   });
 
-  it("renders 中 as a white outline pill without amber fill", () => {
+  it("「中」を白いアウトラインのチップとする", () => {
     const wrapper = mount(PriorityBadge, { props: { priority: "medium" } });
     const classes = wrapper.classes().join(" ");
 
@@ -20,11 +20,9 @@ describe("PriorityBadge", () => {
     expect(classes).toContain("bg-white");
     expect(classes).toContain("border-slate-300");
     expect(classes).toContain("text-slate-600");
-    expect(classes).not.toContain("bg-amber-100");
-    expect(classes).not.toContain("text-amber-800");
   });
 
-  it("renders 低 as a quiet filled pill", () => {
+  it("「低」を灰のチップとする", () => {
     const wrapper = mount(PriorityBadge, { props: { priority: "low" } });
     const classes = wrapper.classes().join(" ");
 

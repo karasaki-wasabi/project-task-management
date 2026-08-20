@@ -1,6 +1,3 @@
-// Create-time workspace attribution ignores client body (workspace-resource-scope
-// task 9.2; Requirements 1.1, 1.2; design.md Testing Strategy Integration Tests:
-// body workspaceId must not override X-Workspace-Id / current workspace context).
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
@@ -19,7 +16,6 @@ const env = {
 
 type App = ReturnType<typeof buildApp>;
 
-/** Isolate case create from active templates (omit templateOperations = full apply). */
 const noApply = { templateOperations: [] as const };
 
 function sessionCookie(response: { headers: Record<string, string | string[] | undefined> }): string {
@@ -66,8 +62,6 @@ async function hardDelete(table: string, ids: string[]): Promise<void> {
       ...ids,
     );
   }
-  // workspaceService.create provisions terminal development_stages (1.2/1.3);
-  // clear them before removing the workspace row (FK).
   if (table === "workspaces") {
     await db.$executeRawUnsafe(
       `DELETE FROM development_stages WHERE workspace_id IN (${ids.map(() => "?").join(",")})`,
@@ -107,7 +101,7 @@ function withWorkspace(
   return csrf ? withCsrfToken(withSession, csrf) : withSession;
 }
 
-describe("create ignores body workspaceId (task 9.2)", () => {
+describe("create は body workspaceId を無視し、X-Workspace-Id を使用 (task 9.2)", () => {
   const app = buildApp(env);
 
   let memberId: string;
@@ -146,7 +140,7 @@ describe("create ignores body workspaceId (task 9.2)", () => {
     await db.$disconnect();
   });
 
-  it("POST /api/cases ignores body workspaceId and attributes to X-Workspace-Id (Requirements 1.1, 1.2)", async () => {
+  it("POST /api/cases は body workspaceId を無視し、X-Workspace-Id を使用 (Requirements 1.1, 1.2)", async () => {
     const response = await app.inject(
       withWorkspace(
         {
@@ -176,7 +170,7 @@ describe("create ignores body workspaceId (task 9.2)", () => {
     await hardDelete("cases", [body.id]);
   });
 
-  it("POST /api/tasks ignores body workspaceId and attributes to X-Workspace-Id (Requirements 1.1, 1.2)", async () => {
+  it("POST /api/tasks は body workspaceId を無視し、X-Workspace-Id を使用 (Requirements 1.1, 1.2)", async () => {
     const response = await app.inject(
       withWorkspace(
         {

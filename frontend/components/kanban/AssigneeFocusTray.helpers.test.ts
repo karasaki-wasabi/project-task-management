@@ -24,25 +24,25 @@ describe("resolveAssigneeName (task 2.1, Requirement 1.2)", () => {
     expect(resolveAssigneeName(users, "u2")).toBe("Bob");
   });
 
-  it("returns undefined when userId is undefined", () => {
+  it("userId が undefined のとき、undefined を返す", () => {
     expect(resolveAssigneeName(users, undefined)).toBeUndefined();
   });
 
-  it("returns undefined when userId is null", () => {
+  it("userId が null のとき、undefined を返す", () => {
     expect(resolveAssigneeName(users, null)).toBeUndefined();
   });
 
-  it("returns undefined when no user matches", () => {
+  it("ユーザーが一致しないとき、undefined を返す", () => {
     expect(resolveAssigneeName(users, "unknown")).toBeUndefined();
   });
 });
 
 describe("isEmpty (task 2.1, Requirement 1.5)", () => {
-  it("returns true for an empty task list", () => {
+  it("空のタスクリストの場合、true を返す", () => {
     expect(isEmpty([])).toBe(true);
   });
 
-  it("returns false when at least one task is present", () => {
+  it("少なくとも1つのタスクが存在する場合、false を返す", () => {
     expect(isEmpty([makeTask()])).toBe(false);
   });
 });

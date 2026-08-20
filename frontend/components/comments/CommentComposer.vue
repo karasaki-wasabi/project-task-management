@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useApiClient, type Comment } from "../../composables/useApiClient";
-
 const props = defineProps<{
   taskId: string;
   mode: "create" | "edit";

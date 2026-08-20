@@ -1,21 +1,4 @@
-<!--
-  Case-relative recurring template create modal (task 7.1,
-  research.md「ビジュアルデザイン確定」, Requirements 1.3, 2.1–2.5, 8.2, 8.3).
-  Create-only — mirrors CaseFormModal. No fixed_interval fields; offset is
-  non-negative with direction fixed per caseAnchor.
-
-  Explicit Vue / useApiClient imports so vitest can mount without Nuxt
-  auto-import runtime (same approach as CaseFormModal.vue).
--->
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import {
-  useApiClient,
-  type CaseRelativeAnchor,
-  type NonBusinessDayPolicy,
-  type Priority,
-  type RecurringTaskTemplate,
-} from "../../composables/useApiClient";
 import { buildRegisterTemplateInput, validateRecurrenceForm } from "./RecurrenceFormModal.helpers";
 import {
   CASE_ANCHOR_OPTIONS,

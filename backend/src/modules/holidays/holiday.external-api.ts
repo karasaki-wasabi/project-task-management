@@ -1,7 +1,3 @@
-// External Japanese-holiday API client (task 6.2, Requirements 8.8, 8.9).
-// research.md "Sources Consulted": Holidays JP API
-// (https://holidays-jp.github.io/), free/unauthenticated, JSON body shaped
-// as { "YYYY-MM-DD": "label", ... }.
 export interface ExternalHolidayRecord {
   date: string;
   label: string;

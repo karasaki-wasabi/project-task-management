@@ -24,12 +24,6 @@ function readWorkspaceHeader(request: FastifyRequest): string | undefined {
   return raw;
 }
 
-/**
- * Resolve X-Workspace-Id and verify the current user is a member.
- * Preconditions: request.currentUser is set (requireUser runs first).
- * Postconditions: on success, request.currentWorkspaceId is a VerifiedWorkspaceId.
- * No caching — isMember is called on every request (Requirement 3.4).
- */
 export async function requireWorkspaceMember(request: FastifyRequest): Promise<void> {
   if (!request.currentUser) {
     throw unauthorized("ログインが必要です。");

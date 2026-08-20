@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { HttpError, forbidden, unauthorized } from "./http-errors.js";
 
 describe("unauthorized", () => {
-  it("returns an HttpError with status 401 and the supplied message", () => {
+  it("401 の HttpError を返す", () => {
     const error = unauthorized("ログインが必要です。");
 
     expect(error).toBeInstanceOf(HttpError);
@@ -12,7 +12,7 @@ describe("unauthorized", () => {
 });
 
 describe("forbidden", () => {
-  it("returns an HttpError with status 403 and the supplied message", () => {
+  it("403 の HttpError を返す", () => {
     const error = forbidden("この操作を行う権限がありません。");
 
     expect(error).toBeInstanceOf(HttpError);

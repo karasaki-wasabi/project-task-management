@@ -1,8 +1,3 @@
-// HTTP routes for Workspaces CRUD + members (tasks 4.1–4.2, design.md
-// "Backend/workspaces" API Contract; Requirements 1.1, 1.2, 2.4, 3.1, 3.2,
-// 4.1–4.5, 6.1–6.5, 7.1–7.4). Auth is applied globally by user-auth's
-// requireUser in app.ts; this plugin reads request.currentUser and does not
-// register its own guard.
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";

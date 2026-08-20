@@ -1,5 +1,3 @@
-// Mount tests for scoped dashboard (workspace-url-routing task 3.1).
-// Overdue-cases body moved from pages/index; empty-state removed (middleware).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -62,7 +60,7 @@ function mountPage() {
   });
 }
 
-describe("DashboardPage scoped (workspace-url-routing task 3.1)", () => {
+describe("ダッシュボード (workspace-url-routing task 3.1)", () => {
   beforeEach(() => {
     listCases.mockReset();
     getCaseProgress.mockReset();
@@ -75,7 +73,7 @@ describe("DashboardPage scoped (workspace-url-routing task 3.1)", () => {
     vi.clearAllMocks();
   });
 
-  it("期限超過案件を読み込みダッシュボードを表示する", async () => {
+  it("期限超過案件を読み込み、ダッシュボードを表示する", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -85,7 +83,7 @@ describe("DashboardPage scoped (workspace-url-routing task 3.1)", () => {
     expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(false);
   });
 
-  it("案件リンクは scoped tasks path を指す", async () => {
+  it("案件リンクはスコープタスクパスを指す", async () => {
     const wrapper = mountPage();
     await flushPromises();
 

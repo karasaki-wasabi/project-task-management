@@ -1,11 +1,3 @@
-// Persistence for NonBusinessDays (task 6.1, design.md "Backend/holidays").
-// Soft-delete / audit-column behavior and the default `deletedAt: null`
-// filter come from the shared `db` client (task 1.4); the
-// `(workspace_id, date_active_key)` unique index (workspace-resource-scope
-// task 1.5) enforces "only one active record per date per workspace" at the
-// DB level, surfaced here as a Prisma P2002 error for the service layer.
-// workspace-resource-scope task 5.1: all queries take VerifiedWorkspaceId and
-// compose where via withWorkspaceScope.
 import type { NonBusinessDay as PrismaNonBusinessDay } from "@prisma/client";
 import { formatDateOnly, parseDateOnly } from "../../shared/date-only.js";
 import { db } from "../../shared/db.js";

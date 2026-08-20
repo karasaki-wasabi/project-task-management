@@ -1,5 +1,3 @@
-// tasksService workspace scope (workspace-resource-scope task 3.1;
-// Requirements 1.1, 1.2, 3.1, 3.2, 3.3) plus prior TasksService coverage.
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -129,7 +127,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Leftover stages from failed cases still reference the workspace.
   await db.$executeRawUnsafe(
     `DELETE FROM development_stages WHERE workspace_id IN (?, ?)`,
     workspaceA,
@@ -149,7 +146,7 @@ afterAll(async () => {
 });
 
 describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
-  it("creates a task with status not_started in the given workspace (Requirement 1.1)", async () => {
+  it("指定されたワークスペースで status not_started のタスクを作成 (Requirement 1.1)", async () => {
     const result = await tasksService.create({
       title: "write report",
       priority: "high",
@@ -167,7 +164,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([result.value.id]);
   });
 
-  it("rejects creating a task with an empty title (Requirement 1.1)", async () => {
+  it("空の title でタスクを作成した場合、400 エラーを返す (Requirement 1.1)", async () => {
     const result = await tasksService.create({ title: "  ", priority: "low", workspaceId: workspaceA });
 
     expect(result.ok).toBe(false);
@@ -175,7 +172,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
   });
 
-  it("stores free-form detail and omits memo/scheduledDate (Requirement 1.1, 1.2, 2.1, 2.2)", async () => {
+  it("free-form detail を保存し、memo/scheduledDate を省略 (Requirement 1.1, 1.2, 2.1, 2.2)", async () => {
     const result = await tasksService.create({
       title: "task with detail",
       priority: "medium",
@@ -193,7 +190,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([result.value.id]);
   });
 
-  it("stores scheduledEndDate when provided (Requirement 2.1, 2.3)", async () => {
+  it("scheduledEndDate を保存 (Requirement 2.1, 2.3)", async () => {
     const scheduledEndDate = new Date("2026-08-15");
     const result = await tasksService.create({
       title: "task with end date",
@@ -210,7 +207,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([result.value.id]);
   });
 
-  it("forces isRequiredForCase to false when no caseId is given (design.md TasksService Implementation Notes)", async () => {
+  it("caseId がない場合、isRequiredForCase を false に強制 (design.md TasksService Implementation Notes)", async () => {
     const result = await tasksService.create({
       title: "no case",
       priority: "low",
@@ -226,7 +223,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([result.value.id]);
   });
 
-  it("updates status and stays visible when set to on_hold (Requirement 1.3, 1.4)", async () => {
+  it("on_hold に設定した場合、status を更新し、表示されたままにする (Requirement 1.3, 1.4)", async () => {
     const created = await tasksService.create({ title: "pause me", priority: "medium", workspaceId: workspaceA });
     if (!created.ok) throw new Error("setup failed");
 
@@ -242,8 +239,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([created.value.id]);
   });
 
-  // task-status-model 3.2: updateStatus is stage-internal work state only (2.4).
-  it("does not change completedAt when status changes (2.4)", async () => {
+  it("status が変更された場合、completedAt は変更されない (2.4)", async () => {
     const created = await tasksService.create({ title: "finish me", priority: "high", workspaceId: workspaceA });
     if (!created.ok) throw new Error("setup failed");
     expect(created.value.completedAt).toBeNull();
@@ -263,7 +259,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([created.value.id]);
   });
 
-  it("rejects status changes when the task is on a terminal stage (4.5)", async () => {
+  it("terminal stage のタスクで status を変更した場合、400 エラーを返す (4.5)", async () => {
     const created = await tasksService.create({
       title: "terminal status",
       priority: "medium",
@@ -322,7 +318,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteStages([completedStage.id, cancelledStage.id]);
   });
 
-  it("returns not_found when updating status of a non-existent task", async () => {
+  it("存在しないタスクの status を更新した場合、404 エラーを返す", async () => {
     const result = await tasksService.updateStatus(randomUUID(), workspaceA, "ready_for_handoff");
 
     expect(result.ok).toBe(false);
@@ -330,7 +326,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(result.error).toEqual({ type: "not_found", taskId: expect.any(String) });
   });
 
-  it("gets a task by id within the same workspace (Requirement 1.2, 3.2)", async () => {
+  it("同じワークスペースの ID でタスクを取得 (Requirement 1.2, 3.2)", async () => {
     const created = await tasksService.create({ title: "detail me", priority: "medium", workspaceId: workspaceA });
     if (!created.ok) throw new Error("setup failed");
 
@@ -344,7 +340,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([created.value.id]);
   });
 
-  it("returns not_found when getting a non-existent task", async () => {
+  it("存在しないタスクを取得した場合、404 エラーを返す", async () => {
     const result = await tasksService.getById(randomUUID(), workspaceA);
 
     expect(result.ok).toBe(false);
@@ -352,7 +348,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(result.error.type).toBe("not_found");
   });
 
-  it("returns not_found when getting a task in another workspace (Requirement 3.3)", async () => {
+  it("別のワークスペースのタスクを取得した場合、404 エラーを返す (Requirement 3.3)", async () => {
     const created = await tasksService.create({
       title: "other ws detail",
       priority: "low",
@@ -369,7 +365,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([created.value.id]);
   });
 
-  it("updates title, priority, and detail (Requirement 1.1, 1.3)", async () => {
+  it("title, priority, detail を更新 (Requirement 1.1, 1.3)", async () => {
     const created = await tasksService.create({
       title: "original",
       priority: "low",
@@ -394,7 +390,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([created.value.id]);
   });
 
-  it("rejects updating to an empty title", async () => {
+  it("空の title で更新した場合、400 エラーを返す", async () => {
     const created = await tasksService.create({ title: "keep me", priority: "low", workspaceId: workspaceA });
     if (!created.ok) throw new Error("setup failed");
 
@@ -407,7 +403,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([created.value.id]);
   });
 
-  it("updates assigneeUserId, overwriting an existing assignee (Requirement 7.2)", async () => {
+  it("assigneeUserId を更新し、既存の assignee を上書き (Requirement 7.2)", async () => {
     const originalAssignee = await db.user.create({ data: createUserData(`orig-${randomUUID()}`) });
     const newAssignee = await db.user.create({ data: createUserData(`new-${randomUUID()}`) });
     const membershipIds = await Promise.all([
@@ -433,7 +429,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteUsers([originalAssignee.id, newAssignee.id]);
   });
 
-  it("forces isRequiredForCase to false when caseId is cleared", async () => {
+  it("caseId がクリアされた場合、isRequiredForCase を false に強制", async () => {
     const caseRecord = await db.case.create({
       data: { name: `c-${randomUUID()}`, endDate: new Date(), workspaceId: workspaceA },
     });
@@ -457,7 +453,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteCases([caseRecord.id]);
   });
 
-  it("returns not_found when updating a non-existent task", async () => {
+  it("存在しないタスクを更新した場合、404 エラーを返す", async () => {
     const result = await tasksService.update(randomUUID(), workspaceA, { title: "ghost" });
 
     expect(result.ok).toBe(false);
@@ -465,7 +461,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(result.error.type).toBe("not_found");
   });
 
-  it("returns not_found when updating a task in another workspace (Requirement 3.3)", async () => {
+  it("別のワークスペースのタスクを更新した場合、404 エラーを返す (Requirement 3.3)", async () => {
     const created = await tasksService.create({
       title: "other ws update",
       priority: "low",
@@ -482,7 +478,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([created.value.id]);
   });
 
-  it("filters the list by caseId and assigneeUserId within workspace (Requirement 7.2)", async () => {
+  it("caseId と assigneeUserId でワークスペース内のリストをフィルタリング (Requirement 7.2)", async () => {
     const caseRecord = await db.case.create({
       data: { name: `c-${randomUUID()}`, endDate: new Date(), workspaceId: workspaceA },
     });
@@ -515,7 +511,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteUsers([user.id]);
   });
 
-  it("lists only tasks in the requested workspace (Requirement 3.1)", async () => {
+  it("要求されたワークスペースのタスクのみをリスト (Requirement 3.1)", async () => {
     const inA = await tasksService.create({ title: "list-a", priority: "low", workspaceId: workspaceA });
     const inB = await tasksService.create({ title: "list-b", priority: "low", workspaceId: workspaceB });
     if (!inA.ok || !inB.ok) throw new Error("setup failed");
@@ -527,7 +523,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([inA.value.id, inB.value.id]);
   });
 
-  it("filters the list to only unassigned tasks when unassignedCase is true (Requirement 3.1)", async () => {
+  it("unassignedCase が true の場合、未割り当てのタスクのみをリスト (Requirement 3.1)", async () => {
     const caseRecord = await db.case.create({
       data: { name: `c-${randomUUID()}`, endDate: new Date(), workspaceId: workspaceA },
     });
@@ -554,7 +550,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteCases([caseRecord.id]);
   });
 
-  it("keeps existing caseId-filter behavior unchanged when unassignedCase is not set (regression)", async () => {
+  it("unassignedCase が設定されていない場合、既存の caseId-filter 動作を変更しない (regression)", async () => {
     const caseRecord = await db.case.create({
       data: { name: `c-${randomUUID()}`, endDate: new Date(), workspaceId: workspaceA },
     });
@@ -579,7 +575,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteCases([caseRecord.id]);
   });
 
-  it("soft-deletes a task and excludes it from list (Requirement 9.3, 9.4)", async () => {
+  it("論理削除し、リストから除外 (Requirement 9.3, 9.4)", async () => {
     const created = await tasksService.create({ title: "delete me", priority: "low", workspaceId: workspaceA });
     if (!created.ok) throw new Error("setup failed");
 
@@ -595,7 +591,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDeleteTasks([created.value.id]);
   });
 
-  it("returns not_found when deleting a non-existent task", async () => {
+  it("存在しないタスクを削除した場合、404 エラーを返す", async () => {
     const result = await tasksService.delete(randomUUID(), workspaceA);
 
     expect(result.ok).toBe(false);
@@ -603,7 +599,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(result.error.type).toBe("not_found");
   });
 
-  it("returns not_found when deleting a task in another workspace (Requirement 3.3)", async () => {
+  it("別のワークスペースのタスクを削除した場合、404 エラーを返す (Requirement 3.3)", async () => {
     const created = await tasksService.create({
       title: "other ws delete",
       priority: "low",
@@ -622,7 +618,7 @@ describe("tasksService (task 3.1 + workspace-resource-scope 3.1)", () => {
 });
 
 describe("tasksService hierarchy (task 3.2)", () => {
-  it("adds a child task under a parent (Requirement 2.1)", async () => {
+  it("親タスクの下に子タスクを追加 (Requirement 2.1)", async () => {
     const parent = await tasksService.create({ title: "parent", priority: "medium", workspaceId: workspaceA });
     if (!parent.ok) throw new Error("setup failed");
 
@@ -640,7 +636,7 @@ describe("tasksService hierarchy (task 3.2)", () => {
     await hardDeleteTasks([child.value.id, parent.value.id]);
   });
 
-  it("allows a child to have its own child, i.e. multi-level nesting (Requirement 2.2)", async () => {
+  it("子タスクが独自の子タスクを持つことができる (Requirement 2.2)", async () => {
     const grandparent = await tasksService.create({
       title: "grandparent",
       priority: "medium",
@@ -667,7 +663,7 @@ describe("tasksService hierarchy (task 3.2)", () => {
     await hardDeleteTasks([child.value.id, parent.value.id, grandparent.value.id]);
   });
 
-  it("returns not_found when adding a child to a non-existent parent", async () => {
+  it("存在しない親タスクの下に子タスクを追加した場合、404 エラーを返す", async () => {
     const result = await tasksService.addChild(randomUUID(), workspaceA, {
       title: "orphan",
       priority: "low",
@@ -679,7 +675,7 @@ describe("tasksService hierarchy (task 3.2)", () => {
     expect(result.error.type).toBe("not_found");
   });
 
-  it("splits a task into parts that inherit its caseId and priority (Requirement 2.3)", async () => {
+  it("caseId と priority を継承した部分タスクに分割 (Requirement 2.3)", async () => {
     const caseRecord = await db.case.create({
       data: { name: `c-${randomUUID()}`, endDate: new Date(), workspaceId: workspaceA },
     });
@@ -710,7 +706,7 @@ describe("tasksService hierarchy (task 3.2)", () => {
     await hardDeleteCases([caseRecord.id]);
   });
 
-  it("rejects splitting into fewer than 2 parts", async () => {
+  it("2つ未満の部分タスクに分割した場合、400 エラーを返す", async () => {
     const original = await tasksService.create({ title: "small task", priority: "low", workspaceId: workspaceA });
     if (!original.ok) throw new Error("setup failed");
 
@@ -725,7 +721,7 @@ describe("tasksService hierarchy (task 3.2)", () => {
     await hardDeleteTasks([original.value.id]);
   });
 
-  it("returns not_found when splitting a non-existent task", async () => {
+  it("存在しないタスクを分割した場合、404 エラーを返す", async () => {
     const result = await tasksService.splitTask(randomUUID(), workspaceA, [
       { title: "a", priority: "low", workspaceId: workspaceA },
       { title: "b", priority: "low", workspaceId: workspaceA },
@@ -736,8 +732,7 @@ describe("tasksService hierarchy (task 3.2)", () => {
     expect(result.error.type).toBe("not_found");
   });
 
-  // task-status-model 3.2: parent/child constraints no longer run on updateStatus (4.2, 5.4).
-  it("allows ready_for_handoff on a parent with open children without stamping completedAt (2.4, 4.2)", async () => {
+  it("ready_for_handoff を親タスクに設定し、子タスクが未完了の場合、completedAt は変更されない (2.4, 4.2)", async () => {
     const parent = await tasksService.create({
       title: "parent with open child",
       priority: "medium",
@@ -763,7 +758,7 @@ describe("tasksService hierarchy (task 3.2)", () => {
 });
 
 describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
-  it("updates developmentStageId independently of the task's status (Requirement 12.9)", async () => {
+  it("developmentStageId を更新し、タスクの status に依存しない (Requirement 12.9)", async () => {
     const created = await tasksService.create({ title: "stage task", priority: "low", workspaceId: workspaceA });
     if (!created.ok) throw new Error("setup failed");
     const stage = await db.developmentStage.create({
@@ -781,7 +776,7 @@ describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
     await hardDeleteStages([stage.id]);
   });
 
-  it("sets the assignee when the task is currently unassigned (Requirement 12.7)", async () => {
+  it("未割り当てのタスクに assignee を設定 (Requirement 12.7)", async () => {
     const created = await tasksService.create({
       title: "unassigned task",
       priority: "low",
@@ -806,7 +801,7 @@ describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
     await hardDeleteStages([stage.id]);
   });
 
-  it("does not overwrite the assignee when the task already has one (Requirement 12.8)", async () => {
+  it("タスクにすでに担当者が設定されている場合、担当者を上書きしない (Requirement 12.8)", async () => {
     const originalAssignee = await db.user.create({ data: createUserData(`original-${randomUUID()}`) });
     const otherUser = await db.user.create({ data: createUserData(`other-${randomUUID()}`) });
     const membershipId = await addWorkspaceMember(workspaceA, originalAssignee.id);
@@ -839,7 +834,7 @@ describe("tasksService.updateDevelopmentStage (task 15.1)", () => {
     await hardDeleteStages([stage.id]);
   });
 
-  it("returns not_found (404) for a non-existent task", async () => {
+  it("存在しないタスクの developmentStageId を更新した場合、404 エラーを返す", async () => {
     const result = await tasksService.updateDevelopmentStage(randomUUID(), workspaceA, randomUUID());
 
     expect(result.ok).toBe(false);
@@ -863,7 +858,7 @@ describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
     });
   }
 
-  it("stamps completedAt on move to completed, clears on normal, restamps on completed again (2.1, 2.2)", async () => {
+  it("completed に移動した場合、completedAt をスタンプし、normal に移動した場合、completedAt をクリアし、再度 completed に移動した場合、completedAt を再スタンプ (2.1, 2.2)", async () => {
     const created = await tasksService.create({
       title: "stamp cycle",
       priority: "medium",
@@ -910,7 +905,7 @@ describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
     await hardDeleteStages([completed.id, normal.id]);
   });
 
-  it("does not stamp completedAt when moved to cancelled (2.3)", async () => {
+  it("cancelled に移動した場合、completedAt をスタンプしない (2.3)", async () => {
     const created = await tasksService.create({
       title: "cancel me",
       priority: "low",
@@ -934,7 +929,7 @@ describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
     await hardDeleteStages([cancelled.id]);
   });
 
-  it("clears completedAt when moved from completed to null stage (2.2, 2.5)", async () => {
+  it("completed から null stage に移動した場合、completedAt をクリア (2.2, 2.5)", async () => {
     const created = await tasksService.create({
       title: "clear via null",
       priority: "low",
@@ -962,7 +957,7 @@ describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
     await hardDeleteStages([completed.id]);
   });
 
-  it("resets status to not_started only when the stage actually changes (4.4)", async () => {
+  it("stage が実際に変更された場合のみ status を not_started にリセット (4.4)", async () => {
     const created = await tasksService.create({
       title: "status reset",
       priority: "medium",
@@ -995,7 +990,7 @@ describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
     await hardDeleteStages([stageA.id, stageB.id]);
   });
 
-  it("rejects move to completed when an open child exists (5.1, 5.4)", async () => {
+  it("子タスクが未完了の場合、completed に移動できない (5.1, 5.4)", async () => {
     const parent = await tasksService.create({
       title: "parent open child",
       priority: "medium",
@@ -1024,7 +1019,7 @@ describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
     await hardDeleteStages([completed.id]);
   });
 
-  it("allows move to completed when the only open child is cancelled (5.2)", async () => {
+  it("子タスクがキャンセルされた場合、completed に移動できる (5.2)", async () => {
     const parent = await tasksService.create({
       title: "parent cancelled child",
       priority: "medium",
@@ -1060,8 +1055,7 @@ describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
     await hardDeleteStages([cancelled.id, completed.id]);
   });
 
-  // task-status-model 7.2: reject with open child, then succeed after child cancelled (5.1, 5.2).
-  it("rejects parent completed while child is open, then allows after that child is cancelled (5.1, 5.2)", async () => {
+  it("子タスクが未完了の場合、completed に移動できない (5.1, 5.2)", async () => {
     const parent = await tasksService.create({
       title: "parent then cancel child",
       priority: "medium",
@@ -1106,8 +1100,7 @@ describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
     await hardDeleteStages([cancelled.id, completed.id]);
   });
 
-  // task-status-model 7.2: soft-deleted children must not block parent completion.
-  it("allows move to completed when the only open child is soft-deleted", async () => {
+  it("子タスクが論理削除された場合、completed に移動できる", async () => {
     const parent = await tasksService.create({
       title: "parent soft-deleted child",
       priority: "medium",
@@ -1138,7 +1131,7 @@ describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
     await hardDeleteStages([completed.id]);
   });
 
-  it("allows move to cancelled regardless of open children (5.3)", async () => {
+  it("子タスクが未完了の場合、cancelled に移動できる (5.3)", async () => {
     const parent = await tasksService.create({
       title: "cancel parent with open child",
       priority: "medium",
@@ -1168,7 +1161,7 @@ describe("tasksService.updateDevelopmentStage (task-status-model 3.1)", () => {
     await hardDeleteStages([cancelled.id]);
   });
 
-  it("allows a stage-unset task to move directly to a terminal stage (2.5)", async () => {
+  it("stage が未設定のタスクを直接 terminal stage に移動できる (2.5)", async () => {
     const created = await tasksService.create({
       title: "unset to terminal",
       priority: "low",
@@ -1220,7 +1213,7 @@ describe("tasksService closed parent child invariant (task-status-model 3.3, Req
     });
   }
 
-  it("rejects splitTask when the task is on a completed stage (5.5)", async () => {
+  it("completed stage のタスクを分割できない (5.5)", async () => {
     const original = await tasksService.create({
       title: "closed split parent",
       priority: "medium",
@@ -1251,7 +1244,7 @@ describe("tasksService closed parent child invariant (task-status-model 3.3, Req
     await hardDeleteStages([completed.id]);
   });
 
-  it("rejects splitTask when the task is on a cancelled stage (5.5)", async () => {
+  it("cancelled stage のタスクを分割できない (5.5)", async () => {
     const original = await tasksService.create({
       title: "cancelled split parent",
       priority: "medium",
@@ -1282,7 +1275,7 @@ describe("tasksService closed parent child invariant (task-status-model 3.3, Req
     await hardDeleteStages([cancelled.id]);
   });
 
-  it("rejects create when parentTaskId is a completed-stage task (5.6)", async () => {
+  it("completed stage の親タスクの下に子タスクを作成できない (5.6)", async () => {
     const parent = await tasksService.create({
       title: "completed parent",
       priority: "medium",
@@ -1315,7 +1308,7 @@ describe("tasksService closed parent child invariant (task-status-model 3.3, Req
     await hardDeleteStages([completed.id]);
   });
 
-  it("rejects addChild when the parent is on a completed stage (5.6)", async () => {
+  it("completed stage の親タスクの下に子タスクを追加できない (5.6)", async () => {
     const parent = await tasksService.create({
       title: "completed addChild parent",
       priority: "medium",
@@ -1347,7 +1340,7 @@ describe("tasksService closed parent child invariant (task-status-model 3.3, Req
     await hardDeleteStages([completed.id]);
   });
 
-  it("rejects create when parentTaskId is a cancelled-stage task (5.6)", async () => {
+  it("cancelled stage の親タスクの下に子タスクを作成できない (5.6)", async () => {
     const parent = await tasksService.create({
       title: "cancelled parent",
       priority: "medium",
@@ -1382,7 +1375,7 @@ describe("tasksService closed parent child invariant (task-status-model 3.3, Req
 });
 
 describe("tasksService assignee membership (workspace-resource-scope task 3.2, Requirement 4.2)", () => {
-  it("rejects create when assigneeUserId is not a workspace member", async () => {
+  it("assigneeUserId がワークスペースメンバーでない場合、タスクを作成できない", async () => {
     const outsider = await db.user.create({ data: createUserData(`outsider-create-${randomUUID()}`) });
 
     const result = await tasksService.create({
@@ -1399,7 +1392,7 @@ describe("tasksService assignee membership (workspace-resource-scope task 3.2, R
     await hardDeleteUsers([outsider.id]);
   });
 
-  it("rejects update when assigneeUserId is not a workspace member", async () => {
+  it("assigneeUserId がワークスペースメンバーでない場合、タスクを更新できない", async () => {
     const created = await tasksService.create({
       title: "update assignee later",
       priority: "low",
@@ -1420,7 +1413,7 @@ describe("tasksService assignee membership (workspace-resource-scope task 3.2, R
     await hardDeleteUsers([outsider.id]);
   });
 
-  it("rejects updateDevelopmentStage assignee when user is not a workspace member", async () => {
+  it("assigneeUserId がワークスペースメンバーでない場合、developmentStageId を更新できない", async () => {
     const created = await tasksService.create({
       title: "stage assign outsider",
       priority: "low",
@@ -1448,7 +1441,7 @@ describe("tasksService assignee membership (workspace-resource-scope task 3.2, R
     await hardDeleteStages([stage.id]);
   });
 
-  it("accepts create when assigneeUserId is a workspace member", async () => {
+  it("assigneeUserId がワークスペースメンバーの場合、タスクを作成できる", async () => {
     const member = await db.user.create({ data: createUserData(`member-create-${randomUUID()}`) });
     const membershipId = await addWorkspaceMember(workspaceA, member.id);
 
@@ -1468,7 +1461,7 @@ describe("tasksService assignee membership (workspace-resource-scope task 3.2, R
     await hardDeleteUsers([member.id]);
   });
 
-  it("rejects addChild when assigneeUserId is not a workspace member", async () => {
+  it("assigneeUserId がワークスペースメンバーでない場合、子タスクを追加できない", async () => {
     const parent = await tasksService.create({
       title: "parent for outsider child",
       priority: "low",
@@ -1495,7 +1488,7 @@ describe("tasksService assignee membership (workspace-resource-scope task 3.2, R
     await hardDeleteUsers([outsider.id]);
   });
 
-  it("rejects splitTask when a part assigneeUserId is not a workspace member", async () => {
+  it("assigneeUserId がワークスペースメンバーでない場合、部分タスクを分割できない", async () => {
     const original = await tasksService.create({
       title: "split with outsider part",
       priority: "medium",
@@ -1535,7 +1528,7 @@ describe("tasksService assignee membership (workspace-resource-scope task 3.2, R
 });
 
 describe("tasksService related resource workspace scope (workspace-resource-scope task 3.3, Requirement 3.5)", () => {
-  it("rejects create when caseId belongs to another workspace", async () => {
+  it("caseId が別のワークスペースに属する場合、タスクを作成できない", async () => {
     const foreignCase = await db.case.create({
       data: { name: `foreign-case-${randomUUID()}`, workspaceId: workspaceB },
     });
@@ -1554,7 +1547,7 @@ describe("tasksService related resource workspace scope (workspace-resource-scop
     await hardDeleteCases([foreignCase.id]);
   });
 
-  it("rejects create when parentTaskId belongs to another workspace", async () => {
+  it("parentTaskId が別のワークスペースに属する場合、タスクを作成できない", async () => {
     const foreignParent = await tasksService.create({
       title: "parent in B",
       priority: "low",
@@ -1576,7 +1569,7 @@ describe("tasksService related resource workspace scope (workspace-resource-scop
     await hardDeleteTasks([foreignParent.value.id]);
   });
 
-  it("rejects create when caseId does not exist", async () => {
+  it("caseId が存在しない場合、タスクを作成できない", async () => {
     const result = await tasksService.create({
       title: "missing case",
       priority: "low",
@@ -1589,7 +1582,7 @@ describe("tasksService related resource workspace scope (workspace-resource-scop
     expect(result.error).toEqual({ type: "validation_error", message: expect.any(String) });
   });
 
-  it("rejects update when caseId belongs to another workspace", async () => {
+  it("caseId が別のワークスペースに属する場合、タスクを更新できない", async () => {
     const created = await tasksService.create({
       title: "update case later",
       priority: "low",
@@ -1610,7 +1603,7 @@ describe("tasksService related resource workspace scope (workspace-resource-scop
     await hardDeleteCases([foreignCase.id]);
   });
 
-  it("rejects addChild when caseId belongs to another workspace", async () => {
+  it("caseId が別のワークスペースに属する場合、子タスクを追加できない", async () => {
     const parent = await tasksService.create({
       title: "parent for cross-ws case child",
       priority: "low",
@@ -1639,7 +1632,7 @@ describe("tasksService related resource workspace scope (workspace-resource-scop
     await hardDeleteCases([foreignCase.id]);
   });
 
-  it("rejects splitTask when a part caseId belongs to another workspace", async () => {
+  it("caseId が別のワークスペースに属する場合、部分タスクを分割できない", async () => {
     const original = await tasksService.create({
       title: "split with foreign case part",
       priority: "medium",
@@ -1675,7 +1668,7 @@ describe("tasksService related resource workspace scope (workspace-resource-scop
     await hardDeleteCases([foreignCase.id]);
   });
 
-  it("rejects updateDevelopmentStage when developmentStageId belongs to another workspace", async () => {
+  it("developmentStageId が別のワークスペースに属する場合、developmentStageId を更新できない", async () => {
     const created = await tasksService.create({
       title: "stage cross-ws",
       priority: "low",
@@ -1696,7 +1689,7 @@ describe("tasksService related resource workspace scope (workspace-resource-scop
     await hardDeleteStages([foreignStage.id]);
   });
 
-  it("accepts create when caseId and parentTaskId belong to the current workspace", async () => {
+  it("caseId と parentTaskId が同じワークスペースに属する場合、タスクを作成できる", async () => {
     const sameCase = await db.case.create({
       data: { name: `same-case-${randomUUID()}`, workspaceId: workspaceA },
     });
@@ -1726,7 +1719,7 @@ describe("tasksService related resource workspace scope (workspace-resource-scop
 });
 
 describe("tasksService module boundary (module-boundary-cleanup task 3)", () => {
-  it("uses caseReadService and stages getById(client); no case repository or developmentStage Prisma (Requirements 1.1–1.4, 3.2)", () => {
+  it("caseReadService と stages getById(client) を使用する (Requirements 1.1–1.4, 3.2)", () => {
     const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "task.service.ts");
     const source = readFileSync(sourcePath, "utf8");
     const importLines = source
@@ -1751,7 +1744,7 @@ describe("tasksService module boundary (module-boundary-cleanup task 3)", () => 
 });
 
 describe("tasksService storyPoints (velocity-dashboard 2.3; Requirements 1.5, 2.1–2.5)", () => {
-  it("rejects update storyPoints when the task has children (1.5, 2.5)", async () => {
+  it("子タスクがある場合、storyPoints を更新できない (1.5, 2.5)", async () => {
     const parent = await tasksService.create({
       title: "parent-with-child",
       priority: "medium",
@@ -1778,7 +1771,7 @@ describe("tasksService storyPoints (velocity-dashboard 2.3; Requirements 1.5, 2.
     await hardDeleteTasks([child.value.id, parent.value.id]);
   });
 
-  it("persists leaf storyPoints on update and records field_changed timeline (2.2)", async () => {
+  it("leaf storyPoints を更新し、field_changed のタイムラインを記録 (2.2)", async () => {
     const leaf = await tasksService.create({
       title: "leaf-points",
       priority: "medium",
@@ -1804,7 +1797,7 @@ describe("tasksService storyPoints (velocity-dashboard 2.3; Requirements 1.5, 2.
     await hardDeleteTasks([leaf.value.id]);
   });
 
-  it("recalculates parent on create with parentTaskId (2.1, 2.3)", async () => {
+  it("parentTaskId を使用して親タスクを再計算 (2.1, 2.3)", async () => {
     const parent = await tasksService.create({
       title: "create-parent",
       priority: "medium",
@@ -1841,7 +1834,7 @@ describe("tasksService storyPoints (velocity-dashboard 2.3; Requirements 1.5, 2.
     await hardDeleteTasks([child.value.id, parent.value.id]);
   });
 
-  it("recalculates parent on addChild (2.1, 2.3)", async () => {
+  it("addChild で親タスクを再計算 (2.1, 2.3)", async () => {
     const parent = await tasksService.create({
       title: "addchild-parent",
       priority: "medium",
@@ -1868,7 +1861,7 @@ describe("tasksService storyPoints (velocity-dashboard 2.3; Requirements 1.5, 2.
     await hardDeleteTasks([child.value.id, parent.value.id]);
   });
 
-  it("recalculates split source on splitTask (2.1, 2.3)", async () => {
+  it("splitTask で分割元を再計算 (2.1, 2.3)", async () => {
     const original = await tasksService.create({
       title: "split-source",
       priority: "high",
@@ -1893,7 +1886,7 @@ describe("tasksService storyPoints (velocity-dashboard 2.3; Requirements 1.5, 2.
     await hardDeleteTasks([...parts.value.map((p) => p.id), original.value.id]);
   });
 
-  it("recalculates current parent when leaf storyPoints change (2.2, 2.4)", async () => {
+  it("leaf storyPoints が変更された場合、現在の親タスクを再計算 (2.2, 2.4)", async () => {
     const root = await tasksService.create({
       title: "recalc-root",
       priority: "medium",
@@ -1942,7 +1935,7 @@ describe("tasksService storyPoints (velocity-dashboard 2.3; Requirements 1.5, 2.
     await hardDeleteTasks([leaf.value.id, mid.value.id, root.value.id]);
   });
 
-  it("recalculates old and new parents when parentTaskId changes (2.1)", async () => {
+  it("parentTaskId が変更された場合、古い親タスクと新しい親タスクを再計算 (2.1)", async () => {
     const oldParent = await tasksService.create({
       title: "old-parent",
       priority: "medium",
@@ -1980,7 +1973,7 @@ describe("tasksService storyPoints (velocity-dashboard 2.3; Requirements 1.5, 2.
     await hardDeleteTasks([child.value.id, oldParent.value.id, newParent.value.id]);
   });
 
-  it("recalculates parent on delete (2.1)", async () => {
+  it("削除で親タスクを再計算 (2.1)", async () => {
     const parent = await tasksService.create({
       title: "delete-parent",
       priority: "medium",

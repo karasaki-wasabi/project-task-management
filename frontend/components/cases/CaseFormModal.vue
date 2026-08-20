@@ -1,35 +1,4 @@
-<!--
-  Case registration popup (task 6.2, design.md System Flow「案件新規作成」,
-  Requirements 2.1-2.5, 3.1-3.7, 9.2). Standalone here — not yet wired into
-  cases/index.vue beyond existing parent mount; this component needs an
-  `open` prop, driving `shared/Modal.vue` directly, plus `close`/`created`
-  emits for whichever parent mounts it.
-
-  Layout mirrors TaskDetailModal's Modal-based structure but has no
-  view/edit mode switch — this is a create-only popup (name/startDate/
-  endDate + unassigned-task selection), never an editor for an existing
-  Case (that's CaseDetailModal, task 6.3).
-
-  Opens (`watch(() => props.open)`) by resetting the form and fetching
-  `listTasks({ unassignedCase: true })`, same fetch-on-open pattern as
-  TaskDetailModal's `watch(taskId)`. Selection/search/validation decision
-  logic lives in CaseFormModal.helpers.ts; this file wires that pure state
-  to the template and the missing-dates confirm → create → associate flow.
-
-  Submit flow (design.md System Flow「案件新規作成」):
-  1. validate
-  2. if start or end missing → CaseTemplateApplyConfirm screen A; cancel = no API
-  3. createCase with templateOperations omitted (both dates: server full
-     candidates; partial/both missing: server derives from present dates /
-     empty candidates)
-  4. emit created; sequential updateTask per SELECTED task; retry failed only
-
-  Explicit Vue / useApiClient imports so vitest can mount without Nuxt
-  auto-import runtime (same approach as CaseTemplateApplyConfirm.vue).
--->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useApiClient } from "../../composables/useApiClient";
 import type { CaseTemplateApplyOperation } from "./caseTemplateApplyCandidates";
 import CaseTemplateApplyConfirm from "./CaseTemplateApplyConfirm.vue";
 import type { MissingDates } from "./CaseTemplateApplyConfirm.helpers";
@@ -157,7 +126,7 @@ async function performCreate() {
 }
 
 async function submit() {
-  if (createdCase.value) return; // case already created — only retry is allowed from here on
+  if (createdCase.value) return;
   error.value = null;
   const validation = validateCaseForm({ name: name.value, startDate: startDate.value, endDate: endDate.value });
   if (!validation.valid) {
@@ -180,7 +149,6 @@ function onConfirmClose() {
 }
 
 async function onConfirmApprove(_operations: CaseTemplateApplyOperation[] | null) {
-  // Screen A approves with null → omit templateOperations (server derives).
   confirmOpen.value = false;
   await performCreate();
 }
@@ -301,8 +269,6 @@ async function retryFailedAssociations() {
             <span class="min-w-0 flex-1 truncate text-sm text-slate-800">{{ task.title }}</span>
             <PriorityBadge :priority="task.priority" />
 
-            <!-- Requirement 3.3: the required toggle is only meaningful/
-                 interactive when the row is selected; otherwise hidden. -->
             <label
               v-if="selection[task.id]?.selected"
               class="required-toggle flex shrink-0 items-center gap-1.5 text-xs font-medium text-slate-600"

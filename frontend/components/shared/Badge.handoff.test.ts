@@ -1,4 +1,3 @@
-// task-status-model 4.1 — handoff tone reserves teal; green stays off StatusBadge path.
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import Badge from "./Badge.vue";

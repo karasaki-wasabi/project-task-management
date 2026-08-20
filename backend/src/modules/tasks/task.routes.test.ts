@@ -1,6 +1,3 @@
-// taskRoutes workspace scope (workspace-resource-scope task 3.1;
-// Requirements 1.1, 1.2, 3.1, 3.2, 3.3). Uses buildApp so requireUser /
-// CSRF / requireWorkspaceMember apply; injects X-Workspace-Id.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
@@ -63,8 +60,6 @@ async function hardDelete(table: string, ids: string[]): Promise<void> {
       ...ids,
     );
   }
-  // workspaceService.create provisions terminal development_stages (1.2/1.3);
-  // clear them before removing the workspace row (FK).
   if (table === "workspaces") {
     await db.$executeRawUnsafe(
       `DELETE FROM development_stages WHERE workspace_id IN (${ids.map(() => "?").join(",")})`,
@@ -137,7 +132,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await db.$disconnect();
   });
 
-  it("POST /api/tasks creates a task in the current workspace and returns 201 (Requirement 1.1)", async () => {
+  it("POST /api/tasks で現在のワークスペースにタスクを作成し、201 を返す (Requirement 1.1)", async () => {
     const response = await app.inject(
       withWorkspace(
         {
@@ -160,7 +155,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [body.id]);
   });
 
-  it("POST /api/tasks stores an optional scheduledEndDate (task-detail 2.9)", async () => {
+  it("POST /api/tasks でオプションの scheduledEndDate を保存 (task-detail 2.9)", async () => {
     const response = await app.inject(
       withWorkspace(
         {
@@ -186,7 +181,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(body.scheduledEndDate).toBe("2036-08-15T00:00:00.000Z");
   });
 
-  it("POST /api/tasks returns 400 for an empty title", async () => {
+  it("POST /api/tasks で空のタイトルを指定した場合、400 を返す", async () => {
     const response = await app.inject(
       withWorkspace(
         {
@@ -205,7 +200,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
 
   describe("storyPoints (velocity-dashboard 6.1; Requirements 1.1–1.5, 2.1–2.5)", () => {
     it.each([0, -1, 1.5])(
-      "POST /api/tasks returns 400 for invalid storyPoints=%s",
+      "POST /api/tasks で無効な storyPoints=%s を指定した場合、400 を返す",
       async (storyPoints) => {
         const response = await app.inject(
           withWorkspace(
@@ -224,7 +219,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       },
     );
 
-    it("POST /api/tasks accepts omitted storyPoints (optional)", async () => {
+    it("POST /api/tasks で storyPoints を省略した場合、201 を返す (optional)", async () => {
       const response = await app.inject(
         withWorkspace(
           {
@@ -244,7 +239,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       expect(response.statusCode).toBe(201);
     });
 
-    it("POST /api/tasks accepts a valid storyPoints integer >= 1", async () => {
+    it("POST /api/tasks で有効な storyPoints の整数 >= 1 を指定した場合、201 を返す", async () => {
       const response = await app.inject(
         withWorkspace(
           {
@@ -264,7 +259,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     });
 
     it.each([0, -1, 1.5])(
-      "PATCH /api/tasks/:id returns 400 for invalid storyPoints=%s",
+      "PATCH /api/tasks/:id で無効な storyPoints=%s を指定した場合、400 を返す",
       async (storyPoints) => {
         const created = await app.inject(
           withWorkspace(
@@ -281,14 +276,12 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
         expect(created.statusCode).toBe(201);
         const { id } = created.json();
 
-        // Include a valid field so rejection is from storyPoints, not empty-body refine
-        // (unknown keys are stripped before validation is implemented).
         const response = await app.inject(
           withWorkspace(
             {
               method: "PATCH",
               url: `/api/tasks/${id}`,
-              payload: { title: "still valid", storyPoints },
+              payload: { title: "valid field", storyPoints },
             },
             memberCsrf.cookie,
             memberCsrf.token,
@@ -301,7 +294,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       },
     );
 
-    it("PATCH /api/tasks/:id accepts storyPoints null", async () => {
+    it("PATCH /api/tasks/:id で storyPoints を null に設定した場合、200 を返す", async () => {
       const created = await app.inject(
         withWorkspace(
           {
@@ -334,7 +327,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       expect(response.statusCode).toBe(200);
     });
 
-    it("PATCH /api/tasks/:id accepts a valid storyPoints integer >= 1", async () => {
+    it("PATCH /api/tasks/:id で有効な storyPoints の整数 >= 1 を指定した場合、200 を返す", async () => {
       const created = await app.inject(
         withWorkspace(
           {
@@ -368,7 +361,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       await hardDelete("tasks", [id]);
     });
 
-    it("PATCH /api/tasks/:id returns 400 when storyPoints is set on a parent (1.5, 2.5)", async () => {
+    it("PATCH /api/tasks/:id で親タスクに storyPoints を設定した場合、400 を返す (1.5, 2.5)", async () => {
       const parent = await app.inject(
         withWorkspace(
           {
@@ -421,7 +414,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       await hardDelete("tasks", [childId, parentId]);
     });
 
-    it("PATCH leaf storyPoints records timeline field_changed (2.2)", async () => {
+    it("PATCH /api/tasks/:id で leaf storyPoints を設定し、field_changed のタイムラインを記録 (2.2)", async () => {
       const created = await app.inject(
         withWorkspace(
           {
@@ -483,7 +476,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       await hardDelete("tasks", [id]);
     });
 
-    it("propagates leaf storyPoints up a 3+ level tree via POST/PATCH (2.1, 2.2, 2.4)", async () => {
+    it("POST/PATCH で leaf storyPoints を3階層以上のツリーに伝播 (2.1, 2.2, 2.4)", async () => {
       const root = await app.inject(
         withWorkspace(
           {
@@ -596,7 +589,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
       await hardDelete("tasks", [leafId, midId, rootId]);
     });
 
-    it("resets parent storyPoints to null when the last child is deleted (2.1)", async () => {
+    it("最後の子タスクが削除された場合、親タスクの storyPoints を null にリセット (2.1)", async () => {
       const parent = await app.inject(
         withWorkspace(
           {
@@ -667,7 +660,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     });
   });
 
-  it("PATCH /api/tasks/:id/status updates status, returns 404 for unknown id", async () => {
+  it("PATCH /api/tasks/:id/status で status を更新し、404 を返す (unknown id)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -723,7 +716,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [id]);
   });
 
-  it("GET /api/tasks/:id returns a task, 404 for unknown id", async () => {
+  it("GET /api/tasks/:id でタスクを取得し、404 を返す (unknown id)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -757,7 +750,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [id]);
   });
 
-  it("GET /api/tasks/:id returns 404 for a task in another workspace (Requirement 3.3)", async () => {
+  it("GET /api/tasks/:id で別のワークスペースのタスクを取得した場合、404 を返す (Requirement 3.3)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -780,7 +773,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [id]);
   });
 
-  it("PATCH /api/tasks/:id updates task fields, 404 for unknown id, 400 for empty title", async () => {
+  it("PATCH /api/tasks/:id でタスクのフィールドを更新し、404 を返す (unknown id), 400 を返す (空のタイトル)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -855,7 +848,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [id]);
   });
 
-  it("PATCH with only memo does not change detail (Requirement 1.4)", async () => {
+  it("PATCH で memo のみを指定した場合、detail は変更されない (Requirement 1.4)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -883,7 +876,6 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
         workspaceA,
       ),
     );
-    // Zod strips unknown keys; empty body fails refine → 400, or succeeds without applying memo.
     if (memoOnly.statusCode === 200) {
       expect(memoOnly.json().detail).toBe("original detail");
       expect(memoOnly.json()).not.toHaveProperty("memo");
@@ -900,7 +892,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [id]);
   });
 
-  it("PATCH /api/tasks/:id returns 404 for a task in another workspace (Requirement 3.3)", async () => {
+  it("PATCH /api/tasks/:id で別のワークスペースのタスクを更新した場合、404 を返す (Requirement 3.3)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -932,7 +924,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [id]);
   });
 
-  it("GET /api/tasks lists only current-workspace tasks and excludes deleted ones (Requirement 3.1)", async () => {
+  it("GET /api/tasks で現在のワークスペースのタスクのみを取得し、削除されたタスクを除外 (Requirement 3.1)", async () => {
     const createdA = await app.inject(
       withWorkspace(
         {
@@ -981,7 +973,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [idA, idB]);
   });
 
-  it("returns a deleted task for detail reads and rejects every task write with 409 (task-detail 1.4)", async () => {
+  it("削除されたタスクを detail で取得し、すべてのタスクの書き込みを 409 で拒否 (task-detail 1.4)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -1096,7 +1088,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("tasks", [taskId]);
   });
 
-  it("GET /api/tasks/:id/timeline filters, orders, pages, and reads deleted tasks", async () => {
+  it("GET /api/tasks/:id/timeline でフィルター、並べ替え、ページング、削除されたタスクを取得 (Requirement 3.1)", async () => {
     const task = await db.task.create({
       data: {
         title: `timeline-${randomUUID()}`,
@@ -1299,7 +1291,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     }
   });
 
-  it("GET /api/tasks/:id/timeline pages a mixed stream without loading every row", async () => {
+  it("GET /api/tasks/:id/timeline で混合ストリームをページングし、すべての行を読み込まない", async () => {
     const task = await db.task.create({
       data: {
         title: `timeline-page-${randomUUID()}`,
@@ -1383,7 +1375,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     }
   });
 
-  it("GET /api/tasks?unassignedCase=true returns only tasks with no case assigned", async () => {
+  it("GET /api/tasks?unassignedCase=true で未割り当てのケースのみを取得", async () => {
     const caseRecord = await db.case.create({
       data: { name: `route-case-${randomUUID()}`, endDate: new Date(), workspaceId: workspaceA },
     });
@@ -1433,7 +1425,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     await hardDelete("cases", [caseRecord.id]);
   });
 
-  it("GET /api/tasks filters parent candidates by title, subtree, and closure state", async () => {
+  it("GET /api/tasks で親候補をタイトル、サブツリー、クローズ状態でフィルタリング", async () => {
     const token = `parent-candidate-${randomUUID()}`;
     const completedStage = await db.developmentStage.findFirstOrThrow({
       where: { workspaceId: workspaceA, kind: "completed" },
@@ -1501,7 +1493,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     }
   });
 
-  it('GET /api/tasks?unassignedCase=false is rejected (only the literal "true" is accepted)', async () => {
+  it('GET /api/tasks?unassignedCase=false で "true" のみが受け付けられることを拒否 (only the literal "true" is accepted)', async () => {
     const response = await app.inject(
       withWorkspace(
         { method: "GET", url: "/api/tasks?unassignedCase=false" },
@@ -1514,7 +1506,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it("DELETE /api/tasks/:id returns 404 for a non-existent task", async () => {
+  it("DELETE /api/tasks/:id で存在しないタスクを削除した場合、404 を返す", async () => {
     const response = await app.inject(
       withWorkspace(
         { method: "DELETE", url: `/api/tasks/${randomUUID()}` },
@@ -1527,7 +1519,7 @@ describe("taskRoutes (task 3.1 + workspace-resource-scope 3.1)", () => {
     expect(response.statusCode).toBe(404);
   });
 
-  it("DELETE /api/tasks/:id returns 404 for a task in another workspace (Requirement 3.3)", async () => {
+  it("DELETE /api/tasks/:id で別のワークスペースのタスクを削除した場合、404 を返す (Requirement 3.3)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -1582,7 +1574,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     await db.$disconnect();
   });
 
-  it("POST /api/tasks/:id/children creates a child task and returns 201", async () => {
+  it("POST /api/tasks/:id/children で子タスクを作成し、201 を返す", async () => {
     const parent = await app.inject(
       withWorkspace(
         {
@@ -1617,7 +1609,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     await hardDelete("tasks", [response.json().id, parentId]);
   });
 
-  it("PATCH /api/tasks/:id updates parentTaskId and scheduledEndDate (task-detail 2.1, 2.2)", async () => {
+  it("PATCH /api/tasks/:id で parentTaskId と scheduledEndDate を更新 (task-detail 2.1, 2.2)", async () => {
     const parent = await app.inject(
       withWorkspace(
         {
@@ -1685,7 +1677,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     });
   });
 
-  it("PATCH /api/tasks/:id rejects self and descendant parents as cycles (task-detail 2.5)", async () => {
+  it("PATCH /api/tasks/:id で自己と子孫の親タスクを循環として拒否 (task-detail 2.5)", async () => {
     const parent = await app.inject(
       withWorkspace(
         {
@@ -1758,7 +1750,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     expect(descendantResponse.json().error).toMatch(/cycle/i);
   });
 
-  it("PATCH /api/tasks/:id rejects a closed parent with 409 (task-detail 2.6)", async () => {
+  it("PATCH /api/tasks/:id でクローズされた親タスクを 409 で拒否 (task-detail 2.6)", async () => {
     const parent = await app.inject(
       withWorkspace(
         {
@@ -1826,7 +1818,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     expect(response.json().error).toMatch(/closed task cannot take children/i);
   });
 
-  it("POST /api/tasks/:id/children returns 404 for a non-existent parent", async () => {
+  it("POST /api/tasks/:id/children で存在しない親タスクを指定した場合、404 を返す", async () => {
     const response = await app.inject(
       withWorkspace(
         {
@@ -1843,7 +1835,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     expect(response.statusCode).toBe(404);
   });
 
-  it("POST /api/tasks/:id/split splits a task into parts and returns 201", async () => {
+  it("POST /api/tasks/:id/split でタスクを分割し、201 を返す", async () => {
     const original = await app.inject(
       withWorkspace(
         {
@@ -1885,7 +1877,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     await hardDelete("tasks", [...parts.map((p: { id: string }) => p.id), originalId]);
   });
 
-  it("POST /api/tasks/:id/split returns 400 when given fewer than 2 parts", async () => {
+  it("POST /api/tasks/:id/split で2つ未満の部分を指定した場合、400 を返す", async () => {
     const original = await app.inject(
       withWorkspace(
         {
@@ -1918,8 +1910,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     await hardDelete("tasks", [originalId]);
   });
 
-  // task-status-model 3.3: closed task split / closed parent → 409 (5.5, 5.6).
-  it("POST /api/tasks/:id/split returns 409 when the task is on a completed stage (5.5)", async () => {
+  it("POST /api/tasks/:id/split でクローズされたタスクをクローズされたステージに分割した場合、409 を返す (5.5)", async () => {
     const original = await app.inject(
       withWorkspace(
         {
@@ -1984,7 +1975,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     await hardDelete("development_stages", [completedStage.id]);
   });
 
-  it("POST /api/tasks returns 409 when parentTaskId is a completed-stage task (5.6)", async () => {
+  it("POST /api/tasks で parentTaskId がクローズされたステージのタスクの場合、409 を返す (5.6)", async () => {
     const parent = await app.inject(
       withWorkspace(
         {
@@ -2045,8 +2036,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     await hardDelete("development_stages", [completedStage.id]);
   });
 
-  // task-status-model 3.2: terminal-stage status edits → status_not_applicable (409).
-  it("PATCH /api/tasks/:id/status returns 409 when the task is on a terminal stage (4.5)", async () => {
+  it("PATCH /api/tasks/:id/status でタスクが終了ステージにある場合、409 を返す (4.5)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -2102,7 +2092,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     await hardDelete("development_stages", [completedStage.id]);
   });
 
-  it("PATCH /api/tasks/:id does not accept completedAt (2.6)", async () => {
+  it("PATCH /api/tasks/:id で completedAt を受け付けない (2.6)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -2135,7 +2125,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     await hardDelete("tasks", [taskId]);
   });
 
-  it("PATCH /api/tasks/:id/development-stage updates developmentStageId and returns 200 (task 15.1)", async () => {
+  it("PATCH /api/tasks/:id/development-stage で developmentStageId を更新し、200 を返す (task 15.1)", async () => {
     const created = await app.inject(
       withWorkspace(
         {
@@ -2186,7 +2176,7 @@ describe("taskRoutes hierarchy (task 3.2)", () => {
     await hardDelete("development_stages", [stage.id]);
   });
 
-  it("PATCH /api/tasks/:id/development-stage returns 404 for a non-existent task", async () => {
+  it("PATCH /api/tasks/:id/development-stage で存在しないタスクを指定した場合、404 を返す", async () => {
     const response = await app.inject(
       withWorkspace(
         {

@@ -1,19 +1,4 @@
-<!--
-  Workspaces / member management page (tasks 6.3–6.6, design.md pages/workspaces,
-  Requirements 2.3, 3.1, 3.2, 4.1–4.5, 6.1–6.3, 7.1–7.4). Empty state when no
-  current workspace (create CTA → WorkspaceCreateModal); otherwise color-dot
-  heading + member list + inline expandable search panel + settings modal +
-  creator-only delete with Modal confirmation.
-
-  Explicit Vue / composable imports so vitest can mount without Nuxt
-  auto-import runtime (same approach as WorkspaceCreateModal.vue).
--->
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import UserAvatar from "../../components/shared/UserAvatar.vue";
-import { useApiClient, type WorkspaceUserSummary } from "../../composables/useApiClient";
-import { useAuth } from "../../composables/useAuth";
-import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
 import {
   findCurrentWorkspace,
   formatMemberCount,

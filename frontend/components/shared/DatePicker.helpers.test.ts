@@ -14,15 +14,11 @@ describe("computeTodayIso (task 11.1, Requirement 10.2)", () => {
 });
 
 describe("generateMonthGrid (task 11.1, Requirement 10.2)", () => {
-  it("generates complete Sun-Sat weeks covering all of August 2026 with correct flags", () => {
-    // August 2026: Aug 1 is a Saturday, Aug 31 is a Monday.
-    // Leading day: Jul 26 (Sun). Trailing days: Sep 1-5 (Tue-Sat) to complete
-    // the last week ending Saturday.
+  it("2026年8月の完全な日曜日から土曜日の週を生成し、正しいフラグを設定する", () => {
     const todayIso = "2026-08-05";
     const selectedIso = "2026-08-12";
     const grid = generateMonthGrid(2026, 8, todayIso, selectedIso);
 
-    // 6 full weeks needed: Jul 26 - Aug 1, Aug 2-8, ..., Aug 30 - Sep 5.
     expect(grid.length % 7).toBe(0);
     expect(grid.length).toBe(42);
 
@@ -67,12 +63,12 @@ describe("generateMonthGrid (task 11.1, Requirement 10.2)", () => {
     expect(lastOfMonthCell?.inCurrentMonth).toBe(true);
   });
 
-  it("treats an empty selectedIso as no selection", () => {
+  it("selectedIso が空の場合、選択がないとみなす", () => {
     const grid = generateMonthGrid(2026, 8, "2026-08-05", "");
     expect(grid.every((cell) => !cell.isSelected)).toBe(true);
   });
 
-  it("handles a month where the 1st falls on Sunday with no leading days needed", () => {
+  it("1日が日曜日である月で、先行日が不要な場合、処理を行う", () => {
     // 2026-11-01 is a Sunday.
     const grid = generateMonthGrid(2026, 11, "2026-08-05", "");
     expect(grid[0]?.date).toBe("2026-11-01");
@@ -81,24 +77,23 @@ describe("generateMonthGrid (task 11.1, Requirement 10.2)", () => {
     expect(grid.length % 7).toBe(0);
   });
 
-  it("assigns dayOfWeek 0 (Sun) and 6 (Sat) to weekend cells for styling", () => {
-    // 2026-08-01 is a Saturday, 2026-08-02 is a Sunday.
+  it("dayOfWeek 0（日）と 6（土）を週末のセルに割り当ててスタイリングを行う", () => {
     const grid = generateMonthGrid(2026, 8, "2026-08-05", "");
     expect(grid.find((cell) => cell.date === "2026-08-01")?.dayOfWeek).toBe(6);
     expect(grid.find((cell) => cell.date === "2026-08-02")?.dayOfWeek).toBe(0);
   });
 });
 
-describe("formatSlashDate / weekdayKanji (design drift fix — claude design mockup uses YYYY/MM/DD + 曜日 labels)", () => {
-  it("converts a YYYY-MM-DD wire value to display-only YYYY/MM/DD", () => {
+describe("formatSlashDate / weekdayKanji（デザインのずれを修正 — claude design mockup は YYYY/MM/DD + 曜日ラベルを使用）", () => {
+  it("YYYY-MM-DD のワイヤー値を表示専用の YYYY/MM/DD に変換する", () => {
     expect(formatSlashDate("2026-09-14")).toBe("2026/09/14");
   });
 
-  it("API の日時 ISO からも日付部分だけを YYYY/MM/DD にする", () => {
+  it("API の日時 ISO からも日付部分だけを YYYY/MM/DD に変換する", () => {
     expect(formatSlashDate("2026-08-10T00:00:00.000Z")).toBe("2026/08/10");
   });
 
-  it("maps dayOfWeek indices to the mockup's kanji labels", () => {
+  it("dayOfWeek のインデックスを漢字ラベルにマッピングする", () => {
     expect(weekdayKanji(0)).toBe("日");
     expect(weekdayKanji(1)).toBe("月");
     expect(weekdayKanji(6)).toBe("土");
@@ -106,14 +101,14 @@ describe("formatSlashDate / weekdayKanji (design drift fix — claude design moc
 });
 
 describe("parseLocalDateOnly", () => {
-  it("parses YYYY-MM-DD as a local calendar day", () => {
+  it("YYYY-MM-DD をローカルカレンダーの日付として解析する", () => {
     const parsed = parseLocalDateOnly("2026-08-10");
     expect(parsed.getFullYear()).toBe(2026);
     expect(parsed.getMonth()).toBe(7);
     expect(parsed.getDate()).toBe(10);
   });
 
-  it("API の日時 ISO は UTC 変換せず日付部分だけを使う", () => {
+  it("API の日時 ISO は UTC 変換せず、日付部分だけを使用する", () => {
     const parsed = parseLocalDateOnly("2026-08-10T00:00:00.000Z");
     expect(parsed.getFullYear()).toBe(2026);
     expect(parsed.getMonth()).toBe(7);

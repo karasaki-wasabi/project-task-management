@@ -1,4 +1,3 @@
-// ThroughputService (design.md "Backend/throughput", Requirements 3.1–3.6, 4.1–4.3, 7.1–7.5).
 import { badRequest } from "../../shared/http-errors.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { caseReadService } from "../cases/case-read.service.js";
@@ -9,12 +8,9 @@ const FORECAST_WINDOW = 4;
 const MIN_PERIODS_FOR_FORECAST = 2;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-// design.md Implementation Notes: "期間境界(週開始曜日等)はUTC基準の月曜始
-// まりで固定する". Both helpers return the start of the period CONTAINING
-// `date` (i.e. today's in-progress period, not a past one).
 function startOfCurrentWeekUTC(date: Date): Date {
   const midnight = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const daysSinceMonday = (midnight.getUTCDay() + 6) % 7; // Sun=0 -> 6, Mon=1 -> 0, ...
+  const daysSinceMonday = (midnight.getUTCDay() + 6) % 7;
   midnight.setUTCDate(midnight.getUTCDate() - daysSinceMonday);
   return midnight;
 }
@@ -33,10 +29,6 @@ function shiftPeriod(start: Date, periodType: PeriodType, delta: number): Date {
   return shifted;
 }
 
-// Builds `rangeCount` fully-elapsed periods, oldest first, ending at the
-// period immediately before the one containing `now` — the in-progress
-// current period is never included (Requirements 6.2, 6.3: both are framed
-// around "過去" / past pace).
 function buildPeriodBoundaries(periodType: PeriodType, rangeCount: number, now: Date): Array<{ start: Date; end: Date }> {
   const currentPeriodStart = periodType === "week" ? startOfCurrentWeekUTC(now) : startOfCurrentMonthUTC(now);
   const boundaries: Array<{ start: Date; end: Date }> = [];
@@ -81,7 +73,6 @@ async function buildCaseOutlook(
 
   if (caseEntity.endDate != null) {
     remainingPeriods = computeRemainingPeriods(caseEntity.endDate, now, periodType);
-    // Forecast must be calculable AND > 0 (0 would divide-by-zero / "算出不可").
     if (forecastNextPeriodPoints != null && forecastNextPeriodPoints > 0) {
       requiredPeriods = Math.ceil(openPoints / forecastNextPeriodPoints);
       marginPoints = forecastNextPeriodPoints * remainingPeriods - openPoints;

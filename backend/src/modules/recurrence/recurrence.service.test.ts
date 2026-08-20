@@ -1,10 +1,3 @@
-// RecurrenceService template management (task 2.1, Requirements 1.1, 1.2,
-// 2.1, 2.2, 2.4, 2.5, 2.6, 2.7, 2.8). Case-relative only — no fixed_interval,
-// generateDueInstances, or unconfirmed auto-apply entrypoints.
-//
-// Cleanup policy: every `it()` deletes its own rows in a `finally` block
-// (not just at the end of the happy path). This suite shares one real MySQL
-// database across runs.
 import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -95,7 +88,7 @@ afterAll(async () => {
 });
 
 describe("recurrenceService.registerTemplate (task 2.1)", () => {
-  it("registers a case-relative template with anchor, non-negative offset, NBD policy, and default detail (Requirements 2.1, 2.2, 2.4, 2.5)", async () => {
+  it("case-relative テンプレートを登録 (Requirements 2.1, 2.2, 2.4, 2.5)", async () => {
     const templateIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate(
@@ -131,7 +124,7 @@ describe("recurrenceService.registerTemplate (task 2.1)", () => {
     "case_end",
     "period_month_start",
     "period_month_end",
-  ] as CaseRelativeAnchor[])("accepts caseAnchor=%s (Requirement 2.1)", async (caseAnchor) => {
+  ] as CaseRelativeAnchor[])("caseAnchor=%s を受け取る (Requirement 2.1)", async (caseAnchor) => {
     const templateIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate(baseInput({ caseAnchor }));
@@ -142,19 +135,19 @@ describe("recurrenceService.registerTemplate (task 2.1)", () => {
     }
   });
 
-  it("rejects a negative caseOffsetDays (Requirement 2.2)", async () => {
+  it("負の caseOffsetDays を受け取った場合、400 エラーを返す (Requirement 2.2)", async () => {
     await expect(recurrenceService.registerTemplate(baseInput({ caseOffsetDays: -1 }))).rejects.toMatchObject({
       statusCode: 400,
     });
   });
 
-  it("rejects a non-integer caseOffsetDays", async () => {
+  it("非整数の caseOffsetDays を受け取った場合、400 エラーを返す", async () => {
     await expect(recurrenceService.registerTemplate(baseInput({ caseOffsetDays: 1.5 }))).rejects.toMatchObject({
       statusCode: 400,
     });
   });
 
-  it("rejects an empty title", async () => {
+  it("空の title を受け取った場合、400 エラーを返す", async () => {
     await expect(recurrenceService.registerTemplate(baseInput({ title: "  " }))).rejects.toMatchObject({
       statusCode: 400,
     });
@@ -162,7 +155,7 @@ describe("recurrenceService.registerTemplate (task 2.1)", () => {
 });
 
 describe("recurrenceService.stopTemplate / resumeTemplate / deleteTemplate / list (task 2.1)", () => {
-  it("stopTemplate sets isActive=false without removing it from list (Requirement 2.6)", async () => {
+  it("stopTemplate で isActive=false に設定し、リストから削除しない (Requirement 2.6)", async () => {
     const templateIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate(baseInput({ title: "stoppable" }));
@@ -180,7 +173,7 @@ describe("recurrenceService.stopTemplate / resumeTemplate / deleteTemplate / lis
     }
   });
 
-  it("resumeTemplate sets isActive=true only and does not backfill tasks for existing cases (Requirement 2.7)", async () => {
+  it("resumeTemplate で isActive=true に設定し、既存のケースに対してタスクをバックフィルしない (Requirement 2.7)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     try {
@@ -207,13 +200,13 @@ describe("recurrenceService.stopTemplate / resumeTemplate / deleteTemplate / lis
     }
   });
 
-  it("returns not_found (404) when stopping or resuming a non-existent template", async () => {
+  it("存在しないテンプレートを停止または再開した場合、404 エラーを返す", async () => {
     const missing = randomUUID();
     await expect(recurrenceService.stopTemplate(missing, workspaceA)).rejects.toMatchObject({ statusCode: 404 });
     await expect(recurrenceService.resumeTemplate(missing, workspaceA)).rejects.toMatchObject({ statusCode: 404 });
   });
 
-  it("deleteTemplate soft-deletes and excludes it from list, distinct from stopTemplate (Requirement 2.8)", async () => {
+  it("deleteTemplate で論理削除し、リストから除外し、stopTemplate とは異なる (Requirement 2.8)", async () => {
     const templateIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate(baseInput({ title: "deletable" }));
@@ -233,7 +226,7 @@ describe("recurrenceService.stopTemplate / resumeTemplate / deleteTemplate / lis
     }
   });
 
-  it("returns not_found (404) when deleting a non-existent template", async () => {
+  it("存在しないテンプレートを削除した場合、404 エラーを返す", async () => {
     await expect(recurrenceService.deleteTemplate(randomUUID(), workspaceA)).rejects.toMatchObject({ statusCode: 404 });
   });
 
@@ -251,8 +244,8 @@ describe("recurrenceService.stopTemplate / resumeTemplate / deleteTemplate / lis
   });
 });
 
-describe("recurrenceService public surface (task 2.1)", () => {
-  it("does not expose fixed_interval / generate-due / unconfirmed auto-apply entrypoints (Requirements 1.1, 1.2)", () => {
+describe("recurrenceService の公開サーフェイス (task 2.1)", () => {
+  it("fixed_interval / generate-due / unconfirmed auto-apply エントリポイントを公開しない (Requirements 1.1, 1.2)", () => {
     expect(recurrenceService).not.toHaveProperty("generateDueInstances");
     expect(recurrenceService).not.toHaveProperty("onCaseCreated");
     expect(recurrenceService).not.toHaveProperty("onCaseEndDateChanged");
@@ -264,28 +257,25 @@ describe("recurrenceService public surface (task 2.1)", () => {
   });
 });
 
-// --- task 2.2: schedule calculation + generation helpers ---
-
 describe("computeRawScheduledDates (task 2.2, Requirements 2.3, 6.1–6.3)", () => {
-  it("case_start: startDate + offset (Requirement 2.3)", () => {
+  it("case_start: startDate + offset を計算 (Requirement 2.3)", () => {
     expect(
       computeRawScheduledDates("case_start", 3, new Date("2036-01-10T00:00:00.000Z"), new Date("2036-03-01T00:00:00.000Z")),
     ).toEqual(["2036-01-13"]);
   });
 
-  it("case_end: endDate − offset (Requirement 2.3)", () => {
+  it("case_end: endDate − offset を計算 (Requirement 2.3)", () => {
     expect(
       computeRawScheduledDates("case_end", 3, new Date("2036-01-10T00:00:00.000Z"), new Date("2036-06-15T00:00:00.000Z")),
     ).toEqual(["2036-06-12"]);
   });
 
-  it("case_start / case_end return [] when the required case date is missing", () => {
+  it("case_start / case_end で必要なケース日付がない場合、[] を返す", () => {
     expect(computeRawScheduledDates("case_start", 0, null, new Date("2036-06-15T00:00:00.000Z"))).toEqual([]);
     expect(computeRawScheduledDates("case_end", 0, new Date("2036-01-10T00:00:00.000Z"), null)).toEqual([]);
   });
 
-  it("period_month_start: 1st + offset per in-range month; skips out-of-period raw dates (Requirements 6.1, 6.3)", () => {
-    // Jan 1 out (< start 01-15); Feb 1 and Mar 1 in; offset 0
+  it("period_month_start: 1st + offset per in-range month; 期間外の生の日付をスキップ (Requirements 6.1, 6.3)", () => {
     expect(
       computeRawScheduledDates(
         "period_month_start",
@@ -296,8 +286,7 @@ describe("computeRawScheduledDates (task 2.2, Requirements 2.3, 6.1–6.3)", () 
     ).toEqual(["2036-02-01", "2036-03-01"]);
   });
 
-  it("period_month_end: month-end − offset; skips out-of-period raw dates (Requirements 6.1, 6.3)", () => {
-    // Jan 31 / Feb 29 in; Mar 31 out (> end 03-10); offset 0
+  it("period_month_end: month-end − offset; 期間外の生の日付をスキップ (Requirements 6.1, 6.3)", () => {
     expect(
       computeRawScheduledDates(
         "period_month_end",
@@ -308,7 +297,7 @@ describe("computeRawScheduledDates (task 2.2, Requirements 2.3, 6.1–6.3)", () 
     ).toEqual(["2036-01-31", "2036-02-29"]);
   });
 
-  it("period_month_* return [] when start or end is missing (Requirement 6.2)", () => {
+  it("period_month_* で start または end がない場合、[] を返す (Requirement 6.2)", () => {
     expect(
       computeRawScheduledDates("period_month_start", 0, new Date("2036-01-15T00:00:00.000Z"), null),
     ).toEqual([]);
@@ -317,8 +306,7 @@ describe("computeRawScheduledDates (task 2.2, Requirements 2.3, 6.1–6.3)", () 
     ).toEqual([]);
   });
 
-  it("period_month_start with offset skips months whose raw date falls outside the period", () => {
-    // Jan 1+20=Jan 21 in; Feb 1+20=Feb 21 in; Mar 1+20=Mar 21 out
+  it("period_month_start with offset で期間外の生の日付をスキップ", () => {
     expect(
       computeRawScheduledDates(
         "period_month_start",
@@ -331,7 +319,7 @@ describe("computeRawScheduledDates (task 2.2, Requirements 2.3, 6.1–6.3)", () 
 });
 
 describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 5.7, 6.1)", () => {
-  it("records generated tasks with the recurring-template system actor", async () => {
+  it("生成されたタスクを recurring-template システムアクターで記録", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -399,7 +387,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
       expectedDates: ["2036-04-30", "2036-05-31"],
     },
   ])(
-    "generates from active $anchor templates with caseId, defaultDetail, sourceAnchor (Requirements 5.1, 5.6, 5.7)",
+    "active $anchor テンプレートから生成し、caseId, defaultDetail, sourceAnchor を使用 (Requirements 5.1, 5.6, 5.7)",
     async ({ anchor, offset, startDate, endDate, expectedDates }) => {
       const templateIds: string[] = [];
       const caseIds: string[] = [];
@@ -443,7 +431,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
     },
   );
 
-  it("does not use stopped (isActive=false) templates (Requirement 5.1)", async () => {
+  it("停止中 (isActive=false) のテンプレートを使用しない (Requirement 5.1)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     try {
@@ -470,7 +458,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
     }
   });
 
-  it("applies NBD policy after period check; skip yields no instance (Requirement 5.7)", async () => {
+  it("期間チェック後に NBD ポリシーを適用; skip でインスタンスを生成しない (Requirement 5.7)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     const nonBusinessDayIds: string[] = [];
@@ -523,7 +511,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
     }
   });
 
-  it("policy=previous_business_day moves scheduledEndDate to the prior business day (Requirement 5.7)", async () => {
+  it("policy=previous_business_day で scheduledEndDate を前の営業日に移動 (Requirement 5.7)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     const nonBusinessDayIds: string[] = [];
@@ -563,7 +551,7 @@ describe("recurrenceService.generateForAnchor (task 2.2, Requirements 5.1, 5.6, 
     }
   });
 
-  it("editing one instance detail does not change template defaultDetail or sibling details (Requirement 5.8)", async () => {
+  it("1つのインスタンスの詳細を編集してもテンプレートの defaultDetail または兄弟の詳細を変更しない (Requirement 5.8)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -613,7 +601,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     return db.task.findMany({ where: { caseId }, orderBy: { createdAt: "asc" } });
   }
 
-  it("start_generate creates tasks from active case_start templates (Requirement 3.2)", async () => {
+  it("start_generate で active case_start テンプレートからタスクを生成 (Requirement 3.2)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -644,7 +632,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     }
   });
 
-  it("end_generate creates tasks from active case_end templates (Requirement 3.3)", async () => {
+  it("end_generate で active case_end テンプレートからタスクを生成 (Requirement 3.3)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -675,7 +663,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     }
   });
 
-  it("month_generate creates tasks from active period_month_* templates (Requirement 3.4)", async () => {
+  it("month_generate で active period_month_* テンプレートからタスクを生成 (Requirement 3.4)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -716,7 +704,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     }
   });
 
-  it("start_delete soft-deletes case_start generated tasks including completed (Requirements 5.2, 5.5)", async () => {
+  it("start_delete で case_start 生成されたタスクを論理削除し、完了したものを含む (Requirements 5.2, 5.5)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -755,7 +743,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     }
   });
 
-  it("end_delete soft-deletes case_end generated tasks (Requirement 5.2)", async () => {
+  it("end_delete で case_end 生成されたタスクを論理削除 (Requirement 5.2)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -786,7 +774,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     }
   });
 
-  it("month_delete soft-deletes both period_month_* generated tasks (Requirement 5.2)", async () => {
+  it("month_delete で both period_month_* 生成されたタスクを論理削除 (Requirement 5.2)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -826,7 +814,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     }
   });
 
-  it("start_regenerate deletes then regenerates case_start tasks for the new date (Requirement 5.2)", async () => {
+  it("start_regenerate で case_start タスクを新しい日付に再生成 (Requirement 5.2)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -869,7 +857,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     }
   });
 
-  it("end_regenerate deletes then regenerates case_end tasks (Requirement 5.2)", async () => {
+  it("end_regenerate で case_end タスクを新しい日付に再生成 (Requirement 5.2)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -908,7 +896,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     }
   });
 
-  it("month_regenerate deletes then regenerates period_month_* tasks (Requirement 5.2)", async () => {
+  it("month_regenerate で period_month_* タスクを新しい日付に再生成 (Requirement 5.2)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -955,7 +943,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     }
   });
 
-  it("does not delete manual tasks when deleting by sourceAnchor (Requirement 5.4)", async () => {
+  it("sourceAnchor で削除する場合、手動タスクを削除しない (Requirement 5.4)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -1000,7 +988,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     }
   });
 
-  it("stopped templates are unused for generate, but prior generated tasks remain deletable (Requirements 5.1, 5.3)", async () => {
+  it("停止中のテンプレートは生成に使用されないが、以前生成されたタスクは削除可能 (Requirements 5.1, 5.3)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -1037,7 +1025,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     }
   });
 
-  it("active unique collision on generate is an idempotent no-op (Requirement 5.5)", async () => {
+  it("active unique collision on generate で重複生成を無視 (Requirement 5.5)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -1070,7 +1058,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
     }
   });
 
-  it("empty operations is a no-op", async () => {
+  it("empty operations で何もしない", async () => {
     const caseIds: string[] = [];
     try {
       const caseEntity = await db.case.create({
@@ -1091,7 +1079,7 @@ describe("recurrenceService.applyToCase (task 3.2, Requirements 3.2–3.4, 5.1�
 });
 
 describe("recurrenceService workspace scope (workspace-resource-scope 4.1)", () => {
-  it("registerTemplate attributes the template to the given workspace (Requirement 1.1, 1.2)", async () => {
+  it("registerTemplate でテンプレートを指定されたワークスペースに属性付け (Requirement 1.1, 1.2)", async () => {
     const templateIds: string[] = [];
     try {
       const template = await recurrenceService.registerTemplate(baseInput({ title: "ws-create", workspaceId: workspaceB }));
@@ -1102,7 +1090,7 @@ describe("recurrenceService workspace scope (workspace-resource-scope 4.1)", () 
     }
   });
 
-  it("list returns only templates in the current workspace (Requirement 3.1)", async () => {
+  it("list で現在のワークスペースのテンプレートのみを返す (Requirement 3.1)", async () => {
     const templateIds: string[] = [];
     try {
       const inA = await recurrenceService.registerTemplate(baseInput({ title: "list-a", workspaceId: workspaceA }));
@@ -1117,7 +1105,7 @@ describe("recurrenceService workspace scope (workspace-resource-scope 4.1)", () 
     }
   });
 
-  it("stop / resume / delete on another workspace template return 404 (Requirement 3.3)", async () => {
+  it("stop / resume / delete で別のワークスペースのテンプレートを操作した場合、404 エラーを返す (Requirement 3.3)", async () => {
     const templateIds: string[] = [];
     try {
       const inB = await recurrenceService.registerTemplate(baseInput({ title: "foreign", workspaceId: workspaceB }));
@@ -1134,7 +1122,7 @@ describe("recurrenceService workspace scope (workspace-resource-scope 4.1)", () 
     }
   });
 
-  it("applyToCase ignores templates from a different workspace and attributes generated tasks to the case workspace (Requirements 1.3, 3.1)", async () => {
+  it("applyToCase で別のワークスペースのテンプレートを無視し、生成されたタスクをケースのワークスペースに属性付け (Requirements 1.3, 3.1)", async () => {
     const templateIds: string[] = [];
     const caseIds: string[] = [];
     let taskIds: string[] = [];
@@ -1180,7 +1168,7 @@ describe("recurrenceService workspace scope (workspace-resource-scope 4.1)", () 
 });
 
 describe("recurrenceService module boundary (module-boundary-cleanup task 4.3)", () => {
-  it("uses caseReadService.requireById and taskIntegrityService.listGeneratedByAnchors; no case/task Prisma (Requirements 1.1, 1.3, 1.4, 3.1, 3.2)", () => {
+  it("caseReadService.requireById と taskIntegrityService.listGeneratedByAnchors を使用; case/task Prisma を使用しない (Requirements 1.1, 1.3, 1.4, 3.1, 3.2)", () => {
     const dir = dirname(fileURLToPath(import.meta.url));
     const sourcePath = join(dir, "recurrence.service.ts");
     const source = readFileSync(sourcePath, "utf8");

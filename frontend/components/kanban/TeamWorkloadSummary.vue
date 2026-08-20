@@ -1,38 +1,6 @@
-<!--
-  Team workload summary + assignee selector, merged into a single control.
-  This is the single control that drives kanban/index.vue's
-  `selectedAssigneeUserId` — there is no separate assignee-filter dropdown.
-  This component always renders every assignee's chip regardless of which
-  one is selected; it never filters itself, it just reports which chip was
-  clicked. Clicking a member's chip again toggles the selection back to ""
-  (closing the focus tray).
-
-  - Requirement 2.1/2.3: aggregation and descending sort order are the
-    caller's responsibility (kanban/index.vue) — this component renders
-    `counts` in the order it is given, it never re-sorts.
-  - Requirement 2.2: each chip shows the assignee's name and count.
-  - Requirement 2.4: when `counts` exceeds `maxVisible`, only the top
-    entries render as chips and the rest are folded into a single "+N名"
-    summary chip.
-  - Requirement 2.5: the folded-away assignees remain individually
-    inspectable (name + count each) via an expand toggle on the "+N名"
-    chip.
-
-  The chip itself only ever changes appearance for selection state (the
-  primary-ring treatment); overload is communicated solely through the
-  shared `Badge` pill around the count (same idiom `PriorityBadge`/
-  `StatusBadge` use elsewhere on this screen), and only turns red past
-  `isOverloaded(entry.count)` (see ./TeamWorkloadSummary.helpers.ts) — never
-  merely for outranking teammates in a caller-provided sort. Coloring an
-  entire chip, or coloring by rank instead of an absolute threshold, both
-  produce false alarms on routine team-size distributions.
--->
 <script setup lang="ts">
-import { computed, ref } from "vue";
 import { isOverloaded, splitVisibleWorkload, type WorkloadCount } from "./TeamWorkloadSummary.helpers";
 
-// design.md: "既定値はコンポーネント内で定義し" — the default visible chip
-// count lives here, not in the caller.
 const DEFAULT_MAX_VISIBLE = 5;
 
 interface TeamWorkloadSummaryProps {

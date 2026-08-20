@@ -1,7 +1,4 @@
-// Mount tests for RecurrencePage (task 7.3): template-only list + modals.
-// Proves: no holiday / fixed_interval controls; create/detail modals open;
-// list renders case-relative API fields. Requirements 1.3, 7.1, 7.2, 8.1–8.3.
-// workspace-resource-scope task 7.2: empty state when currentId is null (Req 2.1, 2.2).
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -96,7 +93,7 @@ function mountPage() {
   });
 }
 
-describe("RecurrencePage (task 7.3)", () => {
+describe("繰り返しタスクテンプレート一覧 (task 7.3)", () => {
   beforeEach(() => {
     listRecurringTemplates.mockReset();
     currentId.value = "ws-1";
@@ -117,7 +114,7 @@ describe("RecurrencePage (task 7.3)", () => {
     vi.clearAllMocks();
   });
 
-  it("loads templates on mount and lists case-relative fields (Req 8.1, 8.3)", async () => {
+  it("繰り返しタスクテンプレートを読み込み、案件相対のフィールドを表示 (Req 8.1, 8.3)", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -134,7 +131,7 @@ describe("RecurrencePage (task 7.3)", () => {
     expect(badges).toEqual(["有効", "停止中"]);
   });
 
-  it("opens the create modal from the primary CTA (Req 8.2, 8.3)", async () => {
+  it("テンプレート登録モーダルを開く (Req 8.2, 8.3)", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -145,7 +142,7 @@ describe("RecurrencePage (task 7.3)", () => {
     expect(wrapper.find("[data-testid='recurrence-form-modal']").exists()).toBe(true);
   });
 
-  it("opens the detail modal when a list row is activated (Req 8.2, 8.3)", async () => {
+  it("リスト行がアクティブになったとき、詳細モーダルを開く (Req 8.2, 8.3)", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -157,7 +154,7 @@ describe("RecurrencePage (task 7.3)", () => {
     expect(detail.attributes("data-template-id")).toBe("rt1");
   });
 
-  it("does not expose holiday management controls (Req 7.1, 7.2)", async () => {
+  it("非営業日管理コントロールを公開しない (Req 7.1, 7.2)", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -168,7 +165,7 @@ describe("RecurrencePage (task 7.3)", () => {
     expect(wrapper.find('input[type="date"]').exists()).toBe(false);
   });
 
-  it("does not expose fixed_interval or generate-due controls (Req 1.3)", async () => {
+  it("固定間隔または生成期限コントロールを公開しない (Req 1.3)", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -179,7 +176,7 @@ describe("RecurrencePage (task 7.3)", () => {
   });
 
 
-  it("scoped 配下では未選択空状態を出さない（workspace-url-routing 3.2）", async () => {
+  it("スコープ配下では未選択空状態を出さない（workspace-url-routing 3.2）", async () => {
     currentId.value = null;
     const mod = await import("./index.vue");
     const wrapper = mount(mod.default);

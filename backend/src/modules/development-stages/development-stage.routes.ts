@@ -1,9 +1,3 @@
-// HTTP routes for Development Stages (task 14.1, design.md
-// "Backend/development-stages" API Contract). Registered into the shared
-// app in task 16.1; standalone Fastify plugin here so this module stays
-// testable in isolation.
-// workspace-resource-scope task 6.1: passes request.currentWorkspaceId into
-// DevelopmentStagesService; clients cannot set workspaceId via body.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";

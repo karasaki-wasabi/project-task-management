@@ -1,5 +1,3 @@
-// Pure helpers for the holidays master page (task 7.2, Requirements 9.1–9.4).
-// Visual labels follow research.md / claude design「繰り返し設定・休日マスタ」.
 import type { NonBusinessDay } from "../../../../composables/useApiClient";
 
 export type HolidaySourceTone = "neutral" | "info";

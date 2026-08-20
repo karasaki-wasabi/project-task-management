@@ -1,27 +1,3 @@
-<!--
-  Shared modal dialog shell (extracted from TaskDetailModal — the first
-  popup this app grew, and expected to be reused for future popups per
-  user feedback). Owns the parts every popup needs: a fixed, centered
-  overlay with backdrop, an animated open/close transition, a top-right
-  close (X) button, real dialog focus-trap semantics, and a three-part
-  layout (title / content / actions) via slots — callers only bring
-  domain-specific content.
-
-  `open` drives visibility via `v-if` inside a single `<Transition>`, so
-  callers don't need to manage their own enter/leave animation. The
-  backdrop and the panel fade+scale together under one transition name
-  (`modal`) — see main.css `.modal-enter-*`/`.modal-leave-*` — nested
-  selectors target `.modal-panel` for its own transform, avoiding a second
-  nested `<Transition>` for one shared open/close timeline.
-
-  Clicking the backdrop itself (`@click.self`) or pressing Esc closes the
-  dialog, same as the close button — callers only get one `close` event,
-  they don't need to distinguish how it happened.
-
-  Slots: `#title` (header text/content next to the close button), default
-  (body content), `#actions` (footer button row, only rendered if the
-  caller provides it).
--->
 <script setup lang="ts">
 const props = defineProps<{ open: boolean; ariaLabel: string }>();
 const emit = defineEmits<{ close: [] }>();

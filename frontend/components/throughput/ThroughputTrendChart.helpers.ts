@@ -1,6 +1,5 @@
 import type { ThroughputPeriod } from "../../composables/useApiClient";
 
-/** Mock 1c layout constants (viewBox 760×300). */
 export const CHART_WIDTH = 760;
 export const CHART_HEIGHT = 300;
 export const PLOT_LEFT = 48;
@@ -32,17 +31,12 @@ export interface AxisTicks {
   values: number[];
 }
 
-/**
- * Format periodStart ISO date as mock 1c x-axis label ("6/01").
- * Uses calendar date parts only (no timezone shift via Date).
- */
 export function formatPeriodLabel(periodStart: string): string {
   const datePart = periodStart.slice(0, 10);
   const [, month = "01", day = "01"] = datePart.split("-");
   return `${Number(month)}/${day}`;
 }
 
-/** Round up to a tidy axis ceiling so ticks stay readable integers. */
 export function niceCeiling(maxValue: number): number {
   if (maxValue <= 0) return 1;
   const padded = maxValue * 1.1;

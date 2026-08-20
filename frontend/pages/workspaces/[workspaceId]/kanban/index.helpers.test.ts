@@ -35,33 +35,33 @@ const stages: readonly DevelopmentStage[] = [
 ];
 
 describe("matchesAssigneeFilter (Requirement 4.1/4.2/4.3)", () => {
-  it("matches every task when selectedAssigneeUserId is empty (すべて)", () => {
+  it("すべてのタスクにマッチ", () => {
     const task = makeTask({ id: "t1", assigneeUserId: "u-alice" });
     expect(matchesAssigneeFilter(task, "")).toBe(true);
     const unassigned = makeTask({ id: "t2", assigneeUserId: null });
     expect(matchesAssigneeFilter(unassigned, "")).toBe(true);
   });
 
-  it("matches only the task belonging to the selected assignee", () => {
+  it("選択した担当者のタスクにマッチ", () => {
     const aliceTask = makeTask({ id: "t1", assigneeUserId: "u-alice" });
     const bobTask = makeTask({ id: "t2", assigneeUserId: "u-bob" });
     expect(matchesAssigneeFilter(aliceTask, "u-alice")).toBe(true);
     expect(matchesAssigneeFilter(bobTask, "u-alice")).toBe(false);
   });
 
-  it("does not match an unassigned task against a specific assignee", () => {
+  it("未割り当てのタスクは特定の担当者にマッチしない", () => {
     const task = makeTask({ id: "t1", assigneeUserId: null });
     expect(matchesAssigneeFilter(task, "u-alice")).toBe(false);
   });
 });
 
-describe("computeFocusedTasks (Requirements 1.1-1.3, 8.7, 8.8)", () => {
-  it("returns an empty array when すべて (empty string) is selected", () => {
+describe("フォーカスされたタスクを計算 (Requirements 1.1-1.3, 8.7, 8.8)", () => {
+  it("すべてが選択されている場合、空の配列を返す", () => {
     const tasks = [makeTask({ id: "t1", assigneeUserId: "u-alice", status: "in_progress" })];
     expect(computeFocusedTasks(tasks, "", stages)).toEqual([]);
   });
 
-  it("returns the selected assignee's open tasks regardless of development stage", () => {
+  it("選択した担当者の進行中のタスクを返す", () => {
     const withStage = makeTask({
       id: "t1",
       assigneeUserId: "u-alice",
@@ -79,7 +79,7 @@ describe("computeFocusedTasks (Requirements 1.1-1.3, 8.7, 8.8)", () => {
     expect(result).toEqual([withStage, withoutStage]);
   });
 
-  it("excludes closed tasks (completed or cancelled stage), not by status (Requirement 8.7, 8.8)", () => {
+  it("完了または中止のステージのタスクを除外 (Requirement 8.7, 8.8)", () => {
     const completed = makeTask({
       id: "t1",
       assigneeUserId: "u-alice",
@@ -112,7 +112,7 @@ describe("computeFocusedTasks (Requirements 1.1-1.3, 8.7, 8.8)", () => {
     expect(result).toEqual([openHandoff, openInProgress]);
   });
 
-  it("returns an empty array when the selected assignee has only closed tasks", () => {
+  it("選択した担当者が完了または中止のステージのタスクしか持たない場合、空の配列を返す", () => {
     const completed = makeTask({
       id: "t1",
       assigneeUserId: "u-alice",
@@ -122,8 +122,8 @@ describe("computeFocusedTasks (Requirements 1.1-1.3, 8.7, 8.8)", () => {
   });
 });
 
-describe("computeWorkloadCounts (Requirements 2.1-2.3, 8.7, 8.8)", () => {
-  it("counts open tasks with a development stage per assignee, descending", () => {
+describe("担当者の負荷を計算 (Requirements 2.1-2.3, 8.7, 8.8)", () => {
+  it("担当者ごとに開発ステージが設定された進行中のタスクをカウント", () => {
     const tasks = [
       makeTask({
         id: "t1",
@@ -151,14 +151,14 @@ describe("computeWorkloadCounts (Requirements 2.1-2.3, 8.7, 8.8)", () => {
     ]);
   });
 
-  it("excludes tasks without a development stage", () => {
+  it("開発ステージが設定されていないタスクを除外", () => {
     const tasks = [
       makeTask({ id: "t1", assigneeUserId: "u-alice", developmentStageId: null, status: "in_progress" }),
     ];
     expect(computeWorkloadCounts(tasks, [alice], stages)).toEqual([]);
   });
 
-  it("excludes closed tasks even when a development stage is set (Requirement 8.7)", () => {
+  it("開発ステージが設定されている場合でも、完了または中止のステージのタスクを除外 (Requirement 8.7)", () => {
     const tasks = [
       makeTask({
         id: "t1",
@@ -176,7 +176,7 @@ describe("computeWorkloadCounts (Requirements 2.1-2.3, 8.7, 8.8)", () => {
     expect(computeWorkloadCounts(tasks, [alice], stages)).toEqual([]);
   });
 
-  it("includes ready_for_handoff tasks on open stages (Requirement 8.8: not status-based)", () => {
+  it("進行中のステージで、ハンドオフ準備完了のタスクを含む (Requirement 8.8)", () => {
     const tasks = [
       makeTask({
         id: "t1",
@@ -188,7 +188,7 @@ describe("computeWorkloadCounts (Requirements 2.1-2.3, 8.7, 8.8)", () => {
     expect(computeWorkloadCounts(tasks, [alice], stages)).toEqual([{ user: alice, count: 1 }]);
   });
 
-  it("excludes tasks without an assignee", () => {
+  it("担当者が未割り当てのタスクを除外", () => {
     const tasks = [
       makeTask({
         id: "t1",
@@ -200,7 +200,7 @@ describe("computeWorkloadCounts (Requirements 2.1-2.3, 8.7, 8.8)", () => {
     expect(computeWorkloadCounts(tasks, [alice], stages)).toEqual([]);
   });
 
-  it("is not affected by any assignee filter selection (always all assignees)", () => {
+  it("担当者フィルタの選択に影響を受けない (常にすべての担当者)", () => {
     const tasks = [
       makeTask({
         id: "t1",
@@ -219,7 +219,7 @@ describe("computeWorkloadCounts (Requirements 2.1-2.3, 8.7, 8.8)", () => {
     expect(result).toHaveLength(2);
   });
 
-  it("keeps ties in original encounter order (stable sort)", () => {
+  it("元の順序を保持 (安定ソート)", () => {
     const tasks = [
       makeTask({
         id: "t1",
@@ -241,13 +241,13 @@ describe("computeWorkloadCounts (Requirements 2.1-2.3, 8.7, 8.8)", () => {
     ]);
   });
 
-  it("returns an empty array for empty input", () => {
+  it("空の入力の場合、空の配列を返す", () => {
     expect(computeWorkloadCounts([], [], stages)).toEqual([]);
   });
 });
 
-describe("computeBacklogTasks (Requirement 3.1/3.6)", () => {
-  it("returns tasks with no development stage set", () => {
+describe("バックログのタスクを計算 (Requirement 3.1/3.6)", () => {
+  it("開発ステージが設定されていないタスクを返す", () => {
     const withStage = makeTask({ id: "t1", developmentStageId: "s1" });
     const withoutStage = makeTask({ id: "t2", developmentStageId: null });
     const withUndefinedStage = makeTask({ id: "t3" });
@@ -257,13 +257,13 @@ describe("computeBacklogTasks (Requirement 3.1/3.6)", () => {
     ]);
   });
 
-  it("returns an empty array when there are no unassigned-stage tasks", () => {
+  it("未割り当てのステージのタスクがない場合、空の配列を返す", () => {
     expect(computeBacklogTasks([])).toEqual([]);
   });
 });
 
-describe("computeTaskProgressById (Requirements 8.6, 8.8, 8.9)", () => {
-  it("counts completed-stage children over non-cancelled children (observable: 1 of 2 with 1 cancelled)", () => {
+describe("親タスクの進捗を計算 (Requirements 8.6, 8.8, 8.9)", () => {
+  it("完了したステージの子タスクを非中止の子タスクで除算 (observable: 1 of 2 with 1 cancelled)", () => {
     const parent = makeTask({ id: "parent", developmentStageId: "stage-normal" });
     const completedChild = makeTask({
       id: "c1",
@@ -294,7 +294,7 @@ describe("computeTaskProgressById (Requirements 8.6, 8.8, 8.9)", () => {
     });
   });
 
-  it("does not count ready_for_handoff as completed (Requirement 8.8)", () => {
+  it("ハンドオフ準備完了のタスクを完了としてカウントしない (Requirement 8.8)", () => {
     const child = makeTask({
       id: "c1",
       parentTaskId: "parent",
@@ -309,7 +309,7 @@ describe("computeTaskProgressById (Requirements 8.6, 8.8, 8.9)", () => {
     });
   });
 
-  it("omits progress when the denominator is 0 after excluding cancelled children (Requirement 8.9)", () => {
+  it("非中止の子タスクを除外した後、分母が0の場合、進捗を除外 (Requirement 8.9)", () => {
     const cancelledOnly = makeTask({
       id: "c1",
       parentTaskId: "parent",
@@ -320,14 +320,14 @@ describe("computeTaskProgressById (Requirements 8.6, 8.8, 8.9)", () => {
     expect(result.size).toBe(0);
   });
 
-  it("has no entry for a task with zero children", () => {
+  it("子タスクが0のタスクは進捗に含まれない", () => {
     const lonely = makeTask({ id: "lonely" });
     const result = computeTaskProgressById([lonely], stages);
     expect(result.has("lonely")).toBe(false);
     expect(result.size).toBe(0);
   });
 
-  it("handles multiple parents independently", () => {
+  it("複数の親タスクを独立して処理", () => {
     const childA1 = makeTask({
       id: "a1",
       parentTaskId: "parentA",
@@ -356,31 +356,31 @@ describe("computeTaskProgressById (Requirements 8.6, 8.8, 8.9)", () => {
     });
   });
 
-  it("returns an empty map for an empty input", () => {
+  it("空の入力の場合、空のマップを返す", () => {
     expect(computeTaskProgressById([], stages).size).toBe(0);
   });
 
-  it("returns an empty map when no task has a parentTaskId", () => {
+  it("親タスクIDが設定されていないタスクがない場合、空のマップを返す", () => {
     const tasks = [makeTask({ id: "t1" }), makeTask({ id: "t2", parentTaskId: null })];
     expect(computeTaskProgressById(tasks, stages).size).toBe(0);
   });
 });
 
-describe("computeTasksForStage (Requirement 4.2/4.3)", () => {
-  it("returns all assignees' tasks for the stage when すべて is selected", () => {
+describe("ステージのタスクを計算 (Requirement 4.2/4.3)", () => {
+  it("すべての担当者のタスクをステージに含む", () => {
     const t1 = makeTask({ id: "t1", developmentStageId: "s1", assigneeUserId: "u-alice" });
     const t2 = makeTask({ id: "t2", developmentStageId: "s1", assigneeUserId: "u-bob" });
     const other = makeTask({ id: "t3", developmentStageId: "s2", assigneeUserId: "u-alice" });
     expect(computeTasksForStage([t1, t2, other], "s1", "")).toEqual([t1, t2]);
   });
 
-  it("limits the stage's tasks to the selected assignee", () => {
+  it("ステージのタスクを選択した担当者に限定", () => {
     const t1 = makeTask({ id: "t1", developmentStageId: "s1", assigneeUserId: "u-alice" });
     const t2 = makeTask({ id: "t2", developmentStageId: "s1", assigneeUserId: "u-bob" });
     expect(computeTasksForStage([t1, t2], "s1", "u-alice")).toEqual([t1]);
   });
 
-  it("returns an empty array when no task in the stage belongs to the selected assignee", () => {
+  it("ステージのタスクが選択した担当者に属していない場合、空の配列を返す", () => {
     const t1 = makeTask({ id: "t1", developmentStageId: "s1", assigneeUserId: "u-bob" });
     expect(computeTasksForStage([t1], "s1", "u-alice")).toEqual([]);
   });

@@ -1,9 +1,3 @@
-// HTTP routes for Cases (task 3.3, design.md "Backend/cases" API Contract;
-// renamed/extended from the former deliveries/delivery.routes.ts, task 4.1).
-// Registered into the shared app in this same task; standalone Fastify
-// plugin here so this module stays testable in isolation.
-// workspace-resource-scope task 2.1: passes request.currentWorkspaceId into
-// CaseService; clients cannot set workspaceId via body.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";
@@ -26,13 +20,8 @@ const createCaseBodySchema = z.object({
   name: z.string(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
-  // Task 4 / design.md CaseCreateInput: omit = full candidates, [] = no apply.
   templateOperations: z.array(caseTemplateApplyOperationSchema).optional(),
 });
-// design.md "Backend/cases" Implementation Notes: PATCH replaces the old
-// due-date-only update with a generic field update — every field is
-// independently optional, and startDate may be explicitly cleared with
-// null.
 const updateCaseBodySchema = z.object({
   name: z.string().optional(),
   startDate: z.coerce.date().nullable().optional(),

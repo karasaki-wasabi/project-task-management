@@ -1,21 +1,4 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import type {
-  Case,
-  DevelopmentStage,
-  Task,
-  User,
-} from "../../composables/useApiClient";
-import { isTaskClosed } from "../../composables/useTaskClosure";
-import DatePicker from "../shared/DatePicker.vue";
-import PriorityBadge from "../shared/PriorityBadge.vue";
-import StageBadge from "../shared/StageBadge.vue";
-import StatusBadge from "../shared/StatusBadge.vue";
-import UserAvatar from "../shared/UserAvatar.vue";
-import FieldOptionList from "./FieldOptionList.vue";
-import InlineEditableField from "./InlineEditableField.vue";
-import ParentTaskCombobox from "./ParentTaskCombobox.vue";
-
 interface CaseDraft {
   caseId: string | null;
   isRequiredForCase: boolean;
@@ -271,7 +254,6 @@ function toggleRequired(value: unknown, setDraftValue: (next: unknown) => void) 
             </template>
           </InlineEditableField>
 
-          <!-- velocity-dashboard 5.3 / mock 1h-c: leaf editable, parent readonly sum -->
           <div
             v-if="hasChildren"
             data-testid="story-points-field"

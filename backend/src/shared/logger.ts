@@ -1,10 +1,3 @@
-// Shared logging infrastructure (task 1.5, Requirements 10.1, 10.2, 10.3,
-// 10.5, 10.6). Every module logs exclusively through the three helpers below
-// so log shape and the requestId correlation key stay consistent across
-// access logs, business-event logs, and error logs (design.md "Backend/shared
-// (Logging Infrastructure)"). Callers always pass `requestId` explicitly
-// (from Fastify's `request.id`) rather than relying on a bound child logger,
-// so the same helpers work identically from route handlers and services.
 import pino, { type DestinationStream } from "pino";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -42,12 +35,9 @@ export function createLogger(level: LogLevel, destination?: DestinationStream): 
       base.info({ ...context, event }, "business_event");
     },
     logError(error, context) {
-      // Logging must never throw and must never affect business-processing
-      // success (design.md Logging Infrastructure Invariants).
       try {
         base.error({ ...context, err: serializeError(error) }, "error");
       } catch {
-        // swallow: a broken log sink must not surface as an application error
       }
     },
   };

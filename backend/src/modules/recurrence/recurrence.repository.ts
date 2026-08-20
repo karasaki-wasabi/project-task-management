@@ -1,8 +1,3 @@
-// Persistence for RecurringTaskTemplates (task 2.1 template CRUD, design.md
-// "RecurrenceService"). Soft-delete / audit-column behavior and the
-// default `deletedAt: null` filter come from the shared `db` client.
-// workspace-resource-scope task 4.1: all queries take VerifiedWorkspaceId and
-// compose where via withWorkspaceScope.
 import { Prisma } from "@prisma/client";
 import { db } from "../../shared/db.js";
 import { withWorkspaceScope, type VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
@@ -31,9 +26,6 @@ export const recurrenceRepository = {
     return db.recurringTaskTemplate.findFirst({ where: withWorkspaceScope({ id }, workspaceId) });
   },
 
-  // `stop` (isActive=false) and `delete` (soft-delete via deletedAt) are
-  // distinct business operations — stop keeps the template visible/listed
-  // but excluded from future generation; delete removes it from listings.
   stop(id: string, workspaceId: VerifiedWorkspaceId): Promise<RecurringTaskTemplate> {
     return db.recurringTaskTemplate.update({
       where: withWorkspaceScope({ id }, workspaceId),
@@ -41,7 +33,6 @@ export const recurrenceRepository = {
     });
   },
 
-  // Requirement 2.7: resume flips isActive only — no case scan / backfill.
   resume(id: string, workspaceId: VerifiedWorkspaceId): Promise<RecurringTaskTemplate> {
     return db.recurringTaskTemplate.update({
       where: withWorkspaceScope({ id }, workspaceId),
@@ -60,8 +51,6 @@ export const recurrenceRepository = {
     });
   },
 
-  // Active templates eligible for future generation (task 2.2+), scoped to
-  // the case's workspace for applyToCase (workspace-resource-scope 4.1).
   listActive(workspaceId: VerifiedWorkspaceId): Promise<RecurringTaskTemplate[]> {
     return db.recurringTaskTemplate.findMany({
       where: withWorkspaceScope({ isActive: true }, workspaceId),

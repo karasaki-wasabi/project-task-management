@@ -1,9 +1,3 @@
-// HTTP routes for Holidays (task 6.1 manual management + task 6.2 external
-// sync, design.md "Backend/holidays" API Contract). Registered into the
-// shared app in task 10.3; standalone Fastify plugin here so this module
-// stays testable in isolation.
-// workspace-resource-scope task 5.1: passes request.currentWorkspaceId into
-// HolidaysService; clients cannot set workspaceId via body.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";

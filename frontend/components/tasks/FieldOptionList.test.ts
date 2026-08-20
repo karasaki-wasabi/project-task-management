@@ -1,4 +1,3 @@
-// user-avatar 2.2 — FieldOptionList の #leading スロット（Requirement 2.1）。
 import { describe, expect, it } from "vitest";
 import { h } from "vue";
 import { mount } from "@vue/test-utils";
@@ -31,7 +30,7 @@ function optionButtons(wrapper: ReturnType<typeof mountList>) {
 
 describe("FieldOptionList (user-avatar 2.2)", () => {
   describe("without #leading", () => {
-    it("keeps listbox/option roles, labels, checkmark, and aria-selected without extra slot nodes", () => {
+    it("余分なスロットノードを追加せずに保持", () => {
       const wrapper = mountList({ modelValue: "high" });
       const listbox = wrapper.get('[role="listbox"]');
       const buttons = optionButtons(wrapper);
@@ -64,7 +63,7 @@ describe("FieldOptionList (user-avatar 2.2)", () => {
   });
 
   describe("with #leading", () => {
-    it("renders slot content before the option label", () => {
+    it("オプションラベルの前にスロットコンテンツをレンダリングする", () => {
       const wrapper = mountList({
         modelValue: "medium",
         slots: {

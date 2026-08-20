@@ -1,6 +1,3 @@
-// Mount tests for WorkspaceCreateModal (task 6.1):
-// name input, empty-name error, create → refresh → select as current workspace.
-// Requirements 1.1, 1.2, 1.3.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";

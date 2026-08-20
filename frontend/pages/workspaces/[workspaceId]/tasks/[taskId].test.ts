@@ -120,7 +120,7 @@ function mountPage() {
   });
 }
 
-describe("TaskDetailPage", () => {
+describe("タスク詳細ページ", () => {
   beforeEach(() => {
     vi.stubGlobal("useRoute", () => ({
       params: { workspaceId: "ws-1", taskId: "task-1" },

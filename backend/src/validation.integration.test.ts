@@ -1,12 +1,3 @@
-// Validation: 結合検証 (task 12.4-12.7). These exercise the already-approved
-// service-level behaviors through the actual HTTP layer (buildApp + inject)
-// rather than calling services directly, to prove the full request/response/log
-// path end-to-end.
-//
-// Cleanup policy: every `it()` deletes its own rows (and closes its app) in
-// a `finally` block. Active `recurring_task_templates` left behind are picked
-// up by later case create/update apply (omit = full candidates). Soft-deleted
-// tasks must also be hard-deleted so RESTRICT FKs allow case/template cleanup.
 import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
 import type { InjectOptions } from "light-my-request";
@@ -206,7 +197,7 @@ afterAll(async () => {
 });
 
 describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.3, 5.5, 5.6)", () => {
-  it("POST /api/cases (omit templateOperations) triggers case-relative generation end-to-end (Requirement 5.3)", async () => {
+  it("POST /api/cases（templateOperations を省略）は、ケース単位のe2eの生成をトリガーする (Requirement 5.3)", async () => {
     const { app } = buildTestApp();
     const caseIds: string[] = [];
     const templateIds: string[] = [];
@@ -246,7 +237,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
     }
   });
 
-  it("PATCH /api/cases/:id endDate change with omit applies end_regenerate end-to-end (Requirements 5.2, 6.1, 6.2)", async () => {
+  it("PATCH /api/cases/:id endDate 変更（omit を使用）は、end_regenerate のe2eを適用する (Requirements 5.2, 6.1, 6.2)", async () => {
     const { app } = buildTestApp();
     const caseIds: string[] = [];
     const templateIds: string[] = [];
@@ -296,7 +287,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
     }
   });
 
-  it("POST /api/cases without endDate does not trigger case_end generation end-to-end (Requirements 2.4, 6.3)", async () => {
+  it("POST /api/cases （endDate を省略）は、case_end のe2eの生成をトリガーしない (Requirements 2.4, 6.3)", async () => {
     const { app } = buildTestApp();
     const caseIds: string[] = [];
     const templateIds: string[] = [];
@@ -336,7 +327,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
     }
   });
 
-  it("PATCH /api/cases/:id setting endDate for the first time triggers end_generate end-to-end (Requirements 2.4, 2.5, 5.3)", async () => {
+  it("PATCH /api/cases/:id endDate の設定（初回）は、end_generate のe2eを適用する (Requirements 2.4, 2.5, 5.3)", async () => {
     const { app } = buildTestApp();
     const caseIds: string[] = [];
     const templateIds: string[] = [];
@@ -387,7 +378,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
     }
   });
 
-  it("DELETE /api/cases/:id detaches linked Task caseId to null end-to-end (Requirements 8.1, 8.2)", async () => {
+  it("DELETE /api/cases/:id は、リンクされた Task caseId を null に切り離す (Requirements 8.1, 8.2)", async () => {
     const { app } = buildTestApp();
     const taskIds: string[] = [];
     const caseIds: string[] = [];
@@ -422,7 +413,7 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
     }
   });
 
-  it("regenerate soft-delete then recreate same scheduled date succeeds via apply path (Requirements 5.2, 5.5)", async () => {
+  it("regenerate は、soft-delete を行い、同じスケジュール日に再作成すると、apply パスで成功する (Requirements 5.2, 5.5)", async () => {
     const { app } = buildTestApp();
     const caseIds: string[] = [];
     const templateIds: string[] = [];
@@ -459,7 +450,6 @@ describe("12.4: 繰り返しタスク生成の統合検証 (Requirements 5.1, 5.
       const oldId = firstMine[0].id;
       expect(firstMine[0].scheduledEndDate.slice(0, 10)).toBe("2041-04-10");
 
-      // Soft-delete the active instance, then regenerate onto the same day.
       await app.inject({ method: "DELETE", url: `/api/tasks/${oldId}` });
       await app.inject({
         method: "PATCH",
@@ -501,7 +491,7 @@ describe("12.5: 非営業日ポリシー4パターンの統合検証 (Requiremen
   ];
 
   for (const scenario of scenarios) {
-    it(`policy=${scenario.policy}: generation result matches the spec via case apply`, async () => {
+    it(`policy=${scenario.policy}: 生成結果は、case apply を介して仕様に一致する`, async () => {
       const { app } = buildTestApp();
       const templateIds: string[] = [];
       const holidayIds: string[] = [];
@@ -562,7 +552,7 @@ describe("12.5: 非営業日ポリシー4パターンの統合検証 (Requiremen
 });
 
 describe("12.6: 論理削除の一覧除外と消化数実績不変の統合検証 (Requirements 9.4, 9.5)", () => {
-  it("a deleted task disappears from GET /api/tasks but still counts in its historical throughput period", async () => {
+  it("削除された task は GET /api/tasks から消えるが、その履歴の消化数実績にはカウントされる", async () => {
     const { app } = buildTestApp();
     const taskIds: string[] = [];
     try {
@@ -601,7 +591,7 @@ describe("12.6: 論理削除の一覧除外と消化数実績不変の統合検�
 });
 
 describe("12.7: ログ相関とフロントエンドエラー記録の統合検証 (Requirements 10.3, 10.4, 10.5)", () => {
-  it("a server-side exception logs the stack trace + requestId, correlated with the access log (Requirement 10.3, 10.5)", async () => {
+  it("サーバーサイドの例外は、スタックトレース + requestId をログに記録し、アクセスログと相関する (Requirement 10.3, 10.5)", async () => {
     const { app, lines } = buildTestApp();
     try {
       const response = await app.inject({ method: "DELETE", url: `/api/cases/${randomUUID()}` });
@@ -617,7 +607,7 @@ describe("12.7: ログ相関とフロントエンドエラー記録の統合検�
     }
   });
 
-  it("POST /api/client-errors records a frontend-reported error in the same log format as a server error (Requirement 10.4)", async () => {
+  it("POST /api/client-errors は、フロントエンドから報告されたエラーをサーバーエラーと同じログ形式で記録する (Requirement 10.4)", async () => {
     const { app, lines } = buildTestApp();
     try {
       const response = await app.inject({
@@ -643,7 +633,7 @@ describe("12.7: ログ相関とフロントエンドエラー記録の統合検�
 });
 
 describe("18.1: 開発段階マスタ削除時のタスク参照解除の統合検証 (Requirement 12.5)", () => {
-  it("deleting a development stage via the real HTTP path resets referencing tasks' developmentStageId to null", async () => {
+  it("実際の HTTP パスを介して開発段階マスタを削除すると、参照中のタスクの developmentStageId を null にリセットする", async () => {
     const { app } = buildTestApp();
     const taskIds: string[] = [];
     const stageIds: string[] = [];
@@ -680,7 +670,7 @@ describe("18.1: 開発段階マスタ削除時のタスク参照解除の統合�
 });
 
 describe("18.2: 開発段階更新時の担当者自動設定ルールの統合検証 (Requirements 12.6, 12.7, 12.8)", () => {
-  it("sets the assignee together with the development stage when the task is unassigned", async () => {
+  it("タスクが未割り当ての状態にある場合、担当者と開発段階を同時に設定", async () => {
     const { app } = buildTestApp();
     const taskIds: string[] = [];
     const stageIds: string[] = [];
@@ -722,7 +712,7 @@ describe("18.2: 開発段階更新時の担当者自動設定ルールの統合�
     }
   });
 
-  it("does not overwrite an already-assigned task's assignee when only the development stage is moved", async () => {
+  it("すでに割り当てられたタスクの担当者を、開発段階マスタのみを移動した場合、上書きしない", async () => {
     const { app } = buildTestApp();
     const taskIds: string[] = [];
     const stageIds: string[] = [];

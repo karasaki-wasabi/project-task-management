@@ -1,7 +1,3 @@
-// RED: buildApp() does not yet wire the Logging Infrastructure (task 1.5,
-// Requirements 10.1, 10.3, 10.5). This proves the requestId correlation
-// end-to-end: a deliberately-thrown route produces both an access log line
-// and an error log line sharing the same requestId.
 import { Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";

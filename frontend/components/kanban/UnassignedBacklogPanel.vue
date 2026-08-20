@@ -1,63 +1,3 @@
-<!--
-  Unassigned backlog panel (task 2.3, design.md "UnassignedBacklogPanel"
-  component detail block, Requirement 3.1-3.6). Shown by the parent kanban
-  page for tasks whose developmentStageId is unset (design.md: "呼び出し側が
-  developmentStageId が未設定のタスクに絞り込み済み" — this component does
-  not itself filter by stage, it only receives the already-filtered list).
-
-  Lives in the leftmost column of the board's own horizontally-scrolling
-  row (not a full-width panel above the board), so dragging a backlog task
-  into a stage column is a short reach rather than a trip across the whole
-  page. Collapsed state is a narrow vertical strip (same column height
-  family as stage columns) instead of a full-width bar.
-
-  - Requirement 3.1/3.2: while collapsed (`expanded === false`, the default),
-    only a count badge renders — no card/row for any task is drawn.
-  - Requirement 3.3/3.4/3.5: expanding switches to a searchable/sortable
-    list. Search and sort decision logic is pure and unit-tested in
-    ./UnassignedBacklogPanel.helpers.ts (this repo has no @vue/test-utils /
-    DOM test environment, see frontend/vitest.config.ts).
-  - Requirement 3.6: an empty `tasks` prop shows "0件" as the badge count,
-    both collapsed and expanded.
-  - "開発段階未設定タスクのドラッグ継続" (System Flows), now via
-    vue-draggable-plus (Sortable.js): the expanded list is itself a
-    `VueDraggable` sharing the `kanban-cards` group with the stage
-    columns, with `put: false` (Requirement 3's rule that this panel is a
-    drag SOURCE only, never a valid drop target, is now enforced
-    declaratively by Sortable rather than by convention) and `sort: false`
-    (order here is controlled by the sort `<select>`, not manual drag
-    reordering).
-  - The expanded card list scrolls internally (`max-h-*` + overflow-y-auto)
-    rather than growing the page, matching the stage columns' treatment
-    (this panel's backlog can hold far more items than fit on screen).
-  - `draggableTasks` is deliberately NOT resynced eagerly on drag end:
-    doing so fights Sortable's own internal bookkeeping and its drop
-    animation, producing a stale duplicate DOM node until reload. A
-    successful move flows back through `props.tasks` naturally (parent
-    reloads, this component's own `watch(visibleTasks)` picks it up). Only
-    an aborted move (assignee-picker canceled) needs an explicit revert,
-    which the parent triggers via the exposed `resync()` method — by the
-    time a user clicks "cancel", Sortable's own drag transition has long
-    finished, so there's no timing race.
-  - Collapse/expand animates via a width transition on a single root
-    element, swapping only the inner content, instead of an abrupt swap
-    between two different elements; the toggle icon is a left/right
-    chevron since this panel collapses to a narrow side strip, not a
-    horizontal accordion.
-  - Content stays hidden until the width transition's `transitionend`
-    fires (`contentVisible`): rendering the card list immediately when
-    `expanded` flips true lays it out (wrapping titles, growing taller)
-    while the panel is still narrow mid-transition, flashing a vertical
-    scrollbar until the width settles. It only appears once the panel is
-    already at full width. Collapsing hides content immediately — no flash
-    there, since it can only ever get narrower.
-  - The panel's label is a real `<h2>` inside its toggle `<button>`
-    (nesting a heading inside a button is valid HTML and keeps the
-    toggle's click/keyboard behavior unchanged), giving this lane a
-    heading landmark like every stage column and the focus tray have —
-    important here since this is the project's largest lane (~50 items),
-    not a minor one.
--->
 <script setup lang="ts">
 import { VueDraggable, type DraggableEvent } from "vue-draggable-plus";
 import { filterTasksByTitle, sortTasks, type BacklogSortKey } from "./UnassignedBacklogPanel.helpers";
@@ -71,19 +11,11 @@ interface UnassignedBacklogPanelProps {
 const props = defineProps<UnassignedBacklogPanelProps>();
 const emit = defineEmits<{ end: [payload: { taskId: string; targetStageId?: string }]; "card-activate": [taskId: string] }>();
 
-// Requirement 3.1/3.2: collapsed by default, no rendering of cards until
-// the user explicitly expands.
 const expanded = ref(false);
-// Gated separately from `expanded` — see header comment. True only once the
-// expand width-transition has finished; false immediately on collapse.
 const contentVisible = ref(false);
 const searchQuery = ref("");
 const sortKey = ref<BacklogSortKey>("priority");
 
-// Requirement 3.6: 0 when there are no unassigned tasks at all. This counts
-// the full `tasks` prop (not the filtered/sorted view), since the badge
-// reflects "how many unassigned tasks exist", independent of the in-progress
-// search text.
 const count = computed(() => props.tasks.length);
 
 const visibleTasks = computed(() => {
@@ -91,9 +23,6 @@ const visibleTasks = computed(() => {
   return sortTasks(filtered, sortKey.value);
 });
 
-// Sortable-mutable mirror of visibleTasks — see header comment on resync
-// strategy. Only re-derived when the real data changes; never forced on
-// drag end.
 const draggableTasks = ref<Task[]>([]);
 watch(visibleTasks, (next) => (draggableTasks.value = [...next]), { immediate: true });
 
@@ -103,8 +32,6 @@ function toggleExpanded() {
     contentVisible.value = false;
   } else {
     expanded.value = true;
-    // contentVisible flips true in handleTransitionEnd once the width
-    // transition actually finishes.
   }
 }
 
@@ -122,9 +49,6 @@ function handleListEnd(evt: DraggableEvent) {
   if (taskId) emit("end", { taskId, targetStageId });
 }
 
-// Called by the parent when a move that pulled a card out of this panel
-// gets canceled (assignee-picker dismissed) — reverts Sortable's
-// optimistic removal.
 function resync() {
   draggableTasks.value = [...visibleTasks.value];
 }
@@ -157,9 +81,6 @@ defineExpose({ resync });
           >{{ count }}件</span
         >
       </span>
-      <!-- Left/right chevron matches this panel's side-strip collapse
-           direction (round 3 fix — was an up/down chevron left over from
-           the earlier full-width horizontal layout). -->
       <svg
         class="h-4 w-4 shrink-0 text-slate-400 transition-transform"
         viewBox="0 0 24 24"

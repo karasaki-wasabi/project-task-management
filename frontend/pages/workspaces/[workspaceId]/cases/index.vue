@@ -1,40 +1,3 @@
-<!--
-  Cases index page (task 6.1, design.md "Frontend / cases > cases index
-  page", Requirements 1.1, 7.1, 7.2, 7.3). Replaces
-  frontend/pages/deliveries/index.vue (that page is removed once 6.1/6.2/
-  6.3/8.1 are all done and the old registration form is no longer the only
-  entry point — not yet, per this task's scope).
-
-  Visual language follows kanban/index.vue per Requirement 9.1: same
-  slate/primary palette, Badge/StatusBadge-style pills, ring-1 card
-  chrome. Status chips (すべて/進行中/完了/期限超過, with counts) are an
-  addition beyond Requirement 7's plain name search, confirmed via
-  claude-design mockups (research.md section 6) — computed client-side
-  from listCases + a Promise.all of getCaseProgress per case (design.md:
-  "追加APIは不要"), same pattern as the old deliveries page's progress
-  fetch.
-
-  Registration ("案件を登録") and per-row navigation to a detail/edit popup
-  are wired here (task 8.1) into CaseFormModal (task 6.2) and
-  CaseDetailModal (task 6.3), following kanban/index.vue's TaskDetailModal
-  wiring pattern: a nullable `activeCaseId` ref controls the detail modal,
-  and both modals share this page's `load()` for post-mutation refresh.
-
-  CaseFormModal's `created` event fires right after `createCase` succeeds,
-  before its per-task association calls run — the modal deliberately stays
-  open afterward to show association errors and a retry action (task 6.2:
-  "失敗したタスクがあってもモーダルを閉じずエラーを表示する"). So `created`
-  only triggers a list reload here (so the new case appears while the
-  modal keeps showing association progress/errors); the modal closes
-  itself by emitting `close` once every association has succeeded (or the
-  user cancels/closes manually), which this page handles the same way as
-  any other `close`.
-
-  CaseDetailModal's `saved` mirrors TaskDetailModal's `onTaskDetailSaved`:
-  the modal returns to view mode internally without emitting `close`, so
-  this page only reloads data and leaves the modal open. `deleted` closes
-  the modal (the case no longer exists) and reloads so the row disappears.
--->
 <script setup lang="ts">
 import { computeStatusCounts, filterCases, type CaseRow, type CaseStatusFilter } from "./index.helpers";
 
@@ -106,21 +69,11 @@ function openCreateModal() {
   showCreateModal.value = true;
 }
 
-// `close` can fire after per-task associations have already succeeded
-// (the modal auto-closes once `runAssociations()` finishes), which happens
-// after `created` already refreshed the list — so the list's snapshot can
-// be stale (e.g. showing 0/0 progress) by the time `close` fires. Reload
-// here too; for the plain-cancel-with-nothing-created path this is just a
-// harmless no-op refresh of already-current data.
 async function closeCreateModal() {
   showCreateModal.value = false;
   await load();
 }
 
-// The case already exists in the backend by the time `created` fires; the
-// modal itself stays open to surface per-task association errors/retry, so
-// this only refreshes the list — closing is driven by the modal's own
-// `close` emit (see header comment).
 async function onCaseCreated() {
   await load();
 }
@@ -133,9 +86,6 @@ function closeCaseDetail() {
   activeCaseId.value = null;
 }
 
-// CaseDetailModal returns to view mode internally after a save without
-// emitting `close` (same pattern as kanban's TaskDetailModal) — keep it
-// open and just refresh the list/progress.
 async function onCaseSaved() {
   await load();
 }

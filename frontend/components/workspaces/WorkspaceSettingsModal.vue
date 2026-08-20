@@ -1,22 +1,4 @@
-<!--
-  Workspace settings modal (task 6.5, design.md WorkspaceSettingsModal,
-  Requirements 6.1–6.3). Edit name and identifier color from the fixed
-  WORKSPACE_COLORS palette. On success: updateWorkspace then refresh
-  useCurrentWorkspace so header and /workspaces heading stay in sync.
-
-  Explicit Vue / composable imports so vitest can mount without Nuxt
-  auto-import runtime (same approach as WorkspaceCreateModal.vue).
--->
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import {
-  WORKSPACE_COLORS,
-  useApiClient,
-  type Workspace,
-  type WorkspaceColor,
-} from "../../composables/useApiClient";
-import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
-
 const props = defineProps<{ open: boolean; workspace: Workspace | null }>();
 const emit = defineEmits<{ close: []; saved: [workspace: Workspace] }>();
 

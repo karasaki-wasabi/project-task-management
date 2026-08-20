@@ -1,6 +1,3 @@
-// Mount tests for WorkspaceSettingsModal (task 6.5):
-// name input, fixed 6-color palette, save → updateWorkspace → refresh,
-// cancel. Requirements 6.1, 6.2, 6.3.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -91,7 +88,6 @@ function buttonByText(wrapper: ReturnType<typeof mountModal>, text: string) {
   return match;
 }
 
-/** happy-dom may not associate form= id submit buttons; submit the form node. */
 async function submitForm(wrapper: ReturnType<typeof mountModal>) {
   await wrapper.get("#workspace-settings-form").trigger("submit");
   await flushPromises();

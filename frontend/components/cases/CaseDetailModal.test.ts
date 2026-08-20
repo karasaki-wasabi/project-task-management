@@ -1,7 +1,3 @@
-// Mount tests for CaseDetailModal:
-// - task 6.3 edit save flow (candidates → B/C confirm → PATCH)
-// - task-status-model 5.6 required-task completion marks + mother-0 progress
-// Requirements 4.1–4.13, 6.6, 8.3.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -170,7 +166,7 @@ async function submitEdit(wrapper: ReturnType<typeof mountDetail>) {
   await nextTick();
 }
 
-describe("CaseDetailModal edit + template apply confirm (task 6.3)", () => {
+describe("CaseDetailModal 編集 + テンプレート適用確認（task 6.3）", () => {
   beforeEach(() => {
     listCases.mockReset();
     getCaseProgress.mockReset();
@@ -189,12 +185,12 @@ describe("CaseDetailModal edit + template apply confirm (task 6.3)", () => {
     vi.clearAllMocks();
   });
 
-  it("no date-driven candidates: saves directly with templateOperations omitted (Req 4.12)", async () => {
+  it("日付に基づく候補がない場合、templateOperations を省略して直接保存する（Req 4.12）", async () => {
     const wrapper = mountDetail();
     await enterEdit(wrapper);
 
     await wrapper.get("#case-detail-name").setValue("案件A改");
-    // dates unchanged → candidates empty
+    // 日付が変更されていない → 候補が空
     await submitEdit(wrapper);
 
     expect(wrapper.text()).not.toContain("テンプレートタスクへの反映");
@@ -208,11 +204,11 @@ describe("CaseDetailModal edit + template apply confirm (task 6.3)", () => {
     expect(updateCase.mock.calls[0]![1]).not.toHaveProperty("templateOperations");
   });
 
-  it("date change: shows screen B then C; cancel keeps edit and skips PATCH (Req 4.1, 4.4)", async () => {
+  it("日付の変更: 画面Bを表示し、画面Cを表示する; キャンセルは編集を保持し、PATCHをスキップする（Req 4.1, 4.4）", async () => {
     const wrapper = mountDetail();
     await enterEdit(wrapper);
 
-    // start moves later but still <= end → start_regenerate + month_regenerate
+    // 開始日が後に移動したが、まだ終了日以下 → start_regenerate + month_regenerate
     await setDates(wrapper, "2026-08-05", "2026-08-10");
     await submitEdit(wrapper);
 
@@ -220,7 +216,7 @@ describe("CaseDetailModal edit + template apply confirm (task 6.3)", () => {
     expect(wrapper.text()).toContain("テンプレートタスクへの反映");
     expect(wrapper.text()).toContain("案件開始日起点のタスクを生成し直し");
 
-    // Confirm's キャンセル (sibling of 次へ), not the edit-form キャンセル
+    // 確認のキャンセル (次への兄弟)、編集フォームのキャンセルではない
     const nextBtn = buttonByText(wrapper, "次へ");
     const confirmActions = nextBtn.element.parentElement;
     const confirmCancel = wrapper
@@ -232,12 +228,12 @@ describe("CaseDetailModal edit + template apply confirm (task 6.3)", () => {
     await nextTick();
 
     expect(updateCase).not.toHaveBeenCalled();
-    // still editing — form kept with unsaved date change (Req 4.4)
+    // まだ編集中 — 変更された日付が保存されていないフォームが保持される（Req 4.4）
     expect(wrapper.find("#case-detail-form").exists()).toBe(true);
     expect(wrapper.get('input[aria-label="開始日"]').element).toHaveProperty("value", "2026-08-05");
   });
 
-  it("uncheck all candidates then approve: PATCH with templateOperations [] (Req 4.3, 4.13)", async () => {
+  it("すべての候補をチェック解除し、承認する: templateOperations [] を含む PATCH（Req 4.3, 4.13）", async () => {
     updateCase.mockResolvedValue(
       makeCase({ startDate: "2026-08-05", endDate: "2026-08-10", name: "案件A" }),
     );
@@ -249,7 +245,7 @@ describe("CaseDetailModal edit + template apply confirm (task 6.3)", () => {
 
     expect(wrapper.text()).toContain("テンプレートタスクへの反映");
 
-    // Uncheck every candidate checkbox (start_regenerate + month_regenerate)
+    // すべての候補チェックボックスをチェック解除する（start_regenerate + month_regenerate）
     const checkboxes = wrapper.findAll('input[type="checkbox"]');
     expect(checkboxes.length).toBeGreaterThan(0);
     for (const box of checkboxes) {
@@ -275,7 +271,7 @@ describe("CaseDetailModal edit + template apply confirm (task 6.3)", () => {
     });
   });
 
-  it("approve selected subset: PATCH includes chosen operations (Req 4.3, 4.6, 4.10)", async () => {
+  it("選択されたサブセットを承認する: 選択された操作を含む PATCH（Req 4.3, 4.6, 4.10）", async () => {
     updateCase.mockResolvedValue(
       makeCase({ startDate: "2026-08-05", endDate: "2026-08-10" }),
     );
@@ -285,7 +281,7 @@ describe("CaseDetailModal edit + template apply confirm (task 6.3)", () => {
     await setDates(wrapper, "2026-08-05", "2026-08-10");
     await submitEdit(wrapper);
 
-    // Keep defaults (all checked): start_regenerate + month_regenerate
+    // デフォルトを保持する（すべてチェック済み）: start_regenerate + month_regenerate
     await buttonByText(wrapper, "次へ").trigger("click");
     await flushPromises();
     await buttonByText(wrapper, "実行する").trigger("click");
@@ -302,7 +298,7 @@ describe("CaseDetailModal edit + template apply confirm (task 6.3)", () => {
     });
   });
 
-  it("start null→value: candidates include start_generate (and month when both set) (Req 4.5, 4.9)", async () => {
+  it("開始日が null→値: 候補に start_generate（両方が設定されている場合は month）を含む（Req 4.5, 4.9）", async () => {
     listCases.mockResolvedValue([
       makeCase({ startDate: null, endDate: null }),
     ]);
@@ -322,7 +318,7 @@ describe("CaseDetailModal edit + template apply confirm (task 6.3)", () => {
   });
 });
 
-describe("CaseDetailModal required tasks (task-status-model 5.6)", () => {
+describe("CaseDetailModal 必須タスク（task-status-model 5.6）", () => {
   beforeEach(() => {
     listCases.mockReset();
     getCaseProgress.mockReset();
@@ -336,7 +332,7 @@ describe("CaseDetailModal required tasks (task-status-model 5.6)", () => {
     vi.clearAllMocks();
   });
 
-  it("fetches development stages when opening a case", async () => {
+  it("案件を開いたとき、開発ステージを取得する", async () => {
     getCaseProgress.mockResolvedValue(makeProgress({ requiredTotal: 1, requiredCompleted: 0 }));
     listTasks.mockResolvedValue([]);
     mountDetail();
@@ -344,7 +340,7 @@ describe("CaseDetailModal required tasks (task-status-model 5.6)", () => {
     expect(listDevelopmentStages).toHaveBeenCalled();
   });
 
-  it("hides required-task progress when requiredTotal is 0 (Requirement 6.6)", async () => {
+  it("必要なタスクの進捗が0の場合、必須タスクの進捗を非表示にする（Requirement 6.6）", async () => {
     getCaseProgress.mockResolvedValue(makeProgress({ requiredTotal: 0, requiredCompleted: 0 }));
     listTasks.mockResolvedValue([
       makeTask({ id: "t-cancel", developmentStageId: "s-cancel", isRequiredForCase: true }),
@@ -357,7 +353,7 @@ describe("CaseDetailModal required tasks (task-status-model 5.6)", () => {
     expect(wrapper.find('[data-testid="required-progress"]').exists()).toBe(false);
   });
 
-  it("shows required-task progress when requiredTotal is positive", async () => {
+  it("必要なタスクの進捗が1以上の場合、必須タスクの進捗を表示する", async () => {
     getCaseProgress.mockResolvedValue(
       makeProgress({ requiredTotal: 2, requiredCompleted: 1, requiredIncomplete: 1 }),
     );
@@ -369,7 +365,7 @@ describe("CaseDetailModal required tasks (task-status-model 5.6)", () => {
     expect(wrapper.text()).toContain("1 / 2");
   });
 
-  it("marks completed-stage required tasks with 完了, not status ready_for_handoff (Requirement 8.3)", async () => {
+  it("完了ステージの必須タスクは、完了としてマークされ、ステータス ready_for_handoff ではない（Requirement 8.3）", async () => {
     getCaseProgress.mockResolvedValue(
       makeProgress({ requiredTotal: 2, requiredCompleted: 1, requiredIncomplete: 1 }),
     );
@@ -400,7 +396,7 @@ describe("CaseDetailModal required tasks (task-status-model 5.6)", () => {
     expect(marks[1]!.text()).toBe("○");
   });
 
-  it("does not leave cancelled required tasks marked as incomplete", async () => {
+  it("中止した必須タスクは、不完全としてマークされない", async () => {
     getCaseProgress.mockResolvedValue(makeProgress({ requiredTotal: 1, requiredCompleted: 0 }));
     listTasks.mockResolvedValue([
       makeTask({

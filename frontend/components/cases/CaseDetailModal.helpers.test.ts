@@ -36,12 +36,12 @@ const stages: DevelopmentStage[] = [
 ];
 
 describe("shouldShowRequiredProgress (task-status-model 5.6, Requirement 6.6)", () => {
-  it("returns false when progress is missing", () => {
+  it("進行状況がない場合、false を返す", () => {
     expect(shouldShowRequiredProgress(null)).toBe(false);
     expect(shouldShowRequiredProgress(undefined)).toBe(false);
   });
 
-  it("returns false when requiredTotal is 0", () => {
+  it("必要なタスクが0の場合、false を返す", () => {
     const progress: CaseProgress = {
       requiredTotal: 0,
       requiredCompleted: 0,
@@ -51,7 +51,7 @@ describe("shouldShowRequiredProgress (task-status-model 5.6, Requirement 6.6)", 
     expect(shouldShowRequiredProgress(progress)).toBe(false);
   });
 
-  it("returns true when requiredTotal is positive", () => {
+  it("必要なタスクが1以上の場合、true を返す", () => {
     const progress: CaseProgress = {
       requiredTotal: 4,
       requiredCompleted: 1,
@@ -63,7 +63,7 @@ describe("shouldShowRequiredProgress (task-status-model 5.6, Requirement 6.6)", 
 });
 
 describe("requiredTaskCompletionMark (task-status-model 5.6, Requirement 8.3)", () => {
-  it("marks completed-stage tasks as completed (not status-based)", () => {
+  it("完了ステージのタスクは、完了としてマークされる（ステータスに基づかない）", () => {
     expect(
       requiredTaskCompletionMark(
         makeTask({ id: "t1", developmentStageId: "s-done", status: "not_started" }),
@@ -72,7 +72,7 @@ describe("requiredTaskCompletionMark (task-status-model 5.6, Requirement 8.3)", 
     ).toBe("completed");
   });
 
-  it("marks cancelled-stage tasks as cancelled so they are not left incomplete", () => {
+  it("中止ステージのタスクは、中止としてマークされるので、不完全なタスクが残らない", () => {
     expect(
       requiredTaskCompletionMark(
         makeTask({ id: "t2", developmentStageId: "s-cancel", status: "in_progress" }),
@@ -81,7 +81,7 @@ describe("requiredTaskCompletionMark (task-status-model 5.6, Requirement 8.3)", 
     ).toBe("cancelled");
   });
 
-  it("marks open-stage tasks as incomplete even if status is ready_for_handoff", () => {
+  it("開始ステージのタスクは、ステータスが ready_for_handoff であっても、不完全としてマークされる", () => {
     expect(
       requiredTaskCompletionMark(
         makeTask({ id: "t3", developmentStageId: "s-normal", status: "ready_for_handoff" }),
@@ -93,38 +93,38 @@ describe("requiredTaskCompletionMark (task-status-model 5.6, Requirement 8.3)", 
 
 
 describe("validateCaseEditForm (Requirement 5.3)", () => {
-  it("accepts a valid edit form", () => {
+  it("有効な編集フォームを受け入れる", () => {
     expect(validateCaseEditForm({ name: "案件A", startDate: "2026-01-01", endDate: "2026-01-31" })).toEqual({
       valid: true,
     });
   });
 
-  it("accepts an empty startDate (nullable field)", () => {
+  it("開始日が空の場合、受け入れる（nullable フィールド）", () => {
     expect(validateCaseEditForm({ name: "案件A", startDate: "", endDate: "2026-01-31" })).toEqual({ valid: true });
   });
 
-  it("rejects an empty name", () => {
+  it("名前が空の場合、拒否する", () => {
     const result = validateCaseEditForm({ name: "  ", startDate: "", endDate: "2026-01-31" });
     expect(result.valid).toBe(false);
     expect(result.error).toBeTruthy();
   });
 
-  it("accepts an empty endDate (nullable field)", () => {
+  it("終了日が空の場合、受け入れる（nullable フィールド）", () => {
     expect(validateCaseEditForm({ name: "案件A", startDate: "", endDate: "" })).toEqual({ valid: true });
     expect(validateCaseEditForm({ name: "案件A", startDate: "2026-01-01", endDate: "" })).toEqual({ valid: true });
   });
 
-  it("accepts both startDate and endDate empty", () => {
+  it("開始日と終了日が空の場合、受け入れる", () => {
     expect(validateCaseEditForm({ name: "案件A", startDate: "", endDate: "" })).toEqual({ valid: true });
   });
 
-  it("rejects startDate after endDate", () => {
+  it("開始日が終了日より後の場合、拒否する", () => {
     const result = validateCaseEditForm({ name: "案件A", startDate: "2026-02-01", endDate: "2026-01-31" });
     expect(result.valid).toBe(false);
     expect(result.error).toBeTruthy();
   });
 
-  it("accepts startDate exactly equal to endDate (boundary)", () => {
+  it("開始日が終了日と完全に一致する場合、受け入れる（境界値）", () => {
     expect(validateCaseEditForm({ name: "案件A", startDate: "2026-01-31", endDate: "2026-01-31" })).toEqual({
       valid: true,
     });
@@ -132,7 +132,7 @@ describe("validateCaseEditForm (Requirement 5.3)", () => {
 });
 
 describe("buildUpdateCaseInput (Requirement 5.2/5.4)", () => {
-  it("trims the name and passes endDate/isCompleted through", () => {
+  it("名前をトリムし、endDate/isCompleted を渡す", () => {
     expect(
       buildUpdateCaseInput({ name: "  案件A  ", startDate: "2026-01-01", endDate: "2026-01-31", isCompleted: true }),
     ).toEqual({
@@ -143,7 +143,7 @@ describe("buildUpdateCaseInput (Requirement 5.2/5.4)", () => {
     });
   });
 
-  it("maps an empty startDate to null rather than omitting or empty string", () => {
+  it("空の開始日を null にマッピングし、空の文字列を省略しない", () => {
     expect(buildUpdateCaseInput({ name: "案件A", startDate: "", endDate: "2026-01-31", isCompleted: false })).toEqual({
       name: "案件A",
       startDate: null,
@@ -152,7 +152,7 @@ describe("buildUpdateCaseInput (Requirement 5.2/5.4)", () => {
     });
   });
 
-  it("maps an empty endDate to null rather than omitting or empty string", () => {
+  it("空の終了日を null にマッピングし、空の文字列を省略しない", () => {
     expect(buildUpdateCaseInput({ name: "案件A", startDate: "2026-01-01", endDate: "", isCompleted: false })).toEqual({
       name: "案件A",
       startDate: "2026-01-01",
@@ -161,7 +161,7 @@ describe("buildUpdateCaseInput (Requirement 5.2/5.4)", () => {
     });
   });
 
-  it("maps both empty startDate and endDate to null", () => {
+  it("空の開始日と終了日を null にマッピングする", () => {
     expect(buildUpdateCaseInput({ name: "案件A", startDate: "", endDate: "", isCompleted: false })).toEqual({
       name: "案件A",
       startDate: null,
@@ -170,18 +170,18 @@ describe("buildUpdateCaseInput (Requirement 5.2/5.4)", () => {
     });
   });
 
-  it("keeps isCompleted independent of any date fields (Requirement 5.4)", () => {
+  it("isCompleted は、日付フィールドに関係なく独立して保持される（Requirement 5.4）", () => {
     const withCompletion = buildUpdateCaseInput({
       name: "案件A",
       startDate: "",
-      endDate: "2020-01-01", // far in the past — would be overdue if incomplete
+      endDate: "2020-01-01", // 過去の日付 — 不完全な場合は遅れている
       isCompleted: true,
     });
     expect(withCompletion.isCompleted).toBe(true);
     expect(withCompletion.endDate).toBe("2020-01-01");
   });
 
-  it("omits templateOperations when options are not provided (Req 4.12 path)", () => {
+  it("オプションが提供されていない場合、templateOperations を省略する（Req 4.12 パス）", () => {
     const body = buildUpdateCaseInput({
       name: "案件A",
       startDate: "2026-01-01",
@@ -191,7 +191,7 @@ describe("buildUpdateCaseInput (Requirement 5.2/5.4)", () => {
     expect(body).not.toHaveProperty("templateOperations");
   });
 
-  it("includes templateOperations when provided, including empty array (Req 4.13)", () => {
+  it("オプションが提供されている場合、templateOperations を含む（空の配列を含む）（Req 4.13）", () => {
     expect(
       buildUpdateCaseInput(
         { name: "案件A", startDate: "2026-01-01", endDate: "2026-01-31", isCompleted: false },
@@ -215,19 +215,19 @@ describe("buildUpdateCaseInput (Requirement 5.2/5.4)", () => {
 });
 
 describe("resolveEditApplyCandidates (Requirements 4.5–4.12)", () => {
-  it("returns empty when dates are unchanged (Req 4.12)", () => {
+  it("日付が変更されていない場合、空の配列を返す（Req 4.12）", () => {
     expect(
       resolveEditApplyCandidates("2026-08-01", "2026-08-10", "2026-08-01", "2026-08-10"),
     ).toEqual([]);
   });
 
-  it("maps start change to start_regenerate + month_regenerate (Req 4.6, 4.10)", () => {
+  it("開始日の変更を start_regenerate + month_regenerate にマッピングする（Req 4.6, 4.10）", () => {
     expect(
       resolveEditApplyCandidates("2026-08-01", "2026-08-10", "2026-09-01", "2026-08-10"),
     ).toEqual(["start_regenerate", "month_regenerate"]);
   });
 
-  it("maps null→both dates to start_generate, end_generate, month_generate (Req 4.5, 4.8, 4.9)", () => {
+  it("null→開始日と終了日を start_generate, end_generate, month_generate にマッピングする（Req 4.5, 4.8, 4.9）", () => {
     expect(resolveEditApplyCandidates(null, null, "2026-08-01", "2026-08-10")).toEqual([
       "start_generate",
       "end_generate",
@@ -235,7 +235,7 @@ describe("resolveEditApplyCandidates (Requirements 4.5–4.12)", () => {
     ]);
   });
 
-  it("treats empty new date strings as unset (Req 4.7, 4.11)", () => {
+  it("空の新しい日付文字列を未設定として扱う（Req 4.7, 4.11）", () => {
     expect(resolveEditApplyCandidates("2026-08-01", "2026-08-10", "", "")).toEqual([
       "start_delete",
       "end_delete",

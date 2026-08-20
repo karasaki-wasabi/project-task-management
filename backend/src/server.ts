@@ -1,6 +1,3 @@
-// Process entrypoint: builds the Fastify app and starts listening.
-// Separated from app.ts so tests can build/inject against the app without
-// binding a real port.
 import { buildApp } from "./app.js";
 import { loadEnv } from "./config/env.js";
 

@@ -1,8 +1,4 @@
-<!-- Task priority badge (screen polish pass). -->
 <script setup lang="ts">
-import { computed } from "vue";
-import type { Priority } from "../../composables/useApiClient";
-import Badge from "./Badge.vue";
 
 const props = defineProps<{ priority: Priority }>();
 

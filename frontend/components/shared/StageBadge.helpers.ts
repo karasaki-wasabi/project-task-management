@@ -1,5 +1,3 @@
-// Stage badge variants and prefixes (task-status-model 4.2, design.md
-// StageBadge.vue: 角丸 6px・枠線・接頭辞; 通常／完了／中止／未設定).
 import type { DevelopmentStageKind } from "../../composables/useApiClient";
 
 export type StageBadgePrefixMode = "list" | "modal";
@@ -7,7 +5,6 @@ export type StageBadgePrefixMode = "list" | "modal";
 export type StageBadgeVariant = "normal" | "completed" | "cancelled" | "unset";
 
 export function stageBadgePrefix(mode: StageBadgePrefixMode): string {
-  // Trailing space separates prefix from the stage name in the rendered label.
   return mode === "modal" ? "開発段階: " : "段階: ";
 }
 
@@ -24,7 +21,6 @@ export function stageBadgeNameLabel(
   return name ?? "";
 }
 
-/** Static Tailwind class strings so the JIT scanner sees every token. */
 export const STAGE_BADGE_VARIANT_CLASSES: Record<StageBadgeVariant, string> = {
   normal: "bg-white border-solid border-[#cbd5e1] text-slate-700",
   completed: "bg-[#dcfce7] border-solid border-[#86efac] text-green-800",

@@ -1,8 +1,3 @@
-// HolidaysService: manual management (task 6.1) + external-API manual sync
-// (task 6.2) + business event logging (task 10.2, design.md
-// "Backend/holidays", Requirements 8.1, 8.2, 8.8, 8.9, 9.1-9.4, 10.2).
-// workspace-resource-scope task 5.1: register/list/remove/sync and business-day
-// helpers are scoped by VerifiedWorkspaceId; cross-workspace access yields 404.
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
@@ -72,8 +67,6 @@ export const holidaysService = {
     return !(await holidayRepository.existsOnDate(date, workspaceId));
   },
 
-  // design.md Postconditions: steps day-by-day, starting the day AFTER
-  // `date`, until a non-holiday is found (Requirement 8.4).
   async nextBusinessDay(date: string, workspaceId: VerifiedWorkspaceId): Promise<string> {
     assertValidDate(date);
     let candidate = addDays(date, 1);
@@ -83,8 +76,6 @@ export const holidaysService = {
     return candidate;
   },
 
-  // Mirror of nextBusinessDay, stepping backward from the day BEFORE `date`
-  // (Requirement 8.5).
   async previousBusinessDay(date: string, workspaceId: VerifiedWorkspaceId): Promise<string> {
     assertValidDate(date);
     let candidate = addDays(date, -1);
@@ -94,11 +85,6 @@ export const holidaysService = {
     return candidate;
   },
 
-  // Requirements 8.8, 8.9: only ever called from a user-triggered action
-  // (never polled). If the fetch itself fails, the master is left untouched
-  // and a 502 is thrown before any writes happen (Requirement: "外部API障害
-  // 時は既存マスタを変更せず502を返す"). Records that already exist for a
-  // date in the current workspace are skipped, not overwritten.
   async syncFromExternalApi(
     workspaceId: VerifiedWorkspaceId,
     fetchHolidays: () => Promise<ExternalHolidayRecord[]> = fetchJapaneseHolidays,

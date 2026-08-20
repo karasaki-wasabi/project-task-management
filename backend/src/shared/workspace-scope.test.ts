@@ -5,7 +5,6 @@ import {
   type VerifiedWorkspaceId,
 } from "./workspace-scope.js";
 
-/** Test-only cast; production code obtains this via requireWorkspaceMember. */
 function asVerified(id: string): VerifiedWorkspaceId {
   return id as VerifiedWorkspaceId;
 }
@@ -24,7 +23,7 @@ describe("withWorkspaceScope", () => {
     expect(result).toEqual({ workspaceId: "ws-1" });
   });
 
-  it("preserves existing where fields and adds workspaceId", () => {
+  it("既存の where フィールドを保持し、workspaceId を追加する", () => {
     const workspaceId = asVerified("ws-2");
     const result = withWorkspaceScope({ id: "case-1", deletedAt: null }, workspaceId);
 
@@ -35,7 +34,7 @@ describe("withWorkspaceScope", () => {
     });
   });
 
-  it("overwrites a pre-existing workspaceId with the verified one", () => {
+  it("既存の workspaceId を検証済みのもので上書きする", () => {
     const workspaceId = asVerified("ws-verified");
     const result = withWorkspaceScope({ workspaceId: "ws-other" }, workspaceId);
 

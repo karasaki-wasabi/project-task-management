@@ -1,14 +1,4 @@
-<!--
-  Two-panel throughput trend chart (velocity-dashboard task 4.2, mock 1c).
-  Top: completed task counts as bars with an independent y-axis.
-  Bottom: completed story points as a line (+ area) with its own y-axis.
-  X labels render only on the bottom panel; the same period columns align
-  vertically. Hovering a period highlights both panels for that index.
-  Inline SVG only — no chart library (design.md ThroughputTrendChart).
--->
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import type { ThroughputPeriod } from "../../composables/useApiClient";
 import {
   BAR_WIDTH,
   CHART_HEIGHT,
@@ -27,7 +17,6 @@ import {
 const props = withDefaults(
   defineProps<{
     periods: ThroughputPeriod[];
-    /** 案件選択時は見出しに「— 案件名」を付ける（モック 1d）。 */
     caseName?: string | null;
   }>(),
   {
@@ -64,10 +53,6 @@ function highlightX(index: number): number | null {
   >
     <h2 class="mb-2.5 text-sm font-semibold text-slate-900">{{ chartTitle }}</h2>
 
-    <!--
-      系列ラベルは SVG 外の HTML にする。viewBox スケールで font-size="12" が
-      見出し(14px)より大きく見えるのを防ぐ。
-    -->
     <div class="relative">
       <p
         class="pointer-events-none absolute z-10 text-xs font-medium leading-none text-slate-500"
@@ -96,7 +81,6 @@ function highlightX(index: number): number | null {
         role="img"
         aria-label="期間別の完了タスク数と完了ストーリーポイントの推移"
       >
-      <!-- Hover column bands (full height of both panels) -->
       <g v-if="hoveredIndex !== null && highlightX(hoveredIndex) !== null">
         <line
           data-testid="period-highlight"
@@ -120,7 +104,6 @@ function highlightX(index: number): number | null {
         />
       </g>
 
-      <!-- Top panel: completed count bars -->
       <line
         v-for="tick in layout.countAxis.values"
         :key="`count-grid-${tick}`"
@@ -167,7 +150,6 @@ function highlightX(index: number): number | null {
         {{ point.count }}
       </text>
 
-      <!-- Bottom panel: completed points line -->
       <line
         v-for="tick in layout.pointsAxis.values"
         :key="`points-grid-${tick}`"
@@ -227,7 +209,6 @@ function highlightX(index: number): number | null {
         {{ point.points }}
       </text>
 
-      <!-- X labels (bottom panel only) -->
       <text
         v-for="point in layout.points"
         :key="`label-${point.index}`"
@@ -241,7 +222,6 @@ function highlightX(index: number): number | null {
         {{ point.label }}
       </text>
 
-      <!-- Invisible hit targets spanning both panels -->
       <rect
         v-for="point in layout.points"
         :key="`hit-${point.index}`"

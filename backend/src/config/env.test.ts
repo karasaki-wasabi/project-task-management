@@ -19,7 +19,7 @@ describe("loadEnv", () => {
     },
   );
 
-  it("loads the authentication environment variables", () => {
+  it("認証環境変数を読み込む", () => {
     expect(loadEnv(requiredEnv)).toMatchObject({
       SESSION_SECRET: requiredEnv.SESSION_SECRET,
       CORS_ORIGIN: requiredEnv.CORS_ORIGIN,
@@ -29,17 +29,17 @@ describe("loadEnv", () => {
 
   it.each([
     [
-      "a 63-character SESSION_SECRET",
+      "63文字の SESSION_SECRET",
       { SESSION_SECRET: requiredEnv.SESSION_SECRET.slice(0, -1) },
       "SESSION_SECRET must be a 32-byte hexadecimal value",
     ],
     [
-      "an invalid CORS_ORIGIN",
+      "無効な CORS_ORIGIN",
       { CORS_ORIGIN: "not-a-valid-url" },
       "CORS_ORIGIN must be a valid URL",
     ],
     [
-      "an invalid COOKIE_SECURE value",
+      "無効な COOKIE_SECURE 値",
       { COOKIE_SECURE: "yes" },
       "COOKIE_SECURE must be true or false",
     ],

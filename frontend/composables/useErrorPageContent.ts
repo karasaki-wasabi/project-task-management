@@ -49,10 +49,6 @@ const DEDICATED: Record<404 | 403 | 401 | 500, ErrorPageContent> = {
   500: CONTENT_500,
 };
 
-/**
- * statusCode をエラーページの表示内容へ決定論的に変換する。
- * 専用4値以外の4xx/5xxは汎用テンプレ、それ以外は500と同一内容を返す。
- */
 export function getErrorPageContent(statusCode: number | undefined): ErrorPageContent {
   if (statusCode === 404 || statusCode === 403 || statusCode === 401 || statusCode === 500) {
     return DEDICATED[statusCode];

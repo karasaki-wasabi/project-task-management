@@ -1,5 +1,3 @@
-// Mount tests for TasksPage assignee candidates (workspace-resource-scope task 8.1).
-// Requirement 4.1: create-form assignee options come from current workspace members.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -111,7 +109,7 @@ function assigneeOptions(wrapper: ReturnType<typeof mountPage>) {
   return assigneeSelect.findAll("option").filter((o) => o.attributes("value") !== "");
 }
 
-describe("TasksPage assignee candidates (task 8.1, Req 4.1)", () => {
+describe("担当者候補 (task 8.1, Req 4.1)", () => {
   beforeEach(() => {
     listTasks.mockReset();
     createTask.mockReset();
@@ -142,7 +140,7 @@ describe("TasksPage assignee candidates (task 8.1, Req 4.1)", () => {
     vi.clearAllMocks();
   });
 
-  it("loads assignee candidates via listWorkspaceMembers(currentId), not listUsers", async () => {
+  it("担当者候補を読み込み、listWorkspaceMembers(currentId)を使用し、listUsersを使用しない", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -154,7 +152,7 @@ describe("TasksPage assignee candidates (task 8.1, Req 4.1)", () => {
     expect(wrapper.text()).not.toContain("外部ユーザー");
   });
 
-  it("submits the selected workspace member userId as assigneeUserId", async () => {
+  it("選択したワークスペースメンバーのuserIdをassigneeUserIdとして送信", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -175,7 +173,7 @@ describe("TasksPage assignee candidates (task 8.1, Req 4.1)", () => {
     );
   });
 
-  it("does not fetch members when current workspace is unset", async () => {
+  it("current workspaceが未設定の場合、メンバーを読み込まない", async () => {
     currentId.value = null;
     const wrapper = mountPage();
     await flushPromises();
@@ -186,7 +184,7 @@ describe("TasksPage assignee candidates (task 8.1, Req 4.1)", () => {
     expect(wrapper.find('[data-testid="workspace-empty-state"]').exists()).toBe(false);
   });
 
-  it("loads development stages and passes them to TaskNode (task-status-model 5.2)", async () => {
+  it("開発ステージを読み込み、TaskNodeに渡す (task-status-model 5.2)", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -196,7 +194,7 @@ describe("TasksPage assignee candidates (task 8.1, Req 4.1)", () => {
   });
 });
 
-describe("TasksPage story points create form (velocity-dashboard 5.1, Req 1.1-1.4)", () => {
+describe("ストーリーポイント作成フォーム (velocity-dashboard 5.1, Req 1.1-1.4)", () => {
   beforeEach(() => {
     listTasks.mockReset();
     createTask.mockReset();
@@ -234,7 +232,7 @@ describe("TasksPage story points create form (velocity-dashboard 5.1, Req 1.1-1.
     return form.find('input[type="number"][min="1"]');
   }
 
-  it("shows an optional story points field labeled ポイント in the create form", async () => {
+  it("作成フォームにオプションのストーリーポイントフィールドを表示 (ラベル: ポイント)", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -247,7 +245,7 @@ describe("TasksPage story points create form (velocity-dashboard 5.1, Req 1.1-1.
     expect(input.attributes("required")).toBeUndefined();
   });
 
-  it("passes storyPoints to createTask when a value >= 1 is entered", async () => {
+  it("ストーリーポイントをcreateTaskに渡す (値 >= 1)", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -264,7 +262,7 @@ describe("TasksPage story points create form (velocity-dashboard 5.1, Req 1.1-1.
     );
   });
 
-  it("omits storyPoints from createTask when the field is left empty", async () => {
+  it("ストーリーポイントをcreateTaskに渡さない (フィールドが空)", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -278,7 +276,7 @@ describe("TasksPage story points create form (velocity-dashboard 5.1, Req 1.1-1.
     expect(payload).not.toHaveProperty("storyPoints");
   });
 
-  it("does not add a story points field to the split dialog", async () => {
+  it("分割ダイアログにストーリーポイントフィールドを追加しない", async () => {
     listTasks.mockResolvedValue([makeTask({ id: "t1", title: "親タスク" })]);
     const wrapper = mountPage();
     await flushPromises();

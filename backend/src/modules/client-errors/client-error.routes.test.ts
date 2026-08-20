@@ -1,6 +1,3 @@
-// RED: clientErrorRoutes does not exist yet (task 8.1). Registration into
-// the main app.ts happens in task 10.3; this test mounts the plugin on a
-// throwaway Fastify instance.
 import Fastify from "fastify";
 import { describe, expect, it } from "vitest";
 import { clientErrorRoutes } from "./client-error.routes.js";
@@ -12,7 +9,7 @@ async function buildTestApp() {
 }
 
 describe("clientErrorRoutes (task 8.1)", () => {
-  it("POST /api/client-errors accepts a valid report and returns 204", async () => {
+  it("POST /api/client-errors で有効なレポートを受け取り、204 を返す", async () => {
     const app = await buildTestApp();
 
     const response = await app.inject({
@@ -30,7 +27,7 @@ describe("clientErrorRoutes (task 8.1)", () => {
     await app.close();
   });
 
-  it("POST /api/client-errors returns 400 when message is missing", async () => {
+  it("POST /api/client-errors で message がない場合、400 を返す", async () => {
     const app = await buildTestApp();
 
     const response = await app.inject({
@@ -43,7 +40,7 @@ describe("clientErrorRoutes (task 8.1)", () => {
     await app.close();
   });
 
-  it("POST /api/client-errors returns 400 when pageUrl is missing", async () => {
+  it("POST /api/client-errors で pageUrl がない場合、400 を返す", async () => {
     const app = await buildTestApp();
 
     const response = await app.inject({

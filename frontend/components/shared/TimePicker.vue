@@ -1,48 +1,3 @@
-<!--
-  Shared popover-style time wheel picker (case-management-ux design.md
-  "Frontend / shared > TimePicker / DateTimePicker(適用先画面なし)", claude
-  design mockup 4c). Task 12.1 — standalone component, no consuming screen
-  in this spec (design.md Non-Goals: "TimePicker/DateTimePickerの既存画面へ
-  の適用...は将来の別スペックの対象").
-
-  `v-model` is an `HH:mm` 24-hour string, empty string meaning "unset" —
-  same wire-format convention as DatePicker's `YYYY-MM-DD`. The wheel UI
-  itself is 12-hour + AM/PM (per the 4c mockup), so the 12h<->24h
-  conversion happens at the boundary in ./TimePicker.helpers.ts; the
-  trigger button's display and the popover header both use the same
-  `formatDisplay12` helper, so they can never disagree about what the
-  underlying 24-hour value looks like.
-
-  Draft-vs-committed separation — same contract as DatePicker.vue (design.md:
-  "いずれも決定/キャンセル/背景クリックの挙動はDatePickerと同じ規約に従う"):
-  opening the popover seeds draftHour12/draftMinute/draftPeriod from
-  modelValue (or "now" if unset). Wheel clicks/scrolls and the AM/PM toggle
-  only ever write those draft refs — the trigger label is bound to
-  modelValue, not the draft, so it provably cannot change until 決定. 決定 is
-  the only path that emits `update:modelValue`; キャンセル/背景クリック/Esc
-  just close without touching modelValue (the draft is re-seeded on next
-  open, so nothing needs explicit discarding). Unlike DatePicker there is no
-  クリア button — design.md's TimePicker responsibilities list only
-  "現在時刻ショートカットと「キャンセル/決定」" for the footer, no clear
-  affordance, so none is added here (this task's brief and design.md agree).
-
-  "Infinite scroll" approximation (design.md: "時・分の2ホイール(相互に無限ス
-  クロール、12↔1で循環)"): true virtualized infinite scroll is over-
-  engineering for a component with no consuming screen yet. Instead each
-  wheel is a plain scrollable list of its full value range (1-12 / 0-59)
-  that responds to mouse-wheel ticks via a `@wheel` handler calling the
-  circular `wrapHour12`/`wrapMinute` helpers (TimePicker.helpers.ts) — so
-  scrolling down past 12 wraps to 1 and vice versa, satisfying "feels like
-  you can scroll past the boundary" without rendering a repeated/duplicated
-  list or tracking scroll position math. Clicking any value in the list
-  also jumps straight to it (an unambiguous, cheap-to-implement affordance
-  the mockup's static image can't fully specify either way).
-
-  Popover shell (trigger button, transparent full-viewport backdrop for
-  outside-click, own Esc handler, no focus-trap composable reuse) mirrors
-  DatePicker.vue's — see that file's header comment for the rationale,
-  which applies unchanged here.
--->
 <script setup lang="ts">
 import {
   computeNowHHmm,
@@ -69,7 +24,6 @@ const panelRef = ref<HTMLElement | null>(null);
 const hourValues = Array.from({ length: 12 }, (_, index) => index + 1); // 1-12
 const minuteValues = Array.from({ length: 60 }, (_, index) => index); // 0-59
 
-// Trigger label reflects modelValue only, never the draft (see file header).
 const triggerLabel = computed(() => {
   const parsed = parseHHmm(props.modelValue);
   return parsed ? formatDisplay12(parsed.hour24, parsed.minute) : "未設定";
@@ -120,9 +74,6 @@ function scrollMinute(event: WheelEvent) {
   draftMinute.value = wrapMinute(draftMinute.value, event.deltaY > 0 ? 1 : -1);
 }
 
-// AM/PM is a 2-value toggle column (design.md), not a wheel — clicking
-// either option should just select it (togglePeriod only needs to fire when
-// the other option is clicked, which is exactly "not already selected").
 function selectPeriod(period: Period) {
   if (draftPeriod.value !== period) {
     draftPeriod.value = togglePeriod(draftPeriod.value);
@@ -135,16 +86,12 @@ function selectNow() {
   seedDraftFrom(computeNowHHmm(new Date()));
 }
 
-// Only 決定 commits the draft to modelValue (matches DatePicker's 10.4).
 function decide() {
   const { hour24, minute } = to24Hour(draftHour12.value, draftMinute.value, draftPeriod.value);
   emit("update:modelValue", formatHHmm(hour24, minute));
   open.value = false;
 }
 
-// キャンセル/背景クリック/Esc discard the draft (implicit — re-seeded from
-// modelValue on the next openPicker() call) and close without emitting
-// (matches DatePicker's 10.5).
 function cancel() {
   open.value = false;
 }
@@ -164,16 +111,8 @@ function cancel() {
       {{ triggerLabel }}
     </button>
 
-    <!-- Transparent full-viewport backdrop for background-click-to-cancel,
-         same pattern as DatePicker.vue. v-if is directly on this element
-         (not a wrapping <template>) — see the comment above the panel's
-         <Transition> below for why. -->
     <div v-if="open" class="fixed inset-0 z-40" @click="cancel" />
 
-    <!-- v-if must sit on the element Transition directly wraps, not on an
-         ancestor <template> that also toggles Transition's own existence —
-         otherwise Vue skips the leave animation entirely (see
-         DatePicker.vue's identical comment for the full explanation). -->
     <Transition
       enter-active-class="transition duration-150 ease-out"
       enter-from-class="opacity-0 scale-95 -translate-y-1"
@@ -190,15 +129,10 @@ function cancel() {
         class="absolute left-0 top-full z-50 mt-1 w-64 origin-top rounded-lg border border-slate-200 bg-white p-3 shadow-xl"
         @keydown.esc="cancel"
       >
-        <!-- Header: currently-selected draft time (reflects the draft, never
-             modelValue directly). Borderless border-bottom style, matching
-             DatePicker.vue's post-review fix for design-mockup fidelity
-             (claude design 4c uses the same header treatment as 4a). -->
         <div class="mb-2 border-b border-slate-100 px-0.5 pb-2.5 text-base font-bold tabular-nums text-slate-900">
           {{ draftHeaderLabel }}
         </div>
 
-        <!-- Hour / minute wheels + AM/PM toggle column. -->
         <div class="mb-2 flex items-stretch justify-center gap-2">
           <div
             class="h-36 w-14 overflow-y-auto rounded-md border border-slate-200"
@@ -257,8 +191,6 @@ function cancel() {
           </div>
         </div>
 
-        <!-- Footer: 現在時刻(left) / キャンセル・決定(right). No クリア —
-             design.md's TimePicker footer is 現在時刻+キャンセル/決定 only. -->
         <div class="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
           <button
             type="button"

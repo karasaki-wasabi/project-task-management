@@ -1,5 +1,3 @@
-// developmentStagesService workspace scope (workspace-resource-scope task 6.1;
-// Requirements 1.1, 1.2, 3.1, 3.2, 3.3) plus prior DevelopmentStagesService coverage.
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -70,7 +68,7 @@ afterAll(async () => {
 });
 
 describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", () => {
-  it("creates a development stage in the given workspace, appended to the end of that workspace's order (Requirements 1.1, 12.1)", async () => {
+  it("指定されたワークスペースに development stage を作成し、そのワークスペースの order の末尾に追加 (Requirements 1.1, 12.1)", async () => {
     const a = await createTracked(`spec-${randomUUID()}`, workspaceA);
     const b = await createTracked(`impl-${randomUUID()}`, workspaceA);
 
@@ -79,11 +77,11 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
     expect(b.order).toBe(a.order + 1);
   });
 
-  it("rejects an empty name", async () => {
+  it("空の name を受け取った場合、400 エラーを返す", async () => {
     await expect(developmentStagesService.create("  ", workspaceA)).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("renames a development stage in the current workspace", async () => {
+  it("現在のワークスペースで development stage をリネーム", async () => {
     const stage = await createTracked(`before-${randomUUID()}`, workspaceA);
 
     const renamed = await developmentStagesService.rename(stage.id, workspaceA, "after");
@@ -91,13 +89,13 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
     expect(renamed.name).toBe("after");
   });
 
-  it("returns not_found (404) when renaming a non-existent stage", async () => {
+  it("存在しない development stage をリネームした場合、404 エラーを返す", async () => {
     await expect(developmentStagesService.rename(randomUUID(), workspaceA, "x")).rejects.toMatchObject({
       statusCode: 404,
     });
   });
 
-  it("returns not_found (404) when renaming a stage in another workspace (Requirement 3.3)", async () => {
+  it("別のワークスペースで development stage をリネームした場合、404 エラーを返す (Requirement 3.3)", async () => {
     const foreign = await createTracked(`foreign-rename-${randomUUID()}`, workspaceB);
 
     await expect(developmentStagesService.rename(foreign.id, workspaceA, "hijacked")).rejects.toMatchObject({
@@ -108,10 +106,9 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
     expect(stillThere?.name).toBe(foreign.name);
   });
 
-  it("reorders stages according to the given id order within the workspace (Requirement 12.2)", async () => {
+  it("指定された id 順に development stage を並べ替える (Requirement 12.2)", async () => {
     const a = await createTracked(`a-${randomUUID()}`, workspaceA);
     const b = await createTracked(`b-${randomUUID()}`, workspaceA);
-    // Foreign-workspace stages must not be required in orderedIds.
     await createTracked(`foreign-${randomUUID()}`, workspaceB);
     const others = (await developmentStagesService.list(workspaceA))
       .map((s) => s.id)
@@ -124,7 +121,7 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
     expect(reordered[1].order).toBe(1);
   });
 
-  it("rejects reorder when orderedIds does not exactly match the current stages in the workspace", async () => {
+  it("orderedIds が現在のワークスペースの development stage と完全に一致しない場合、reorder を拒否 (Requirement 12.2)", async () => {
     const a = await createTracked(`only-${randomUUID()}`, workspaceA);
 
     await expect(developmentStagesService.reorder([a.id, randomUUID()], workspaceA)).rejects.toMatchObject({
@@ -132,7 +129,7 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
     });
   });
 
-  it("lists development stages only for the current workspace, ordered by order (Requirements 3.1, 9.4)", async () => {
+  it("現在のワークスペースの development stage のみを返し、order で並べ替える (Requirements 3.1, 9.4)", async () => {
     const a = await createTracked(`list-a-${randomUUID()}`, workspaceA);
     const b = await createTracked(`list-b-${randomUUID()}`, workspaceA);
     const foreign = await createTracked(`list-foreign-${randomUUID()}`, workspaceB);
@@ -146,7 +143,7 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
     expect(ids).not.toContain(foreign.id);
   });
 
-  it("list includes kind for each stage (task-status-model 2.1, Requirements 1.1, 1.8)", async () => {
+  it("list で各 development stage の kind を含む (task-status-model 2.1, Requirements 1.1, 1.8)", async () => {
     const stage = await createTracked(`kind-list-${randomUUID()}`, workspaceA);
     await db.developmentStage.create({
       data: {
@@ -176,7 +173,7 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
     expect(list.some((s) => s.kind === "cancelled")).toBe(true);
   });
 
-  it("getById returns a stage with kind in the workspace and null for another workspace (task-status-model 2.1)", async () => {
+  it("getById で workspace 内の kind を持つ development stage を返し、別のワークスペースの場合は null を返す (task-status-model 2.1)", async () => {
     const stage = await createTracked(`find-${randomUUID()}`, workspaceA);
     const completed = await db.developmentStage.create({
       data: {
@@ -200,7 +197,7 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
     expect(await developmentStagesService.getById(stage.id, workspaceB)).toBeNull();
   });
 
-  it("deleting a stage resets developmentStageId to null on tasks that referenced it, and excludes it from list (Requirement 12.5, 9.4)", async () => {
+  it("development stage を削除すると、それを参照しているタスクの developmentStageId を null にリセットし、list から除外する (Requirement 12.5, 9.4)", async () => {
     const stage = await createTracked(`deletable-${randomUUID()}`, workspaceA);
     const task = await db.task.create({
       data: {
@@ -222,13 +219,13 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
     expect(list.some((s) => s.id === stage.id)).toBe(false);
   });
 
-  it("returns not_found (404) when deleting a non-existent stage", async () => {
+  it("存在しない development stage を削除した場合、404 エラーを返す", async () => {
     await expect(developmentStagesService.delete(randomUUID(), workspaceA)).rejects.toMatchObject({
       statusCode: 404,
     });
   });
 
-  it("returns not_found (404) when deleting a stage in another workspace (Requirement 3.3)", async () => {
+  it("別のワークスペースで development stage を削除した場合、404 エラーを返す (Requirement 3.3)", async () => {
     const foreign = await createTracked(`foreign-delete-${randomUUID()}`, workspaceB);
 
     await expect(developmentStagesService.delete(foreign.id, workspaceA)).rejects.toMatchObject({
@@ -239,7 +236,7 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
     expect(stillThere.some((s) => s.id === foreign.id)).toBe(true);
   });
 
-  it("does not reuse a deleted stage's order value for a newly created stage in the same workspace", async () => {
+  it("削除された development stage の order 値を同じワークスペースで新しい development stage を作成する際に再利用しない", async () => {
     const a = await createTracked(`churn-a-${randomUUID()}`, workspaceA);
     const b = await createTracked(`churn-b-${randomUUID()}`, workspaceA);
     await developmentStagesService.delete(a.id, workspaceA);
@@ -252,7 +249,7 @@ describe("developmentStagesService (task 14.1 + workspace-resource-scope 6.1)", 
   });
 });
 
-describe("developmentStagesService kind invariants (task-status-model 2.2, Requirements 1.4–1.7)", () => {
+describe("developmentStagesService kind 不変条件 (task-status-model 2.2, Requirements 1.4–1.7)", () => {
   async function seedTerminalsAfter(baseOrder: number, workspaceId: VerifiedWorkspaceId) {
     const completed = await db.developmentStage.create({
       data: {
@@ -274,13 +271,13 @@ describe("developmentStagesService kind invariants (task-status-model 2.2, Requi
     return { completed, cancelled };
   }
 
-  it("creates stages as kind normal (Requirement 1.4)", async () => {
+  it("development stage を kind normal で作成 (Requirement 1.4)", async () => {
     const stage = await createTracked(`always-normal-${randomUUID()}`, workspaceA);
 
     expect(stage.kind).toBe("normal");
   });
 
-  it("inserts a new stage after the last normal stage, not after terminal stages (Requirement 1.4)", async () => {
+  it("最後の normal stage の後に新しい development stage を挿入し、terminal stage の後ではない (Requirement 1.4)", async () => {
     const normal = await createTracked(`normal-before-${randomUUID()}`, workspaceA);
     const { completed, cancelled } = await seedTerminalsAfter(normal.order, workspaceA);
 
@@ -300,7 +297,7 @@ describe("developmentStagesService kind invariants (task-status-model 2.2, Requi
     expect(ids.indexOf(created.id)).toBeLessThan(ids.indexOf(cancelled.id));
   });
 
-  it("rejects deleting a completed stage (Requirement 1.5)", async () => {
+  it("completed development stage を削除した場合、400 エラーを返す (Requirement 1.5)", async () => {
     const normal = await createTracked(`keep-${randomUUID()}`, workspaceA);
     const { completed } = await seedTerminalsAfter(normal.order, workspaceA);
 
@@ -311,7 +308,7 @@ describe("developmentStagesService kind invariants (task-status-model 2.2, Requi
     expect(await developmentStagesService.getById(completed.id, workspaceA)).not.toBeNull();
   });
 
-  it("rejects deleting a cancelled stage (Requirement 1.5)", async () => {
+  it("cancelled development stage を削除した場合、400 エラーを返す (Requirement 1.5)", async () => {
     const normal = await createTracked(`keep-${randomUUID()}`, workspaceA);
     const { cancelled } = await seedTerminalsAfter(normal.order, workspaceA);
 
@@ -322,7 +319,7 @@ describe("developmentStagesService kind invariants (task-status-model 2.2, Requi
     expect(await developmentStagesService.getById(cancelled.id, workspaceA)).not.toBeNull();
   });
 
-  it("allows renaming a terminal stage (Requirement 1.7)", async () => {
+  it("terminal development stage をリネームできる (Requirement 1.7)", async () => {
     const normal = await createTracked(`rename-base-${randomUUID()}`, workspaceA);
     const { completed } = await seedTerminalsAfter(normal.order, workspaceA);
 
@@ -331,7 +328,7 @@ describe("developmentStagesService kind invariants (task-status-model 2.2, Requi
     expect(renamed).toMatchObject({ id: completed.id, name: "完了（改）", kind: "completed" });
   });
 
-  it("allows reordering including terminal stages (Requirement 1.7)", async () => {
+  it("terminal development stage を含む reorder ができる (Requirement 1.7)", async () => {
     const normal = await createTracked(`reorder-base-${randomUUID()}`, workspaceA);
     const { completed, cancelled } = await seedTerminalsAfter(normal.order, workspaceA);
     const others = (await developmentStagesService.list(workspaceA))
@@ -349,7 +346,7 @@ describe("developmentStagesService kind invariants (task-status-model 2.2, Requi
   });
 });
 
-describe("developmentStagesService getById(client) and ensureTerminalStages (module-boundary-cleanup 2.2)", () => {
+describe("developmentStagesService getById(client) と ensureTerminalStages (module-boundary-cleanup 2.2)", () => {
   let terminalWorkspace: VerifiedWorkspaceId;
 
   beforeAll(async () => {
@@ -364,7 +361,7 @@ describe("developmentStagesService getById(client) and ensureTerminalStages (mod
     await hardDelete("workspaces", [terminalWorkspace]);
   });
 
-  it("getById sees uncommitted rows via the TX client and not via the default client (Requirement 3.2)", async () => {
+  it("getById で未コミットの行を TX client で見えるようにし、default client では見えない (Requirement 3.2)", async () => {
     await expect(
       db.$transaction(async (tx) => {
         const created = await tx.developmentStage.create({
@@ -392,7 +389,7 @@ describe("developmentStagesService getById(client) and ensureTerminalStages (mod
     ).rejects.toThrow("rollback-getById-tx-proof");
   });
 
-  it("getById with a TX client still returns null for another workspace (Requirement 1.4)", async () => {
+  it("TX client で別のワークスペースの development stage を取得した場合、null を返す (Requirement 1.4)", async () => {
     await expect(
       db.$transaction(async (tx) => {
         const created = await tx.developmentStage.create({
@@ -414,7 +411,7 @@ describe("developmentStagesService getById(client) and ensureTerminalStages (mod
     ).rejects.toThrow("rollback-getById-scope-tx-proof");
   });
 
-  it("ensureTerminalStages creates completed/cancelled with the same initial state as workspace create (Requirement 4.4)", async () => {
+  it("ensureTerminalStages で workspace 作成時と同じ初期状態の completed/cancelled development stage を作成 (Requirement 4.4)", async () => {
     await expect(
       db.$transaction(async (tx) => {
         await developmentStagesService.ensureTerminalStages(terminalWorkspace, tx);
@@ -452,8 +449,8 @@ describe("developmentStagesService getById(client) and ensureTerminalStages (mod
   });
 });
 
-describe("developmentStagesService module boundary (module-boundary-cleanup task 4.2)", () => {
-  it("orchestrates delete via taskIntegrityService.clearDevelopmentStage then repository delete (Requirements 1.1, 1.4, 2.1, 3.1, 3.3, 4.3, 4.6)", () => {
+describe("developmentStagesService モジュール境界 (module-boundary-cleanup task 4.2)", () => {
+  it("taskIntegrityService.clearDevelopmentStage と repository delete を orchestrate する (Requirements 1.1, 1.4, 2.1, 3.1, 3.3, 4.3, 4.6)", () => {
     const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "development-stage.service.ts");
     const source = readFileSync(sourcePath, "utf8");
     const importLines = source

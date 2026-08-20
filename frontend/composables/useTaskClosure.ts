@@ -1,7 +1,3 @@
-// Client-side task closure predicates (task-status-model 4.3; design.md useTaskClosure).
-// Authority stays on the server; these pure helpers exist only for display control.
-// Semantics match backend task.closure.resolveClosureState:
-// completed/cancelled => closed; only completed => completed; unset/unknown => open.
 import type { DevelopmentStage, Task } from "./useApiClient";
 
 export type TaskClosureState = "open" | "completed" | "cancelled";

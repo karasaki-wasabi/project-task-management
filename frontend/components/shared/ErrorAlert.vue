@@ -1,8 +1,3 @@
-<!--
-  Shared error display (screen polish pass). Backend errors must always be
-  surfaced on screen, never left to the console
-  (.kiro/steering/error-handling.md).
--->
 <script setup lang="ts">
 defineProps<{ message: string }>();
 </script>

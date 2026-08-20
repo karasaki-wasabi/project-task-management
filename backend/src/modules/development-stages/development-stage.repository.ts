@@ -1,8 +1,3 @@
-// Persistence for DevelopmentStages (task 14.1, design.md
-// "Backend/development-stages"). Soft-delete / audit-column behavior comes
-// from the shared `db` client (task 1.4).
-// workspace-resource-scope task 6.1: all queries take VerifiedWorkspaceId and
-// compose where via withWorkspaceScope.
 import type { DevelopmentStage as PrismaDevelopmentStage } from "@prisma/client";
 import { db } from "../../shared/db.js";
 import type { DbClient } from "../../shared/soft-delete.repository.js";
@@ -20,8 +15,6 @@ function toDomain(row: PrismaDevelopmentStage): DevelopmentStage {
 }
 
 export const developmentStageRepository = {
-  // Inserts at `order` and shifts later stages up by 1 so a new normal stage
-  // can sit before terminal stages (task-status-model 2.2 / design.md).
   async create(name: string, order: number, workspaceId: VerifiedWorkspaceId): Promise<DevelopmentStage> {
     return db.$transaction(async (tx) => {
       await tx.developmentStage.updateMany({
@@ -46,7 +39,6 @@ export const developmentStageRepository = {
     return row ? toDomain(row) : null;
   },
 
-  // Same payload as workspaceService.create terminal bootstrap (name/order/kind).
   createTerminalStages(workspaceId: VerifiedWorkspaceId, client: DbClient): Promise<{ count: number }> {
     return client.developmentStage.createMany({
       data: [
@@ -80,9 +72,6 @@ export const developmentStageRepository = {
     });
   },
 
-  // Stage row only. Linked-task clear is owned by taskIntegrityService and
-  // orchestrated by developmentStagesService in the same write unit
-  // (design.md developmentStagesService.delete).
   delete(id: string, workspaceId: VerifiedWorkspaceId, client: DbClient = db): Promise<PrismaDevelopmentStage> {
     return client.developmentStage.delete({ where: withWorkspaceScope({ id }, workspaceId) });
   },

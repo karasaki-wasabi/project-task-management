@@ -1,6 +1,3 @@
-// holidayRoutes workspace scope (workspace-resource-scope task 5.1;
-// Requirements 1.1, 1.2, 3.1, 3.2, 3.3). Uses buildApp so requireUser /
-// CSRF / requireWorkspaceMember apply; injects X-Workspace-Id.
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../../app.js";
@@ -57,8 +54,6 @@ async function csrfToken(app: App, cookie: string): Promise<{ token: string; coo
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  // workspaceService.create provisions terminal development_stages (1.2/1.3);
-  // clear them before removing the workspace row (FK).
   if (table === "workspaces") {
     await db.$executeRawUnsafe(
       `DELETE FROM development_stages WHERE workspace_id IN (${ids.map(() => "?").join(",")})`,
@@ -101,7 +96,7 @@ function withWorkspace(
   return csrf ? withCsrfToken(withSession, csrf) : withSession;
 }
 
-describe("holidayRoutes (task 6.1 + workspace-resource-scope 5.1)", () => {
+describe("holidayRoutes ワークスペーススコープ (task 6.1 + workspace-resource-scope 5.1)", () => {
   const app = buildApp(env);
 
   let memberId: string;
@@ -125,7 +120,6 @@ describe("holidayRoutes (task 6.1 + workspace-resource-scope 5.1)", () => {
   });
 
   afterAll(async () => {
-    // Soft-deleted rows still hold workspace FK; purge by workspace before teardown.
     await db.$executeRawUnsafe(
       `DELETE FROM non_business_days WHERE workspace_id IN (?, ?)`,
       workspaceA,
@@ -144,7 +138,7 @@ describe("holidayRoutes (task 6.1 + workspace-resource-scope 5.1)", () => {
     await db.$disconnect();
   });
 
-  it("POST /api/holidays registers a non-business day in the current workspace and returns 201", async () => {
+  it("POST /api/holidays で現在のワークスペースに非営業日を登録し、201 を返す", async () => {
     const response = await app.inject(
       withWorkspace(
         { method: "POST", url: "/api/holidays", payload: { date: "2032-01-01", label: "元日" } },
@@ -160,7 +154,7 @@ describe("holidayRoutes (task 6.1 + workspace-resource-scope 5.1)", () => {
     holidayIds.push(response.json().id);
   });
 
-  it("POST /api/holidays returns 409 for a duplicate active date in the same workspace", async () => {
+  it("POST /api/holidays で同じ日付を2回登録した場合、409 を返す", async () => {
     const first = await app.inject(
       withWorkspace(
         { method: "POST", url: "/api/holidays", payload: { date: "2032-01-02" } },
@@ -184,7 +178,7 @@ describe("holidayRoutes (task 6.1 + workspace-resource-scope 5.1)", () => {
     expect(response.statusCode).toBe(409);
   });
 
-  it("POST /api/holidays returns 400 for an invalid date", async () => {
+  it("POST /api/holidays で無効な日付を受け取った場合、400 を返す", async () => {
     const response = await app.inject(
       withWorkspace(
         { method: "POST", url: "/api/holidays", payload: { date: "bogus" } },
@@ -197,7 +191,7 @@ describe("holidayRoutes (task 6.1 + workspace-resource-scope 5.1)", () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it("GET /api/holidays lists only current-workspace holidays and excludes removed ones", async () => {
+  it("GET /api/holidays で現在のワークスペースの非営業日のみを返し、削除されたものを除外", async () => {
     const created = await app.inject(
       withWorkspace(
         { method: "POST", url: "/api/holidays", payload: { date: "2032-01-03" } },
@@ -240,7 +234,7 @@ describe("holidayRoutes (task 6.1 + workspace-resource-scope 5.1)", () => {
     expect(list.some((h) => h.id === foreign.json().id)).toBe(false);
   });
 
-  it("DELETE /api/holidays/:id returns 404 for a non-existent holiday", async () => {
+  it("DELETE /api/holidays/:id で存在しない非営業日を削除した場合、404 を返す", async () => {
     const response = await app.inject(
       withWorkspace(
         { method: "DELETE", url: `/api/holidays/${randomUUID()}` },
@@ -253,7 +247,7 @@ describe("holidayRoutes (task 6.1 + workspace-resource-scope 5.1)", () => {
     expect(response.statusCode).toBe(404);
   });
 
-  it("DELETE /api/holidays/:id returns 404 for a holiday in another workspace (Requirement 3.3)", async () => {
+  it("DELETE /api/holidays/:id で別のワークスペースの非営業日を削除した場合、404 を返す (Requirement 3.3)", async () => {
     const foreign = await app.inject(
       withWorkspace(
         { method: "POST", url: "/api/holidays", payload: { date: "2032-01-05" } },
@@ -284,7 +278,7 @@ describe("holidayRoutes (task 6.1 + workspace-resource-scope 5.1)", () => {
   });
 });
 
-describe("holidayRoutes sync (task 6.2 + workspace-resource-scope 5.1)", () => {
+describe("holidayRoutes 外部API同期 (task 6.2 + workspace-resource-scope 5.1)", () => {
   const app = buildApp(env);
 
   let memberId: string;
@@ -316,7 +310,7 @@ describe("holidayRoutes sync (task 6.2 + workspace-resource-scope 5.1)", () => {
     await db.$disconnect();
   });
 
-  it("POST /api/holidays/sync adds new holidays into the current workspace", async () => {
+  it("POST /api/holidays/sync で外部APIから新しい非営業日を現在のワークスペースに追加", async () => {
     const date = "2033-02-11";
     vi.stubGlobal(
       "fetch",
@@ -340,7 +334,7 @@ describe("holidayRoutes sync (task 6.2 + workspace-resource-scope 5.1)", () => {
     for (const h of body.added) holidayIds.push(h.id);
   });
 
-  it("POST /api/holidays/sync returns 502 and leaves the master unchanged when the external API fails", async () => {
+  it("POST /api/holidays/sync で外部APIが失敗した場合、502 エラーを返し、既存のマスターを変更しない", async () => {
     const survivor = "2033-03-03";
     const seed = await app.inject(
       withWorkspace(

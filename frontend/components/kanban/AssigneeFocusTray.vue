@@ -1,39 +1,3 @@
-<!--
-  Assignee focus tray (task 2.1, design.md "AssigneeFocusTray" component
-  detail block, Requirement 1.2/1.3/1.4/1.5). Shown by the parent kanban page
-  only while a specific assignee is selected (Requirement 1.1 — that
-  render-or-not decision belongs to the parent page, out of scope here).
-
-  - Requirement 1.2/1.3: `tasks` is expected to already be filtered by the
-    caller to the selected assignee's incomplete tasks, regardless of
-    whether a development stage is set — this component only renders them.
-  - Requirement 1.4: the display area has a fixed height; once the task list
-    overflows it, only internal scrolling (not page scrolling) reveals the
-    rest.
-  - Requirement 1.5: an empty `tasks` list shows a zero-count message
-    instead of an empty area.
-
-  This tray is a drop TARGET (not just inert) — dragging any card here
-  (assigned or not) reassigns it to the currently-focused user
-  (kanban-ux-redesign Requirement 9). It's a `VueDraggable` with
-  `put: true`, sharing the same `kanban-cards` Sortable group as the stage
-  columns and backlog panel. This component only reports which task was
-  dropped (`assign` event); the parent owns the actual API call (the
-  general `updateTask` API, not `updateDevelopmentStage` — that one
-  deliberately preserves an existing assignee for stage-column moves,
-  which doesn't apply to this drop target) and needs to also revert the
-  optimistic drop on failure — the parent calls the exposed `resync()`
-  after handling the drop either way. Has a background/border like the
-  other lanes, since it functions as one.
-
-  Also `pull: true`: a card dropped here only gets an assignee, not a
-  development stage, so without this it would sit effectively hidden back
-  in the (possibly collapsed) backlog panel until the user went and found
-  it again. Instead the card sits right here, visibly, and can be dragged
-  straight from the tray into a stage column next, so the two-step
-  "assign, then place" flow stays in one visible spot. Dragging out emits
-  `end` (same shape as UnassignedBacklogPanel's) for the parent to act on.
--->
 <script setup lang="ts">
 import { VueDraggable, type DraggableEvent } from "vue-draggable-plus";
 import { isEmpty, resolveAssigneeName } from "./AssigneeFocusTray.helpers";
@@ -52,9 +16,6 @@ const emit = defineEmits<{
 
 const hasNoTasks = computed(() => isEmpty(props.tasks));
 
-// Sortable-mutable mirror of props.tasks — same resync strategy as
-// UnassignedBacklogPanel.vue (no eager resync on drop; only on explicit
-// parent request via the exposed `resync()`).
 const draggableTasks = ref<Task[]>([]);
 watch(
   () => props.tasks,
@@ -71,15 +32,6 @@ function handleAdd(evt: DraggableEvent) {
   if (taskId) emit("assign", taskId);
 }
 
-// Fires when a drag STARTS in this tray, regardless of where it lands
-// (Sortable's onEnd is a source-side event — see UnassignedBacklogPanel's
-// identically-shaped handleListEnd). Always emit when there's a `taskId`
-// (matching UnassignedBacklogPanel's condition) even if `targetStageId` is
-// undefined — a drop back into this tray itself is exactly that case, and
-// the parent still needs to hear about it to clear its drop-target
-// highlight. Emitting only when `targetStageId` is set would mean a
-// "changed my mind, dropped back in the tray" drag never notifies the
-// parent, leaving whichever column had last been hovered stuck highlighted.
 function handleEnd(evt: DraggableEvent) {
   const taskId = (evt.item as HTMLElement | undefined)?.dataset.taskId;
   const targetStageId = (evt.to as HTMLElement | undefined)?.dataset.stageId;

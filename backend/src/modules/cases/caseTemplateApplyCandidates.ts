@@ -1,7 +1,3 @@
-// Pure candidate builder for case template apply operations
-// (task 3.1, Requirements 4.5–4.12, design.md 適用操作の種類 +
-// templateOperations 導出の原則).
-
 export type CaseTemplateApplyOperation =
   | "start_generate"
   | "start_regenerate"
@@ -13,7 +9,6 @@ export type CaseTemplateApplyOperation =
   | "month_regenerate"
   | "month_delete";
 
-/** Calendar day as YYYY-MM-DD, Date, or unset (null/undefined). */
 export type CaseDateInput = string | Date | null | undefined;
 
 function toDayKey(value: CaseDateInput): string | null {
@@ -24,15 +19,9 @@ function toDayKey(value: CaseDateInput): string | null {
   }
   const trimmed = value.trim();
   if (trimmed.length === 0) return null;
-  // Accept full ISO timestamps by taking the calendar day prefix.
   return trimmed.slice(0, 10);
 }
 
-/**
- * Build the full list of template-apply candidate operations for a case
- * date transition. Create paths pass null for both old dates.
- * Order is fixed: start → end → month (matches CaseTemplateApplyOperation).
- */
 export function buildCaseTemplateApplyCandidates(
   oldStart: CaseDateInput,
   oldEnd: CaseDateInput,

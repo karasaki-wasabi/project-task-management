@@ -1,7 +1,3 @@
-// App-level wiring of requireWorkspaceMember (task 1.4;
-// Requirements 2.2, 3.1, 3.2). Confirms the guard runs after requireUser
-// only on the workspace-scoped path prefixes, and leaves excluded
-// paths unaffected.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
@@ -67,8 +63,6 @@ async function csrfToken(app: App, cookie: string): Promise<{ token: string; coo
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  // workspaceService.create provisions terminal development_stages (1.2/1.3);
-  // clear them before removing the workspace row (FK).
   if (table === "workspaces") {
     await db.$executeRawUnsafe(
       `DELETE FROM development_stages WHERE workspace_id IN (${ids.map(() => "?").join(",")})`,
@@ -78,7 +72,7 @@ async function hardDelete(table: string, ids: string[]): Promise<void> {
   await db.$executeRawUnsafe(`DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids);
 }
 
-describe("workspace scope guard wiring (task 1.4)", () => {
+describe("workspace scope guard の配線 (task 1.4)", () => {
   const app = buildApp(env);
 
   let memberId: string;
@@ -130,7 +124,7 @@ describe("workspace scope guard wiring (task 1.4)", () => {
   });
 
   it.each(SCOPED_PATHS)(
-    "returns 400 when authenticated GET %s omits X-Workspace-Id",
+    "認証済みの GET %s が X-Workspace-Id を省略している場合、400 を返す",
     async (path) => {
       const response = await app.inject(
         withSessionCookie({ method: "GET", url: path }, memberCsrf.cookie),
@@ -140,7 +134,7 @@ describe("workspace scope guard wiring (task 1.4)", () => {
   );
 
   it.each(SCOPED_PATHS)(
-    "returns 403 when authenticated GET %s uses a non-member workspace",
+    "認証済みの GET %s が非メンバーのワークスペースを使用している場合、403 を返す",
     async (path) => {
       const response = await app.inject(
         withSessionCookie(
@@ -156,7 +150,7 @@ describe("workspace scope guard wiring (task 1.4)", () => {
     },
   );
 
-  it("does not apply the workspace guard to excluded paths", async () => {
+  it("除外されたパスにはワークスペースガードを適用しない", async () => {
     const workspaces = await app.inject(
       withSessionCookie({ method: "GET", url: "/api/workspaces" }, memberCsrf.cookie),
     );
@@ -175,8 +169,6 @@ describe("workspace scope guard wiring (task 1.4)", () => {
     const health = await app.inject({ method: "GET", url: "/health" });
     expect(health.statusCode).toBe(200);
 
-    // client-errors is requireUser-exempt and outside the scoped prefixes;
-    // a CSRF-valid POST without X-Workspace-Id must succeed (204).
     const publicCsrf = await app.inject({ method: "GET", url: "/api/auth/csrf" });
     expect(publicCsrf.statusCode).toBe(200);
     const clientErrors = await app.inject(

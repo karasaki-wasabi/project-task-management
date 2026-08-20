@@ -1,7 +1,3 @@
-// WorkspaceService: create / settings update / creator-only delete / list /
-// member list / search-add / isMember (tasks 3.1–3.2, design.md
-// "Backend/workspaces" WorkspaceService; Requirements 1.1, 1.2, 3.1, 3.2,
-// 4.2–4.5, 5.1, 5.2, 6.1–6.5, 7.1–7.3).
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
@@ -56,9 +52,6 @@ export const workspaceService = {
         { workspaceId: created.id, userId: input.createdByUserId },
         tx,
       );
-      // Requirements 1.2 / 1.3: every workspace must have exactly one completed
-      // and one cancelled stage. Migration covers pre-existing rows; seed covers
-      // the demo workspace; UI/API create must provision terminals here.
       await developmentStagesService.ensureTerminalStages(
         created.id as VerifiedWorkspaceId,
         tx,
@@ -118,7 +111,6 @@ export const workspaceService = {
 
     const member = await workspaceRepository.isMember(id, requestingUserId);
     if (!member) {
-      // Requirement 7.3 / design deletion flow: non-member → 404 (not 403).
       throw notFound(`Workspace not found: ${id}`);
     }
 

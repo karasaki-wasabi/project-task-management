@@ -1,10 +1,3 @@
-// Shared by every dialog-like overlay on the kanban page (the assignee
-// picker, the keyboard-triggered task action menu) so Tab stays inside the
-// open dialog, initial focus lands on its first control, and closing it
-// returns focus to whatever opened it. DOM-dependent (focus/querySelector),
-// so it's covered by e2e (frontend/e2e/kanban.spec.ts's keyboard-path
-// coverage) rather than vitest — this repo has no jsdom/DOM test
-// environment (see vitest.config.ts).
 import type { Ref } from "vue";
 
 const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -36,12 +29,6 @@ export function useDialogFocusTrap(dialogRef: Ref<HTMLElement | null | undefined
     if (open) {
       previouslyFocused = document.activeElement as HTMLElement | null;
       await nextTick();
-      // The dialog always renders at a fixed spot in page flow, disconnected
-      // from wherever on the horizontally-scrolling board a drag/
-      // keyboard-activate actually happened. An explicit smooth
-      // scroll-into-view (on top of the native scroll `.focus()` already
-      // triggers) makes that jump legible instead of the dialog just
-      // appearing to "pop in" off to one side.
       dialogRef.value?.scrollIntoView({ behavior: "smooth", block: "center" });
       focusableElements()[0]?.focus();
       document.addEventListener("keydown", handleKeydown);

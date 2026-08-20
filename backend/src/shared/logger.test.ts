@@ -1,4 +1,3 @@
-// RED: createLogger() does not exist yet (task 1.5, Requirements 10.1, 10.3, 10.5, 10.6).
 import { Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { createLogger } from "./logger.js";
@@ -24,7 +23,7 @@ function collectingStream() {
 }
 
 describe("createLogger (task 1.5)", () => {
-  it("logAccess writes a JSON line with method/path/statusCode/durationMs/requestId", () => {
+  it("logAccess で method/path/statusCode/durationMs/requestId を含む JSON 行を書き込む", () => {
     const { stream, lines } = collectingStream();
     const logger = createLogger("debug", stream);
 
@@ -39,7 +38,7 @@ describe("createLogger (task 1.5)", () => {
     expect(entry.durationMs).toBe(4.2);
   });
 
-  it("logBusinessEvent writes the event name, requestId, and entityId", () => {
+  it("logBusinessEvent で event 名、requestId、entityId を書き込む", () => {
     const { stream, lines } = collectingStream();
     const logger = createLogger("debug", stream);
 
@@ -52,7 +51,7 @@ describe("createLogger (task 1.5)", () => {
     expect(entry.entityId).toBe("delivery-1");
   });
 
-  it("logError writes the stack trace and requestId", () => {
+  it("logError で stack trace と requestId を書き込む", () => {
     const { stream, lines } = collectingStream();
     const logger = createLogger("debug", stream);
 
@@ -66,7 +65,7 @@ describe("createLogger (task 1.5)", () => {
     expect(typeof err.stack).toBe("string");
   });
 
-  it("respects LOG_LEVEL: a warn-level logger drops debug/info lines", () => {
+  it("LOG_LEVEL に従って debug/info の行を破棄する", () => {
     const { stream, lines } = collectingStream();
     const logger = createLogger("warn", stream);
 
@@ -76,7 +75,7 @@ describe("createLogger (task 1.5)", () => {
     expect(lines).toHaveLength(0);
   });
 
-  it("logError is emitted at error level even when LOG_LEVEL is warn", () => {
+  it("logError は LOG_LEVEL が warn の場合でも error レベルで出力される", () => {
     const { stream, lines } = collectingStream();
     const logger = createLogger("warn", stream);
 

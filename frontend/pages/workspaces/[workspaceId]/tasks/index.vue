@@ -1,23 +1,4 @@
-<!--
-  Task list with status/priority at a glance, hierarchy display, and split
-  UI (task 11.1, design.md "Frontend/tasks", Requirements 1.1-1.6, 2.1-2.4).
-  Assignee filtering reuses AssigneeFilter (task 11.6, Requirement 7.2).
-
-  Explicit Vue / useApiClient imports so vitest can mount without Nuxt
-  auto-import runtime (same approach as pages/holidays/index.vue).
--->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import {
-  useApiClient,
-  type DevelopmentStage,
-  type Priority,
-  type Task,
-  type TaskStatus,
-  type User,
-} from "../../../../composables/useApiClient";
-import { useCurrentWorkspace } from "../../../../composables/useCurrentWorkspace";
-
 const api = useApiClient();
 const { currentId } = useCurrentWorkspace();
 
@@ -66,14 +47,8 @@ async function createTask() {
     priority: newPriority.value,
     detail: newDetail.value || undefined,
     caseId: caseId.value || undefined,
-    // Requirement 3.3: only meaningful when the task is linked to a
-    // case; found missing entirely from this form while writing task
-    // 18.3's dashboard E2E test (no UI could ever mark a task required,
-    // so a case's progress could never show a nonzero requiredTotal).
     isRequiredForCase: caseId.value ? newIsRequiredForCase.value : undefined,
-    // Requirement 7.1: assign to one pre-registered user at creation time.
     assigneeUserId: newAssigneeUserId.value || undefined,
-    // velocity-dashboard Req 1.1-1.4: optional leaf story points (new tasks are always leaves).
     ...(storyPoints !== undefined ? { storyPoints } : {}),
   });
   newTitle.value = "";
@@ -89,8 +64,6 @@ async function onStatusChange(id: string, status: TaskStatus) {
     await api.updateTaskStatus(id, status);
     await load();
   } catch (e) {
-    // Requirement 2.4: surface the backend's incomplete-children guard
-    // (409) instead of letting it fail silently as an unhandled rejection.
     error.value = e instanceof Error ? e.message : String(e);
     await load();
   }
@@ -129,9 +102,6 @@ watch(
     }
     void (async () => {
       await load();
-      // Requirement 4.1 / design.md: assignee candidates are current
-      // workspace members. Normalize WorkspaceUserSummary.userId → User.id
-      // so existing option :value / :key keep working.
       const members = await api.listWorkspaceMembers(id);
       users.value = members.map((member) => ({
         id: member.userId,

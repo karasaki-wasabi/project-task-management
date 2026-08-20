@@ -1,7 +1,3 @@
-// Task integrity / aggregation public surface (module-boundary-cleanup task 2.3;
-// design.md Backend/tasks taskIntegrityService). Depends on taskRepository and
-// task.closure only. Must not import stages / cases / recurrence services, and
-// must not query Task rows through Prisma client accessors.
 import type { DbClient } from "../../shared/soft-delete.repository.js";
 import type { VerifiedWorkspaceId } from "../../shared/workspace-scope.js";
 import { completedTaskFilter, openTaskFilter } from "./task.closure.js";

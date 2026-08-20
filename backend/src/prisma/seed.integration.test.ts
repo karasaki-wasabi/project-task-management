@@ -1,12 +1,3 @@
-/**
- * Manual seed invariants for task-status-model task 1.2 / velocity-dashboard.
- *
- * Destructive: calls the real seed path (TRUNCATE + reseed). Prefer running this
- * file alone or at the end of a suite that does not rely on leftover rows.
- *
- *   docker compose run --rm backend npx vitest run --no-file-parallelism \
- *     src/prisma/seed.integration.test.ts
- */
 import { afterAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { throughputService } from "../modules/throughput/throughput.service.js";
@@ -31,8 +22,8 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe("manual confirmation seed (task-status-model 1.2)", () => {
-  it("leaves exactly one completed and one cancelled stage for the seeded workspace", async () => {
+describe("手動確認用シード (task-status-model 1.2)", () => {
+  it("シードされたワークスペースに1つの completed と1つの cancelled の stage を残す", async () => {
     const { workspaceId } = await seedManualConfirmationData(prisma);
     expect(workspaceId).toBe(SEED_WORKSPACE_ID);
 
@@ -64,7 +55,7 @@ describe("manual confirmation seed (task-status-model 1.2)", () => {
     expect(doneTask.storyPoints).toBe(5);
   });
 
-  it("seeds a three-level parent-child tree for task detail confirmation", async () => {
+  it("タスク詳細確認用の3階層の親子ツリーをシードする", async () => {
     await seedManualConfirmationData(prisma);
 
     const [parent, child, sibling, grandchild] = await Promise.all([
@@ -90,7 +81,7 @@ describe("manual confirmation seed (task-status-model 1.2)", () => {
     expect(logDays.size).toBeGreaterThanOrEqual(2);
   });
 
-  it("seeds past-week completions so throughput summary is non-zero (velocity-dashboard)", async () => {
+  it("過去週の完了をシードし、スループットサマリーが非ゼロになるようにする (velocity-dashboard)", async () => {
     await seedManualConfirmationData(prisma);
 
     const velocityIds = [

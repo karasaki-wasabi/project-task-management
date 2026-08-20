@@ -56,7 +56,6 @@ function makeTask(overrides: Partial<Task> & { id: string }): Task {
   };
 }
 
-// A full Sun-Sat week: 2026-08-02 (Sun) .. 2026-08-08 (Sat).
 const WEEK: DateCell[] = [
   makeCell("2026-08-02", { dayOfWeek: 0 }),
   makeCell("2026-08-03", { dayOfWeek: 1 }),
@@ -67,10 +66,10 @@ const WEEK: DateCell[] = [
   makeCell("2026-08-08", { dayOfWeek: 6 }),
 ];
 
-describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", () => {
+describe("タスクマーカーの生成 (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", () => {
   const stages = [makeStage({ id: "s1", name: "設計" }), makeStage({ id: "s2", name: "実装" })];
 
-  it("groups tasks with a scheduledEndDate by local-calendar-day date key", () => {
+  it("scheduledEndDateが設定されたタスクをlocal-calendar-dayの日付キーでグループ化", () => {
     const tasks = [
       makeTask({ id: "t1", title: "Task 1", scheduledEndDate: "2026-08-05T00:00:00.000Z" }),
       makeTask({ id: "t2", title: "Task 2", scheduledEndDate: "2026-08-05T00:00:00.000Z" }),
@@ -84,7 +83,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-06")?.map((m) => m.taskId)).toEqual(["t3"]);
   });
 
-  it("excludes tasks without a scheduledEndDate", () => {
+  it("scheduledEndDateが未設定のタスクを除外", () => {
     const tasks = [
       makeTask({ id: "t1", scheduledEndDate: undefined }),
       makeTask({ id: "t2", scheduledEndDate: null }),
@@ -97,11 +96,11 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-05")?.map((marker) => marker.taskId)).toEqual(["t3"]);
   });
 
-  it("returns an empty map when given no tasks", () => {
+  it("タスクが存在しない場合、空のマップを返す", () => {
     expect(buildTaskMarkersByDate([], stages, "2026-08-01").size).toBe(0);
   });
 
-  it("resolves developmentStageId to the stage's name via the provided stages list", () => {
+  it("developmentStageIdをステージ名に変換", () => {
     const tasks = [
       makeTask({ id: "t1", developmentStageId: "s2", scheduledEndDate: "2026-08-05T00:00:00.000Z" }),
     ];
@@ -111,7 +110,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-05")?.[0]?.stage).toBe("実装");
   });
 
-  it("uses a null stage when developmentStageId is unset", () => {
+  it("developmentStageIdが未設定の場合、nullを返す", () => {
     const tasks = [
       makeTask({ id: "t1", developmentStageId: null, scheduledEndDate: "2026-08-05T00:00:00.000Z" }),
     ];
@@ -121,7 +120,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-05")?.[0]?.stage).toBeNull();
   });
 
-  it("flags isOverdue when scheduledEndDate is before today and the task is not closed (Requirement 8.4)", () => {
+  it("scheduledEndDateが本日以前かつタスクがクローズされていない場合、isOverdueはtrue (Requirement 8.4)", () => {
     const tasks = [
       makeTask({
         id: "t1",
@@ -136,7 +135,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-01")?.[0]?.isOverdue).toBe(true);
   });
 
-  it("does not flag isOverdue for completed-stage tasks even when past due and status is open (Requirements 8.4, 8.5)", () => {
+  it("completed-stageタスクが過期でstatusがopenの場合、isOverdueはfalse (Requirements 8.4, 8.5)", () => {
     const withKinds = [
       makeStage({ id: "s1", name: "設計", kind: "normal" }),
       makeStage({ id: "s-done", name: "完了", kind: "completed" }),
@@ -155,7 +154,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-01")?.[0]?.isOverdue).toBe(false);
   });
 
-  it("does not flag isOverdue for cancelled-stage tasks even when past due (Requirements 8.4, 8.5)", () => {
+  it("cancelled-stageタスクが過期の場合、isOverdueはfalse (Requirements 8.4, 8.5)", () => {
     const withKinds = [
       makeStage({ id: "s1", name: "設計", kind: "normal" }),
       makeStage({ id: "s-cancel", name: "中止", kind: "cancelled" }),
@@ -174,7 +173,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-01")?.[0]?.isOverdue).toBe(false);
   });
 
-  it("still flags isOverdue for past-due open tasks even when status is ready_for_handoff (Requirement 8.5)", () => {
+  it("過期のopenタスクがstatusがready_for_handoffの場合、isOverdueはtrue (Requirement 8.5)", () => {
     const tasks = [
       makeTask({
         id: "t1",
@@ -189,7 +188,7 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
     expect(result.get("2026-08-01")?.[0]?.isOverdue).toBe(true);
   });
 
-  it("does not flag isOverdue when scheduledEndDate is today or in the future", () => {
+  it("scheduledEndDateが本日または未来の場合、isOverdueはfalse", () => {
     const tasks = [
       makeTask({ id: "t1", status: "not_started", scheduledEndDate: "2026-08-05T00:00:00.000Z" }),
       makeTask({ id: "t2", status: "not_started", scheduledEndDate: "2026-08-06T00:00:00.000Z" }),
@@ -202,22 +201,22 @@ describe("buildTaskMarkersByDate (task 7.2, Requirement 2.1, 2.2, 2.3, 2.4)", ()
   });
 });
 
-describe("truncateDayMarkers (task 7.2, Requirement 2.5)", () => {
+describe("日付マーカーの切り捨て (task 7.2, Requirement 2.5)", () => {
   function makeMarker(taskId: string) {
     return { taskId, title: `Task ${taskId}`, stage: null, isOverdue: false };
   }
 
-  it("returns all markers with zero overflow when under maxVisible", () => {
+  it("maxVisible未満の場合、すべてのマーカーを表示", () => {
     const markers = [makeMarker("t1"), makeMarker("t2")];
     expect(truncateDayMarkers(markers, 3)).toEqual({ visible: markers, overflowCount: 0 });
   });
 
-  it("returns all markers with zero overflow when exactly at maxVisible", () => {
+  it("maxVisibleと一致する場合、すべてのマーカーを表示", () => {
     const markers = [makeMarker("t1"), makeMarker("t2"), makeMarker("t3")];
     expect(truncateDayMarkers(markers, 3)).toEqual({ visible: markers, overflowCount: 0 });
   });
 
-  it("reserves one row for the 他N chip when over the threshold (visible + chip <= maxVisible)", () => {
+  it("maxVisibleを超える場合、1行を予約 (visible + chip <= maxVisible)", () => {
     // budget 2 with 5 markers → 1 visible + "他4件", not 2 visible + "他3件"
     const markers = [makeMarker("t1"), makeMarker("t2"), makeMarker("t3"), makeMarker("t4"), makeMarker("t5")];
     const result = truncateDayMarkers(markers, 2);
@@ -225,43 +224,43 @@ describe("truncateDayMarkers (task 7.2, Requirement 2.5)", () => {
     expect(result.overflowCount).toBe(4);
   });
 
-  it("shows 6 tasks + 他2件 when budget is 7 and there are 8 tasks", () => {
+  it("予算が7でタスクが8件の場合、6件のタスク + 他2件を表示", () => {
     const markers = Array.from({ length: 8 }, (_, i) => makeMarker(`t${i + 1}`));
     const result = truncateDayMarkers(markers, 7);
     expect(result.visible).toHaveLength(6);
     expect(result.overflowCount).toBe(2);
   });
 
-  it("returns an empty visible list with zero overflow for an empty input", () => {
+  it("入力が空の場合、空の表示リストを返す", () => {
     expect(truncateDayMarkers([], 3)).toEqual({ visible: [], overflowCount: 0 });
   });
 
-  it("shows only the 他N chip when budget is 1 and there is overflow", () => {
+  it("他N件チップのみを表示", () => {
     const markers = [makeMarker("t1"), makeMarker("t2")];
     expect(truncateDayMarkers(markers, 1)).toEqual({ visible: [], overflowCount: 2 });
   });
 });
 
-describe("formatTaskOverflowLabel / formatCaseOverflowLabel", () => {
+describe("タスク・案件オーバーフローのラベルのフォーマット", () => {
   function makeMarker(taskId: string) {
     return { taskId, title: `Task ${taskId}`, stage: null, isOverdue: false };
   }
 
-  it("formats task overflow as 他N件 and caps at 他99+件", () => {
+  it("タスクオーバー: 他N件 とフォーマットし、99件を超える場合は 他99+件 とする", () => {
     expect(formatTaskOverflowLabel(1)).toBe("他1件");
     expect(formatTaskOverflowLabel(99)).toBe("他99件");
     expect(formatTaskOverflowLabel(100)).toBe("他99+件");
     expect(formatTaskOverflowLabel(1000)).toBe("他99+件");
   });
 
-  it("formats case overflow as 他N件 and caps at 他9+件", () => {
+  it("案件オーバー: 他N件 とフォーマットし、9件を超える場合は 他9+件 とする", () => {
     expect(formatCaseOverflowLabel(1)).toBe("他1件");
     expect(formatCaseOverflowLabel(9)).toBe("他9件");
     expect(formatCaseOverflowLabel(10)).toBe("他9+件");
     expect(formatCaseOverflowLabel(100)).toBe("他9+件");
   });
 
-  it("shows 他99+件 when a day has 100+ omitted tasks after truncation (Requirement 2.5)", () => {
+  it("日付マーカーの切り捨て後、100件を超える場合、他99+件 とする (Requirement 2.5)", () => {
     // budget 7 → 6 visible; 106 total → overflowCount 100 → capped label
     const markers = Array.from({ length: 106 }, (_, i) => makeMarker(`t${i + 1}`));
     const truncated = truncateDayMarkers(markers, 7);
@@ -270,7 +269,7 @@ describe("formatTaskOverflowLabel / formatCaseOverflowLabel", () => {
     expect(formatTaskOverflowLabel(truncated.overflowCount)).toBe("他99+件");
   });
 
-  it("shows 他9+件 when a week has 10+ omitted cases after lane assignment (Requirement 3.6)", () => {
+  it("週単位レーン割り当て後、10件を超える場合、他9+件 とする (Requirement 3.6)", () => {
     // maxLanes=3 with overflow → 2 bar lanes; 12 overlapping cases → 10 overflow
     const cases = Array.from({ length: 12 }, (_, i) =>
       makeCase({
@@ -286,8 +285,8 @@ describe("formatTaskOverflowLabel / formatCaseOverflowLabel", () => {
   });
 });
 
-describe("collectWeekCasePopupItems (task 7.6, Requirement 3.6)", () => {
-  it("lists lane-placed cases then overflow so the popup shows the whole week", () => {
+describe("案件ポップアップ (task 7.6, Requirement 3.6)", () => {
+  it("案件とオーバーフロー案件をリストアップし、ポップアップで週全体を表示", () => {
     const cases = [
       makeCase({ id: "lane-a", name: "Lane A", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
       makeCase({ id: "lane-b", name: "Lane B", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
@@ -295,7 +294,6 @@ describe("collectWeekCasePopupItems (task 7.6, Requirement 3.6)", () => {
       makeCase({ id: "over-d", name: "Over D", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
     ];
     const weekLanes = buildWeekCaseLanes(WEEK, cases, 3);
-    // 4 overlapping → 2 lanes + 2 overflow under the overflow-row reservation
     expect(weekLanes.lanes.length).toBe(2);
     expect(weekLanes.overflow.length).toBe(2);
 
@@ -309,30 +307,30 @@ describe("collectWeekCasePopupItems (task 7.6, Requirement 3.6)", () => {
   });
 });
 
-describe("shiftMonth (task 7.2, Requirement 4.1, 4.2, 4.3)", () => {
-  it("moves forward one month within the same year", () => {
+describe("月のシフト (task 7.2, Requirement 4.1, 4.2, 4.3)", () => {
+  it("1ヶ月進む", () => {
     expect(shiftMonth(2026, 8, 1)).toEqual({ year: 2026, month: 9 });
   });
 
-  it("moves backward one month within the same year", () => {
+  it("1ヶ月戻る", () => {
     expect(shiftMonth(2026, 8, -1)).toEqual({ year: 2026, month: 7 });
   });
 
-  it("rolls over from December to next January when moving forward", () => {
+  it("12月から1月になる", () => {
     expect(shiftMonth(2026, 12, 1)).toEqual({ year: 2027, month: 1 });
   });
 
-  it("rolls over from January to previous December when moving backward", () => {
+  it("1月から12月になる", () => {
     expect(shiftMonth(2026, 1, -1)).toEqual({ year: 2025, month: 12 });
   });
 
-  it("returns the same year/month when delta is zero", () => {
+  it("deltaが0の場合、同じ年月を返す", () => {
     expect(shiftMonth(2026, 8, 0)).toEqual({ year: 2026, month: 8 });
   });
 });
 
-describe("colorIndexForCase (task 7.2)", () => {
-  it("returns a value in the 0-5 range", () => {
+describe("案件色 (task 7.2)", () => {
+  it("0-5の範囲の値を返す", () => {
     for (const id of ["case-1", "case-2", "abc", "z", "", "a-very-long-case-id-string-1234567890"]) {
       const index = colorIndexForCase(id);
       expect(index).toBeGreaterThanOrEqual(0);
@@ -340,20 +338,20 @@ describe("colorIndexForCase (task 7.2)", () => {
     }
   });
 
-  it("returns the same value for the same caseId across multiple calls (stable)", () => {
+  it("同じcaseIdの場合、同じ値を返す (stable)", () => {
     const a = colorIndexForCase("case-abc-123");
     const b = colorIndexForCase("case-abc-123");
     expect(a).toBe(b);
   });
 
-  it("is deterministic across process-independent computation (not Math.random)", () => {
+  it("プロセス独立な計算で決定的な値を返す (not Math.random)", () => {
     const values = Array.from({ length: 5 }, () => colorIndexForCase("stable-id"));
     expect(new Set(values).size).toBe(1);
   });
 });
 
-describe("computeWeekRowBudget (task 7.2)", () => {
-  it("always sums bandRows + maxTasks to totalRows across lane counts and overflow states", () => {
+describe("週単位レーン予算 (task 7.2)", () => {
+  it("bandRows + maxTasksを合計してtotalRowsを計算", () => {
     for (let laneCount = 0; laneCount <= 3; laneCount += 1) {
       for (const hasOverflow of [true, false]) {
         const budget = computeWeekRowBudget(laneCount, hasOverflow, 7, 3);
@@ -362,40 +360,40 @@ describe("computeWeekRowBudget (task 7.2)", () => {
     }
   });
 
-  it("caps bandRows at maxLanes even when laneCount + overflow would exceed it", () => {
+  it("laneCount + overflowがmaxLanesを超える場合、bandRowsをmaxLanesに制限", () => {
     const budget = computeWeekRowBudget(3, true, 7, 3);
     expect(budget.bandRows).toBe(3);
     expect(budget.maxTasks).toBe(4);
   });
 
-  it("computes bandRows as laneCount without the overflow row when there is no overflow", () => {
+  it("オーバーフローがない場合、bandRowsをlaneCountに設定", () => {
     const budget = computeWeekRowBudget(2, false, 7, 3);
     expect(budget.bandRows).toBe(2);
     expect(budget.maxTasks).toBe(5);
   });
 
-  it("computes bandRows as laneCount + 1 for the overflow chip row when under maxLanes", () => {
+  it("maxLanes未満の場合、bandRowsをlaneCount + 1に設定", () => {
     const budget = computeWeekRowBudget(1, true, 7, 3);
     expect(budget.bandRows).toBe(2);
     expect(budget.maxTasks).toBe(5);
   });
 
-  it("returns bandRows 0 and maxTasks == totalRows when there are no lanes and no overflow", () => {
+  it("レーンがなくオーバーフローがない場合、bandRowsを0に設定", () => {
     const budget = computeWeekRowBudget(0, false, 7, 3);
     expect(budget.bandRows).toBe(0);
     expect(budget.maxTasks).toBe(7);
   });
 });
 
-describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
-  it("excludes a case with neither startDate nor endDate set", () => {
+describe("週単位レーン割り当て (task 7.2, Requirement 3.1-3.6)", () => {
+  it("startDateとendDateが未設定の案件を除外", () => {
     const cases = [makeCase({ id: "c1", startDate: null, endDate: null })];
     const result = buildWeekCaseLanes(WEEK, cases, 3);
     expect(result.lanes.flat()).toEqual([]);
     expect(result.overflow).toEqual([]);
   });
 
-  it("packs two non-overlapping cases into the same lane", () => {
+  it("2つの非重複案件を同じレーンに配置", () => {
     const cases = [
       makeCase({ id: "c1", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-03T00:00:00.000Z" }),
       makeCase({ id: "c2", startDate: "2026-08-05T00:00:00.000Z", endDate: "2026-08-06T00:00:00.000Z" }),
@@ -408,7 +406,7 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
     expect(result.overflow).toEqual([]);
   });
 
-  it("places overlapping cases into different lanes", () => {
+  it("重複案件を異なるレーンに配置", () => {
     const cases = [
       makeCase({ id: "c1", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-05T00:00:00.000Z" }),
       makeCase({ id: "c2", startDate: "2026-08-03T00:00:00.000Z", endDate: "2026-08-06T00:00:00.000Z" }),
@@ -416,19 +414,13 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
 
     const result = buildWeekCaseLanes(WEEK, cases, 3);
 
-    // c1 has the longer duration (4 days vs 3 days) so it sorts first and
-    // claims lane 0; c2 overlaps it and must go to lane 1.
     expect(result.lanes.length).toBe(2);
     expect(result.lanes[0]?.map((item) => item.caseId)).toEqual(["c1"]);
     expect(result.lanes[1]?.map((item) => item.caseId)).toEqual(["c2"]);
     expect(result.overflow).toEqual([]);
   });
 
-  it("reserves one band row for the 他N chip when cases exceed maxLanes (2 bars + overflow, not 3 overlapping)", () => {
-    // 4 mutually-overlapping cases with maxLanes=3: the "他N件" chip needs
-    // its own band row, so bar lanes shrink to maxLanes-1=2.
-    // open-ended wins a lane over closed cases; closed-long is next; the
-    // two shorter closed cases overflow.
+  it("案件がmaxLanesを超える場合、1行を予約 (2 bars + overflow, not 3 overlapping)", () => {
     const cases = [
       makeCase({ id: "closed-short", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-03T00:00:00.000Z" }),
       makeCase({ id: "closed-long", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
@@ -444,7 +436,7 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
     expect(result.overflow.map((item) => item.caseId)).toEqual(["closed-mid", "closed-short"]);
   });
 
-  it("keeps all 3 bar lanes when exactly maxLanes overlapping cases fit with no overflow", () => {
+  it("maxLanesと一致する重複案件がなくオーバーフローがない場合、すべてのレーンを保持", () => {
     const cases = [
       makeCase({ id: "c1", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
       makeCase({ id: "c2", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
@@ -457,7 +449,7 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
     expect(result.overflow).toEqual([]);
   });
 
-  it("flags openStart/openEnd true when the case's date is literally unset on that side", () => {
+  it("startDateまたはendDateが未設定の場合、openStart/openEndをtrueに設定", () => {
     const cases = [makeCase({ id: "c1", startDate: "2026-08-05T00:00:00.000Z", endDate: null })];
 
     const result = buildWeekCaseLanes(WEEK, cases, 3);
@@ -470,7 +462,7 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
     expect(item?.endDayIndex).toBe(6); // clipped to the week's last column
   });
 
-  it("flags openStart true and clips startDayIndex to 0 when the range extends before the week boundary", () => {
+  it("startDateが週の境界より前の場合、openStartをtrueに設定し、startDayIndexを0にクリップ", () => {
     const cases = [
       makeCase({ id: "c1", startDate: "2026-07-20T00:00:00.000Z", endDate: "2026-08-04T00:00:00.000Z" }),
     ];
@@ -484,7 +476,7 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
     expect(item?.endDayIndex).toBe(2); // 2026-08-04 is index 2 in WEEK
   });
 
-  it("flags openEnd true and clips endDayIndex to 6 when the range extends past the week boundary", () => {
+  it("endDateが週の境界より後の場合、openEndをtrueに設定し、endDayIndexを6にクリップ", () => {
     const cases = [
       makeCase({ id: "c1", startDate: "2026-08-06T00:00:00.000Z", endDate: "2026-09-20T00:00:00.000Z" }),
     ];
@@ -498,7 +490,7 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
     expect(item?.endDayIndex).toBe(6);
   });
 
-  it("excludes a case entirely from this week when its range does not overlap the week at all", () => {
+  it("startDateとendDateが週と重複しない場合、案件を完全に除外", () => {
     const cases = [
       makeCase({ id: "c1", startDate: "2026-09-01T00:00:00.000Z", endDate: "2026-09-10T00:00:00.000Z" }),
     ];
@@ -509,7 +501,7 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
     expect(result.overflow).toEqual([]);
   });
 
-  it("carries isCompleted through onto the lane item", () => {
+  it("isCompletedをレーンアイテムに反映", () => {
     const cases = [
       makeCase({ id: "c1", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-03T00:00:00.000Z", isCompleted: true }),
     ];
@@ -519,7 +511,7 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
     expect(result.lanes.flat()[0]?.isCompleted).toBe(true);
   });
 
-  it("assigns colorIndex matching colorIndexForCase for the same caseId", () => {
+  it("同じcaseIdの場合、colorIndexForCaseと一致するcolorIndexを割り当て", () => {
     const cases = [
       makeCase({ id: "c1", startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-03T00:00:00.000Z" }),
     ];
@@ -529,7 +521,7 @@ describe("buildWeekCaseLanes (task 7.2, Requirement 3.1-3.6)", () => {
     expect(result.lanes.flat()[0]?.colorIndex).toBe(colorIndexForCase("c1"));
   });
 
-  it("never exceeds maxLanes lanes, and shrinks to maxLanes-1 when overflow is present", () => {
+  it("maxLanesを超えないように調整し、オーバーフローがある場合はmaxLanes-1に縮小", () => {
     const cases = Array.from({ length: 6 }, (_, i) =>
       makeCase({ id: `c${i}`, startDate: "2026-08-02T00:00:00.000Z", endDate: "2026-08-08T00:00:00.000Z" }),
     );

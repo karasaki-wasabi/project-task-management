@@ -1,8 +1,3 @@
-// RED: withSoftDelete() does not exist yet (task 1.4, Requirements 9.1-9.5).
-// This is an integration test against a real MySQL instance because the
-// behavior under test is a Prisma Client Extension, which only takes effect
-// through actual query execution.
-// Run inside the backend container: `docker compose run --rm -T backend npx vitest run soft-delete`
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
@@ -17,7 +12,7 @@ afterAll(async () => {
 });
 
 describe("withSoftDelete (task 1.4)", () => {
-  it("bumps updated_at on update()", async () => {
+  it("update() で updated_at を更新する", async () => {
     const user = await db.user.create({ data: createUserData(`u-${randomUUID()}`) });
     await new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -28,7 +23,7 @@ describe("withSoftDelete (task 1.4)", () => {
     await rawPrisma.$executeRaw`DELETE FROM users WHERE id = ${user.id}`;
   });
 
-  it("bumps updated_at on updateMany(), which Prisma's own @updatedAt does not cover", async () => {
+  it("updateMany() で updated_at を更新する。Prisma の @updatedAt ではカバーされない", async () => {
     const user = await db.user.create({ data: createUserData(`u-${randomUUID()}`) });
     await new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -40,7 +35,7 @@ describe("withSoftDelete (task 1.4)", () => {
     await rawPrisma.$executeRaw`DELETE FROM users WHERE id = ${user.id}`;
   });
 
-  it("delete() issues a soft delete (UPDATE deleted_at) instead of a physical DELETE", async () => {
+  it("delete() で論理削除 (UPDATE deleted_at) を実行する。物理削除は行われない", async () => {
     const user = await db.user.create({ data: createUserData(`u-${randomUUID()}`) });
 
     const result = await db.user.delete({ where: { id: user.id } });
@@ -54,7 +49,7 @@ describe("withSoftDelete (task 1.4)", () => {
     await rawPrisma.$executeRaw`DELETE FROM users WHERE id = ${user.id}`;
   });
 
-  it("deleteMany() issues soft deletes for every matching row", async () => {
+  it("すべてのマッチング行に対して deleteMany() で論理削除を行う。", async () => {
     const marker = `batch-${randomUUID()}`;
     const a = await db.user.create({ data: createUserData(marker) });
     const b = await db.user.create({ data: createUserData(marker) });
@@ -69,7 +64,7 @@ describe("withSoftDelete (task 1.4)", () => {
     await rawPrisma.$executeRaw`DELETE FROM users WHERE id IN (${a.id}, ${b.id})`;
   });
 
-  it("excludes soft-deleted rows from findMany/findFirst/count by default", async () => {
+  it("findMany/findFirst/count で論理削除された行を除外する", async () => {
     const marker = `find-${randomUUID()}`;
     const kept = await db.user.create({ data: createUserData(marker) });
     const removed = await db.user.create({ data: createUserData(marker) });
@@ -86,7 +81,7 @@ describe("withSoftDelete (task 1.4)", () => {
     await rawPrisma.$executeRaw`DELETE FROM users WHERE id IN (${kept.id}, ${removed.id})`;
   });
 
-  it("excludes soft-deleted rows from findUnique/findUniqueOrThrow by default", async () => {
+  it("findUnique/findUniqueOrThrow で論理削除された行を除外する", async () => {
     const user = await db.user.create({ data: createUserData(`unique-${randomUUID()}`) });
     await db.user.delete({ where: { id: user.id } });
 
@@ -98,7 +93,7 @@ describe("withSoftDelete (task 1.4)", () => {
     await rawPrisma.$executeRaw`DELETE FROM users WHERE id = ${user.id}`;
   });
 
-  it("still lets callers explicitly query soft-deleted rows when they ask for deletedAt: { not: null }", async () => {
+  it("deletedAt: { not: null } を指定すると論理削除された行を明示的にクエリできる", async () => {
     const user = await db.user.create({ data: createUserData(`explicit-${randomUUID()}`) });
     await db.user.delete({ where: { id: user.id } });
 

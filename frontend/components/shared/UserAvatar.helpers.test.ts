@@ -1,5 +1,3 @@
-// user-avatar 1.1 / 1.2 / 1.3 — FNV-1a / mulberry32 / palette / symmetric grid
-// (Requirements 1.1, 1.2, 1.3, 1.4; design.md UserAvatar.helpers.ts Service Interface).
 import { describe, expect, it } from "vitest";
 import {
   createMulberry32,
@@ -20,26 +18,26 @@ function parseHsl(css: string): { h: number; s: number; l: number } {
 }
 
 describe("fnv1aHash", () => {
-  it("returns the FNV-1a 32-bit test vectors", () => {
+  it("FNV-1a 32 ビットのテストベクトルを返す", () => {
     expect(fnv1aHash("")).toBe(0x811c9dc5);
     expect(fnv1aHash("a")).toBe(0xe40c292c);
     expect(fnv1aHash("foobar")).toBe(0xbf9cf968);
   });
 
-  it("is deterministic for the same string, including empty and non-ASCII", () => {
+  it("同じ文字列では決定的であり、空文字列と非 ASCII 文字列を含む", () => {
     expect(fnv1aHash("user-abc")).toBe(fnv1aHash("user-abc"));
     expect(fnv1aHash("")).toBe(fnv1aHash(""));
     expect(fnv1aHash("田中")).toBe(fnv1aHash("田中"));
   });
 
-  it("hashes UTF-8 bytes so non-ASCII strings differ from ASCII lookalikes", () => {
+  it("UTF-8 バイトをハッシュするため、非 ASCII 文字列は ASCII のようなものと異なる", () => {
     expect(fnv1aHash("田中")).not.toBe(fnv1aHash("a"));
     expect(fnv1aHash("田中")).not.toBe(fnv1aHash(""));
   });
 });
 
 describe("createMulberry32", () => {
-  it("returns values in [0, 1) and is deterministic for the same seed", () => {
+  it("[0, 1) の値を返し、同じシードでは決定的である", () => {
     const a = createMulberry32(0x811c9dc5);
     const b = createMulberry32(0x811c9dc5);
     const sequenceA = [a(), a(), a(), a()];
@@ -52,14 +50,14 @@ describe("createMulberry32", () => {
     expect(new Set(sequenceA).size).toBe(4);
   });
 
-  it("diverges when seeded from different hashes", () => {
+  it("異なるハッシュからシードされた場合、異なる値を返す", () => {
     const a = createMulberry32(fnv1aHash("user-a"));
     const b = createMulberry32(fnv1aHash("user-b"));
     expect(a()).not.toBe(b());
   });
 });
 
-describe("userAvatarPaletteAt (N=12 mechanical palette)", () => {
+describe("userAvatarPaletteAt (N=12 機械的なパレット)", () => {
   it("uses 30-degree hue steps and CSS hsl() strings for main/alt/background", () => {
     for (let index = 0; index < 12; index += 1) {
       const palette = userAvatarPaletteAt(index);
@@ -77,7 +75,7 @@ describe("userAvatarPaletteAt (N=12 mechanical palette)", () => {
     }
   });
 
-  it("assigns one fixed S/L pair per hue band, not per-hue tuning", () => {
+  it("S/L ペアを hue ごとに割り当て", () => {
     const sl = (index: number) => {
       const { s, l } = parseHsl(userAvatarPaletteAt(index).mainColor);
       return `${s}/${l}`;
@@ -95,7 +93,7 @@ describe("userAvatarPaletteAt (N=12 mechanical palette)", () => {
 });
 
 describe("generateUserAvatarPalette", () => {
-  it("returns the same index and hsl() colors for the same userId", () => {
+  it("同じuserId では同じインデックスとhsl() 色を返す", () => {
     const first = generateUserAvatarPalette("user-abc");
     const second = generateUserAvatarPalette("user-abc");
     expect(first).toEqual(second);
@@ -107,21 +105,21 @@ describe("generateUserAvatarPalette", () => {
     expect(first).toEqual(userAvatarPaletteAt(first.index));
   });
 
-  it("selects the palette index from the first mulberry32 draw of the FNV-1a seed", () => {
+  it("FNV-1a シードの最初のmulberry32 のドローからパレットインデックスを選択する", () => {
     const userId = "user-abc";
     const rng = createMulberry32(fnv1aHash(userId));
     const expectedIndex = Math.floor(rng() * 12);
     expect(generateUserAvatarPalette(userId).index).toBe(expectedIndex);
   });
 
-  it("accepts an empty userId without throwing and still returns a palette", () => {
+  it("空のuserId を受け入れ、パレットを返す", () => {
     const palette = generateUserAvatarPalette("");
     expect(palette.index).toBeGreaterThanOrEqual(0);
     expect(palette.index).toBeLessThan(12);
     expect(palette.mainColor).toMatch(HSL_RE);
   });
 
-  it("spreads distinct userIds across the 12 hues with high probability", () => {
+  it("異なるuserId を12 色に分散し、高い確率で異なる色を使用する", () => {
     const indices = new Set<number>();
     for (let i = 0; i < 200; i += 1) {
       indices.add(generateUserAvatarPalette(`user-${i}`).index);
@@ -169,7 +167,7 @@ function paintedIndependentCount(cells: UserAvatarCell[], axis: UserAvatarAxis):
 }
 
 describe("generateUserAvatarPattern", () => {
-  it("returns the same grid, colors, and axis for the same userId", () => {
+  it("同じ userId では同じグリッド、色、軸を返す", () => {
     for (const userId of ["user-abc", "user-0", "", "田中"]) {
       const first = generateUserAvatarPattern(userId);
       const second = generateUserAvatarPattern(userId);
@@ -186,7 +184,7 @@ describe("generateUserAvatarPattern", () => {
     }
   });
 
-  it("lists only painted cells with main or alt tones and coords in 0..4", () => {
+  it("main または alt トーンのあるセルのみをリストし、座標が 0～4 である", () => {
     const pattern = generateUserAvatarPattern("user-abc");
     const seen = new Set<string>();
     for (const cell of pattern.cells) {
@@ -201,7 +199,7 @@ describe("generateUserAvatarPattern", () => {
     }
   });
 
-  it("uses the same hsl() colors as generateUserAvatarPalette for the same userId", () => {
+  it("同じ userId では同じ hsl() 色を generateUserAvatarPalette と同じに使用する", () => {
     const userId = "user-abc";
     const palette = generateUserAvatarPalette(userId);
     const pattern = generateUserAvatarPattern(userId);
@@ -210,7 +208,7 @@ describe("generateUserAvatarPattern", () => {
     expect(pattern.backgroundColor).toBe(palette.backgroundColor);
   });
 
-  it("selects the axis from the second mulberry32 draw after the palette index", () => {
+  it("パレットインデックスの後の2番目の mulberry32 のドローから軸を選択する", () => {
     const userId = "user-abc";
     const rng = createMulberry32(fnv1aHash(userId));
     rng();
@@ -218,7 +216,7 @@ describe("generateUserAvatarPattern", () => {
     expect(generateUserAvatarPattern(userId).axis).toBe(expectedAxis);
   });
 
-  it("mirrors painted tones across the chosen axis, including the point-symmetry center", () => {
+  it("選択された軸に沿って描画されたトーンを鏡像化し、点対称の中心を含む", () => {
     const userIds = ["user-abc", "user-0", "user-1", "user-2", "user-3", ""];
     for (const userId of userIds) {
       const pattern = generateUserAvatarPattern(userId);
@@ -233,7 +231,7 @@ describe("generateUserAvatarPattern", () => {
     }
   });
 
-  it("keeps independent-region fill count within 34%..74% for typical userIds", () => {
+  it("userId では独立領域の塗りカウントを 34%～74% の範囲内に保つ", () => {
     for (let i = 0; i < 50; i += 1) {
       const pattern = generateUserAvatarPattern(`user-${i}`);
       const regionSize = independentRegionSize(pattern.axis);
@@ -243,14 +241,14 @@ describe("generateUserAvatarPattern", () => {
     }
   });
 
-  it("accepts an empty userId without throwing and still returns a pattern", () => {
+  it("空の userId を受け入れ、パターンを返す", () => {
     const pattern = generateUserAvatarPattern("");
     expect(pattern.gridSize).toBe(5);
     expect(AXES).toContain(pattern.axis);
     expect(pattern.mainColor).toMatch(HSL_RE);
   });
 
-  it("produces a different pattern when a display-name-like string is passed as userId", () => {
+  it("表示名のような文字列を userId として渡した場合、異なるパターンを生成する", () => {
     expect(generateUserAvatarPattern.length).toBe(1);
     const userId = "user-abc";
     const displayName = "田中 太郎";
@@ -265,7 +263,7 @@ describe("generateUserAvatarPattern", () => {
     expect(withIgnoredName).toEqual(byUserId);
   });
 
-  it("selects leftRight, topBottom, and point for some userIds", () => {
+  it("leftRight, topBottom, およびpoint をいくつかの userId に選択する", () => {
     const found = new Map<UserAvatarAxis, string>();
     for (let i = 0; i < 500 && found.size < AXES.length; i += 1) {
       const userId = `user-${i}`;
@@ -275,7 +273,7 @@ describe("generateUserAvatarPattern", () => {
     expect([...found.keys()].sort()).toEqual([...AXES].sort());
   });
 
-  it("chooses the point-symmetry center independently and pairs cells at 180 degrees", () => {
+  it("点対称の中心を独立して選択し、180 度のセルをペアにする", () => {
     const pointPatterns: UserAvatarPattern[] = [];
     for (let i = 0; i < 400 && pointPatterns.length < 40; i += 1) {
       const pattern = generateUserAvatarPattern(`point-probe-${i}`);
@@ -307,7 +305,7 @@ describe("generateUserAvatarPattern", () => {
     expect(blankCenter).toBe(true);
   });
 
-  it("almost never collides on palette index + axis + cells across 1000 dummy userIds", () => {
+  it("1000 個のダミーuserId では衝突しない", () => {
     const keys = new Set<string>();
     for (let i = 0; i < 1000; i += 1) {
       const userId = `dummy-user-${i}`;
@@ -361,8 +359,8 @@ function fillCountWouldBeInRange(count: number, regionSize: number): boolean {
   return count >= MIN_FILL_RATIO * regionSize && count <= MAX_FILL_RATIO * regionSize;
 }
 
-describe("generateUserAvatarPatternFromRng (fill-guard seam)", () => {
-  it("rerolls an out-of-range fill until the independent region is within 34%..74%", () => {
+describe("generateUserAvatarPatternFromRng (塗りガードシーム)", () => {
+  it("範囲外の塗りを再ロールし、独立領域が34%..74% の範囲内になるまで続ける", () => {
     const cases: Array<{ axis: UserAvatarAxis; outOfRange: number; inRange: number }> = [
       { axis: "leftRight", outOfRange: 0, inRange: 8 },
       { axis: "topBottom", outOfRange: 15, inRange: 6 },
@@ -381,7 +379,7 @@ describe("generateUserAvatarPatternFromRng (fill-guard seam)", () => {
     }
   });
 
-  it("keeps the 12th fill when every attempt is out of range", () => {
+  it("すべての試行が範囲外の場合、12 番目の塗りを保持する", () => {
     const cases: Array<{ axis: UserAvatarAxis; early: number; last: number }> = [
       { axis: "leftRight", early: 0, last: 15 },
       { axis: "topBottom", early: 15, last: 0 },
@@ -403,10 +401,8 @@ describe("generateUserAvatarPatternFromRng (fill-guard seam)", () => {
     }
   });
 
-  it("paints the point-symmetry center independently without copying another cell", () => {
+  it("点対称の中心を独立して塗り、他のセルをコピーしない", () => {
     const regionSize = independentRegionSize("point");
-    // Center (2,2) is the last independent cell in scan order. Blank every
-    // other independent cell so a copied center would stay blank.
     const centerOnlyDraws = Array.from({ length: regionSize }, (_, i) =>
       i === regionSize - 1 ? MAIN_ROLL : BLANK_ROLL,
     );

@@ -1,5 +1,3 @@
-// Status badge vocabulary and tones (task-status-model 4.1, design.md
-// StatusBadge.vue: 未着手／作業中／引継待ち／保留; tone handoff; no success).
 import type { TaskStatus } from "../../composables/useApiClient";
 
 export type StatusBadgeTone = "neutral" | "info" | "handoff" | "warning";

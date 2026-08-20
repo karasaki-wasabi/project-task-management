@@ -1,7 +1,3 @@
-// RED: workspaceService does not exist yet (task 3.1, design.md
-// "Backend/workspaces" WorkspaceService; Requirements 1.1, 1.2, 5.1, 5.2,
-// 6.1, 6.2, 6.3, 6.4, 6.5, 7.1, 7.2, 7.3). Integration test against real
-// MySQL via shared/db.ts.
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -18,8 +14,6 @@ import { workspaceService } from "./workspace.service.js";
 
 async function hardDelete(table: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  // workspaceService.create provisions terminal development_stages (1.2/1.3);
-  // clear them before removing the workspace row (FK).
   if (table === "workspaces") {
     await db.$executeRawUnsafe(
       `DELETE FROM development_stages WHERE workspace_id IN (${ids.map(() => "?").join(",")})`,
@@ -66,7 +60,7 @@ afterAll(async () => {
 });
 
 describe("workspaceService.create (task 3.1)", () => {
-  it("creates a workspace and registers the creator as a member in the same TX (Requirement 1.1, 1.2)", async () => {
+  it("workspaceService.create で workspace を作成し、creator をメンバーとして同じ TX で登録 (Requirement 1.1, 1.2)", async () => {
     const user = await db.user.create({ data: createUserData(`ws-svc-create-${randomUUID()}`) });
     const name = `  svc-ws-${randomUUID()}  `;
 
@@ -97,7 +91,7 @@ describe("workspaceService.create (task 3.1)", () => {
     await hardDelete("users", [user.id]);
   });
 
-  it("rejects a blank name (Requirement 6.2 pattern for create)", async () => {
+  it("workspaceService.create で blank name を拒否 (Requirement 6.2 pattern for create)", async () => {
     const user = await db.user.create({ data: createUserData(`ws-svc-blank-${randomUUID()}`) });
 
     await expect(
@@ -107,7 +101,7 @@ describe("workspaceService.create (task 3.1)", () => {
     await hardDelete("users", [user.id]);
   });
 
-  it("logs workspace.created with requestId and entityId", async () => {
+  it("workspaceService.create で workspace.created をログし、requestId と entityId を含む", async () => {
     const user = await db.user.create({ data: createUserData(`ws-svc-log-c-${randomUUID()}`) });
     const requestId = `req-ws-create-${randomUUID()}`;
 
@@ -131,7 +125,7 @@ describe("workspaceService.create (task 3.1)", () => {
 });
 
 describe("workspaceService.update (task 3.1)", () => {
-  it("allows any member to update name and color (Requirement 5.1, 5.2, 6.1, 6.3)", async () => {
+  it("workspaceService.update で any member が name と color を更新できる (Requirement 5.1, 5.2, 6.1, 6.3)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-upd-c-${randomUUID()}`) });
     const member = await db.user.create({ data: createUserData(`ws-svc-upd-m-${randomUUID()}`) });
     const workspace = await workspaceService.create({
@@ -158,7 +152,7 @@ describe("workspaceService.update (task 3.1)", () => {
     await hardDelete("users", [creator.id, member.id]);
   });
 
-  it("rejects a blank name (Requirement 6.2)", async () => {
+  it("workspaceService.update で blank name を拒否 (Requirement 6.2)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-upd-blank-${randomUUID()}`) });
     const workspace = await workspaceService.create({
       name: `upd-blank-${randomUUID()}`,
@@ -178,7 +172,7 @@ describe("workspaceService.update (task 3.1)", () => {
     await hardDelete("users", [creator.id]);
   });
 
-  it("rejects a color outside WORKSPACE_COLORS (Requirement 6.4)", async () => {
+  it("workspaceService.update で WORKSPACE_COLORS 外の color を拒否 (Requirement 6.4)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-upd-color-${randomUUID()}`) });
     const workspace = await workspaceService.create({
       name: `upd-color-${randomUUID()}`,
@@ -202,7 +196,7 @@ describe("workspaceService.update (task 3.1)", () => {
     await hardDelete("users", [creator.id]);
   });
 
-  it("rejects a non-member setting change with 403 (Requirement 6.5)", async () => {
+  it("workspaceService.update で non-member の設定変更を拒否し、403 エラーを返す (Requirement 6.5)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-upd-forb-${randomUUID()}`) });
     const outsider = await db.user.create({ data: createUserData(`ws-svc-upd-out-${randomUUID()}`) });
     const workspace = await workspaceService.create({
@@ -223,7 +217,7 @@ describe("workspaceService.update (task 3.1)", () => {
     await hardDelete("users", [creator.id, outsider.id]);
   });
 
-  it("returns 404 when the workspace does not exist", async () => {
+  it("workspaceService.update で workspace が存在しない場合、404 エラーを返す", async () => {
     const user = await db.user.create({ data: createUserData(`ws-svc-upd-404-${randomUUID()}`) });
 
     await expect(
@@ -233,7 +227,7 @@ describe("workspaceService.update (task 3.1)", () => {
     await hardDelete("users", [user.id]);
   });
 
-  it("logs workspace.updated with requestId and entityId", async () => {
+  it("workspaceService.update で workspace.updated をログし、requestId と entityId を含む", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-log-u-${randomUUID()}`) });
     const workspace = await workspaceService.create({
       name: `log-upd-${randomUUID()}`,
@@ -258,7 +252,7 @@ describe("workspaceService.update (task 3.1)", () => {
 });
 
 describe("workspaceService.delete (task 3.1)", () => {
-  it("allows the creator to delete the workspace and its memberships (Requirement 7.1)", async () => {
+  it("workspaceService.delete で creator が workspace とそのメンバーシップを削除できる (Requirement 7.1)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-del-c-${randomUUID()}`) });
     const teammate = await db.user.create({ data: createUserData(`ws-svc-del-m-${randomUUID()}`) });
     const workspace = await workspaceService.create({
@@ -284,7 +278,7 @@ describe("workspaceService.delete (task 3.1)", () => {
     await hardDelete("users", [creator.id, teammate.id]);
   });
 
-  it("rejects a non-creator member with 403 (Requirement 7.2)", async () => {
+  it("workspaceService.delete で non-creator member を拒否し、403 エラーを返す (Requirement 7.2)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-del-nc-${randomUUID()}`) });
     const member = await db.user.create({ data: createUserData(`ws-svc-del-nm-${randomUUID()}`) });
     const workspace = await workspaceService.create({
@@ -308,7 +302,7 @@ describe("workspaceService.delete (task 3.1)", () => {
     await hardDelete("users", [creator.id, member.id]);
   });
 
-  it("rejects a non-member with 404 (Requirement 7.3)", async () => {
+  it("workspaceService.delete で non-member を拒否し、404 エラーを返す (Requirement 7.3)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-del-404-${randomUUID()}`) });
     const outsider = await db.user.create({ data: createUserData(`ws-svc-del-out-${randomUUID()}`) });
     const workspace = await workspaceService.create({
@@ -329,7 +323,7 @@ describe("workspaceService.delete (task 3.1)", () => {
     await hardDelete("users", [creator.id, outsider.id]);
   });
 
-  it("rejects a missing workspace with 404", async () => {
+  it("workspaceService.delete で missing workspace を拒否し、404 エラーを返す", async () => {
     const user = await db.user.create({ data: createUserData(`ws-svc-del-miss-${randomUUID()}`) });
 
     await expect(workspaceService.delete(randomUUID(), user.id)).rejects.toMatchObject({
@@ -339,7 +333,7 @@ describe("workspaceService.delete (task 3.1)", () => {
     await hardDelete("users", [user.id]);
   });
 
-  it("logs workspace.deleted with requestId and entityId", async () => {
+  it("workspaceService.delete で workspace.deleted をログし、requestId と entityId を含む", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-log-d-${randomUUID()}`) });
     const workspace = await workspaceService.create({
       name: `log-del-${randomUUID()}`,
@@ -366,7 +360,7 @@ describe("workspaceService.delete (task 3.1)", () => {
 });
 
 describe("workspaceService.list (task 3.1)", () => {
-  it("returns only workspaces the user belongs to", async () => {
+  it("workspaceService.list で user が所属する workspace のみを返す", async () => {
     const owner = await db.user.create({ data: createUserData(`ws-svc-list-o-${randomUUID()}`) });
     const outsider = await db.user.create({ data: createUserData(`ws-svc-list-x-${randomUUID()}`) });
     const mine = await workspaceService.create({
@@ -395,7 +389,7 @@ describe("workspaceService.list (task 3.1)", () => {
 });
 
 describe("workspaceService.isMember (task 3.2)", () => {
-  it("returns true for members and false for non-members", async () => {
+  it("workspaceService.isMember で members に対して true、non-members に対して false を返す", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-im-c-${randomUUID()}`) });
     const outsider = await db.user.create({ data: createUserData(`ws-svc-im-x-${randomUUID()}`) });
     const workspace = await workspaceService.create({
@@ -417,7 +411,7 @@ describe("workspaceService.isMember (task 3.2)", () => {
 });
 
 describe("workspaceService.listMembers (task 3.2)", () => {
-  it("returns all members for a requesting member (Requirement 3.1)", async () => {
+  it("workspaceService.listMembers で requesting member のすべてのメンバーを返す (Requirement 3.1)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-lm-c-${randomUUID()}`) });
     const teammate = await db.user.create({ data: createUserData(`ws-svc-lm-m-${randomUUID()}`) });
     const workspace = await workspaceService.create({
@@ -444,7 +438,7 @@ describe("workspaceService.listMembers (task 3.2)", () => {
     await hardDelete("users", [creator.id, teammate.id]);
   });
 
-  it("rejects a non-member with 403 (Requirement 3.2)", async () => {
+  it("workspaceService.listMembers で non-member を拒否し、403 エラーを返す (Requirement 3.2)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-lm-forb-${randomUUID()}`) });
     const outsider = await db.user.create({ data: createUserData(`ws-svc-lm-out-${randomUUID()}`) });
     const workspace = await workspaceService.create({
@@ -465,7 +459,7 @@ describe("workspaceService.listMembers (task 3.2)", () => {
     await hardDelete("users", [creator.id, outsider.id]);
   });
 
-  it("returns 404 when the workspace does not exist", async () => {
+  it("workspaceService.listMembers で workspace が存在しない場合、404 エラーを返す", async () => {
     const user = await db.user.create({ data: createUserData(`ws-svc-lm-404-${randomUUID()}`) });
 
     await expect(workspaceService.listMembers(randomUUID(), user.id)).rejects.toMatchObject({
@@ -477,7 +471,7 @@ describe("workspaceService.listMembers (task 3.2)", () => {
 });
 
 describe("workspaceService.searchAddableUsers (task 3.2)", () => {
-  it("excludes existing members from search results (Requirement 4.2)", async () => {
+  it("workspaceService.searchAddableUsers で existing members を除外し、search results を返す (Requirement 4.2)", async () => {
     const marker = randomUUID().slice(0, 8);
     const creator = await db.user.create({
       data: createUserData(`ws-svc-search-c-${marker}`),
@@ -524,7 +518,7 @@ describe("workspaceService.searchAddableUsers (task 3.2)", () => {
     await hardDelete("users", [creator.id, member.id, candidate.id]);
   });
 
-  it("returns an empty array for empty or whitespace-only query", async () => {
+  it("workspaceService.searchAddableUsers で empty または whitespace-only query の場合、空配列を返す", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-search-empty-${randomUUID()}`) });
     const workspace = await workspaceService.create({
       name: `search-empty-${randomUUID()}`,
@@ -543,7 +537,7 @@ describe("workspaceService.searchAddableUsers (task 3.2)", () => {
     await hardDelete("users", [creator.id]);
   });
 
-  it("rejects a non-member search with 403 (Requirement 4.5)", async () => {
+  it("workspaceService.searchAddableUsers で non-member の検索を拒否し、403 エラーを返す (Requirement 4.5)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-search-forb-${randomUUID()}`) });
     const outsider = await db.user.create({ data: createUserData(`ws-svc-search-out-${randomUUID()}`) });
     const workspace = await workspaceService.create({
@@ -566,7 +560,7 @@ describe("workspaceService.searchAddableUsers (task 3.2)", () => {
 });
 
 describe("workspaceService.addMember (task 3.2)", () => {
-  it("adds a user as a member (Requirement 4.3, 4.4)", async () => {
+  it("workspaceService.addMember で user をメンバーとして追加 (Requirement 4.3, 4.4)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-add-c-${randomUUID()}`) });
     const target = await db.user.create({ data: createUserData(`ws-svc-add-t-${randomUUID()}`) });
     const workspace = await workspaceService.create({
@@ -592,7 +586,7 @@ describe("workspaceService.addMember (task 3.2)", () => {
     await hardDelete("users", [creator.id, target.id]);
   });
 
-  it("rejects duplicate membership with 400", async () => {
+  it("workspaceService.addMember で duplicate membership を拒否し、400 エラーを返す", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-add-dup-${randomUUID()}`) });
     const target = await db.user.create({ data: createUserData(`ws-svc-add-dup-t-${randomUUID()}`) });
     const workspace = await workspaceService.create({
@@ -614,7 +608,7 @@ describe("workspaceService.addMember (task 3.2)", () => {
     await hardDelete("users", [creator.id, target.id]);
   });
 
-  it("rejects a non-member add with 403 (Requirement 4.5)", async () => {
+  it("workspaceService.addMember で non-member の追加を拒否し、403 エラーを返す (Requirement 4.5)", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-add-forb-${randomUUID()}`) });
     const outsider = await db.user.create({ data: createUserData(`ws-svc-add-out-${randomUUID()}`) });
     const target = await db.user.create({ data: createUserData(`ws-svc-add-tgt-${randomUUID()}`) });
@@ -638,7 +632,7 @@ describe("workspaceService.addMember (task 3.2)", () => {
     await hardDelete("users", [creator.id, outsider.id, target.id]);
   });
 
-  it("logs workspace.member_added with requestId and entityId", async () => {
+  it("workspaceService.addMember で workspace.member_added をログし、requestId と entityId を含む", async () => {
     const creator = await db.user.create({ data: createUserData(`ws-svc-log-add-${randomUUID()}`) });
     const target = await db.user.create({ data: createUserData(`ws-svc-log-add-t-${randomUUID()}`) });
     const workspace = await workspaceService.create({
@@ -664,7 +658,7 @@ describe("workspaceService.addMember (task 3.2)", () => {
 });
 
 describe("workspaceService module boundary (module-boundary-cleanup task 4.5)", () => {
-  it("provisions terminal stages via ensureTerminalStages in the same TX; no developmentStage createMany (Requirements 1.1, 1.4, 3.1, 3.2, 4.4, 4.6)", () => {
+  it("workspaceService モジュール境界で terminal stages をプロビジョニングし、同じ TX で ensureTerminalStages を呼び出す; developmentStage createMany はなし (Requirements 1.1, 1.4, 3.1, 3.2, 4.4, 4.6)", () => {
     const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "workspace.service.ts");
     const source = readFileSync(sourcePath, "utf8");
     const importLines = source

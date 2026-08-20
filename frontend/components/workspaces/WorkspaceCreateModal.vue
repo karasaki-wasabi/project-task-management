@@ -1,22 +1,4 @@
-<!--
-  Workspace create modal (task 6.1, design.md WorkspaceCreateModal,
-  Requirements 1.1–1.3). Create-only popup with a single name field.
-  On success: refresh membership list then select the new workspace as
-  current (Requirement 1.3). Reusable from WorkspaceSwitcher (6.2) and
-  the /workspaces empty-state CTA (6.3).
-
-  Explicit Vue / composable imports so vitest can mount without Nuxt
-  auto-import runtime (same approach as CaseFormModal.vue).
--->
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import { useApiClient, type Workspace } from "../../composables/useApiClient";
-import { useCurrentWorkspace } from "../../composables/useCurrentWorkspace";
-import {
-  replaceWorkspaceIdInPath,
-  workspacePath,
-} from "../../utils/workspacePath";
-
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: []; created: [workspace: Workspace] }>();
 

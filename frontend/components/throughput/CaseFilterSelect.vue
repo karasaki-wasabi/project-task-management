@@ -1,12 +1,4 @@
-<!--
-  Searchable case filter for the throughput dashboard (velocity-dashboard 4.3).
-  Filters out completed cases client-side; leading "全体(ワークスペース)" clears
-  selection (null). Requirements 4.2, 4.3, 4.4, 7.6.
--->
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import type { Case } from "../../composables/useApiClient";
-
 const props = defineProps<{
   cases: Case[];
   modelValue: string | null;

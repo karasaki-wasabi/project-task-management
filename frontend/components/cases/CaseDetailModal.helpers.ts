@@ -1,10 +1,3 @@
-// Pure logic for CaseDetailModal (task 6.3 + task-status-model 5.6,
-// design.md System Flow「案件編集保存」 / CaseDetailModal; Requirements
-// 4.1–4.13 + 6.6 / 8.3). Extracted so candidate gating, PATCH body shape,
-// and required-progress display decisions can be unit-tested without
-// mounting the SFC. Mount coverage for checklist → final confirm → PATCH
-// and completion marks lives in CaseDetailModal.test.ts.
-
 import type { CaseProgress, DevelopmentStage, Task } from "../../composables/useApiClient";
 import { isTaskCompleted, resolveTaskClosureState } from "../../composables/useTaskClosure";
 import {
@@ -12,15 +5,10 @@ import {
   type CaseTemplateApplyOperation,
 } from "./caseTemplateApplyCandidates";
 
-/** Requirement 6.6: mother 0 (all required tasks cancelled) hides progress. */
 export function shouldShowRequiredProgress(progress: CaseProgress | null | undefined): boolean {
   return progress != null && progress.requiredTotal > 0;
 }
 
-/**
- * Requirement 8.3 / task 5.6: mark required-task rows by stage kind.
- * Cancelled must not remain as 「未完了」.
- */
 export type RequiredTaskCompletionMark = "completed" | "cancelled" | "incomplete";
 
 export function requiredTaskCompletionMark(
@@ -42,8 +30,6 @@ export interface CaseEditValidationResult {
   error?: string;
 }
 
-// Client-side mirror of create/edit date ordering (start <= end when both set).
-// endDate/startDate empty means unset (nullable).
 export function validateCaseEditForm(input: { name: string; startDate: string; endDate: string }): CaseEditValidationResult {
   if (input.name.trim() === "") {
     return { valid: false, error: "案件名を入力してください" };
@@ -69,10 +55,6 @@ export type UpdateCasePatchBody = {
   templateOperations?: CaseTemplateApplyOperation[];
 };
 
-/**
- * Requirements 4.5–4.12: full apply candidates for old→new date transition.
- * Empty form date strings are treated as null (unset).
- */
 export function resolveEditApplyCandidates(
   oldStart: string | null | undefined,
   oldEnd: string | null | undefined,
@@ -87,12 +69,6 @@ export function resolveEditApplyCandidates(
   );
 }
 
-/**
- * Builds PATCH /api/cases/:id body.
- * - Empty start/end → null (clear field; do not omit).
- * - `templateOperations` omitted from options → key omitted (server full candidates / empty).
- * - `templateOperations` provided (including []) → sent as selected subset (Req 4.3, 4.13).
- */
 export function buildUpdateCaseInput(
   form: CaseEditFormState,
   options?: { templateOperations: CaseTemplateApplyOperation[] },

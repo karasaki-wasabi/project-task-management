@@ -1,16 +1,4 @@
-<!--
-  Non-business-day (holiday) master page (task 7.2, design.md HolidaysPage,
-  Requirements 7.1, 7.3, 9.1–9.4). Visual follows research.md / claude design
-  「繰り返し設定・休日マスタ」holidays section — users/index.vue-style inline
-  form + table, no modals.
-
-  Explicit Vue / useApiClient imports so vitest can mount without Nuxt
-  auto-import runtime (same approach as RecurrenceFormModal.vue).
--->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useApiClient, type NonBusinessDay } from "../../../../composables/useApiClient";
-import { useCurrentWorkspace } from "../../../../composables/useCurrentWorkspace";
 import {
   formatSyncResult,
   holidayDisplayLabel,

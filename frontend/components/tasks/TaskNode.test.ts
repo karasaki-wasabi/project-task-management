@@ -1,5 +1,3 @@
-// Mount tests for TaskNode stage display / terminal actions / layout
-// (task-status-model 5.2, Requirements 4.5, 8.2, 8.10; design.md TaskNode.vue).
 import { describe, expect, it } from "vitest";
 import { defineComponent } from "vue";
 import { mount } from "@vue/test-utils";
@@ -70,7 +68,7 @@ function mountNode(task: Task, stageList: DevelopmentStage[] = stages) {
 }
 
 describe("TaskNode (task-status-model 5.2)", () => {
-  it("shows StageBadge after priority for a normal stage", () => {
+  it("段階: 作業中 を表示し、優先度バッジの後に段階バッジを表示する", () => {
     const wrapper = mountNode(makeTask({ developmentStageId: "s-normal" }));
     const row = wrapper.get('[data-testid="task-node-main"]');
     const badges = row.get('[data-testid="task-node-badges"]');
@@ -88,12 +86,12 @@ describe("TaskNode (task-status-model 5.2)", () => {
     expect(priorityIdx).toBeGreaterThanOrEqual(0);
   });
 
-  it("shows unset StageBadge when developmentStageId is null", () => {
+  it("developmentStageId が null の場合、段階: 未設定 を表示する", () => {
     const wrapper = mountNode(makeTask({ developmentStageId: null }));
     expect(wrapper.text()).toContain("段階: 未設定");
   });
 
-  it("hides status badge, status select, and split on completed stage", () => {
+  it("完了段階ではステータスバッジ、ステータス選択、および分割を非表示にする", () => {
     const wrapper = mountNode(
       makeTask({ id: "t-done", title: "完了タスク", developmentStageId: "s-done" }),
     );
@@ -104,7 +102,7 @@ describe("TaskNode (task-status-model 5.2)", () => {
     expect(wrapper.text()).toContain("段階: 完了");
   });
 
-  it("hides status badge, status select, and split on cancelled stage", () => {
+  it("中止段階ではステータスバッジ、ステータス選択、および分割を非表示にする", () => {
     const wrapper = mountNode(
       makeTask({ id: "t-cancel", title: "中止タスク", developmentStageId: "s-cancel" }),
     );
@@ -115,7 +113,7 @@ describe("TaskNode (task-status-model 5.2)", () => {
     expect(wrapper.text()).toContain("段階: 中止");
   });
 
-  it("shows status badge, status select, and split on open stages", () => {
+  it("開いた段階ではステータスバッジ、ステータス選択、および分割を表示する", () => {
     const wrapper = mountNode(makeTask());
 
     expect(wrapper.find('[data-testid="status-badge"]').exists()).toBe(true);
@@ -128,7 +126,7 @@ describe("TaskNode (task-status-model 5.2)", () => {
     expect(select.text()).toContain("保留");
   });
 
-  it("uses a three-block layout with spacer locking actions to the right", () => {
+  it("3つのブロックレイアウトを使用し、スペーサーでアクションを右に固定する", () => {
     const open = mountNode(makeTask({ id: "open", title: "通常" }));
     const closed = mountNode(
       makeTask({ id: "closed", title: "完了", developmentStageId: "s-done" }),
@@ -149,7 +147,6 @@ describe("TaskNode (task-status-model 5.2)", () => {
     expect(closedActions.element.parentElement).toBe(
       closed.get('[data-testid="task-node-main"]').element,
     );
-    // Same structural position: actions are the last flex child after spacer.
     const openChildren = Array.from(open.get('[data-testid="task-node-main"]').element.children);
     const closedChildren = Array.from(closed.get('[data-testid="task-node-main"]').element.children);
     expect(openChildren.indexOf(openActions.element)).toBe(openChildren.length - 1);

@@ -1,7 +1,3 @@
-// taskIntegrityService (module-boundary-cleanup task 2.3; design.md
-// Backend/tasks taskIntegrityService; Requirements 1.1, 1.4, 2.1, 2.2, 3.2,
-// 4.1, 4.2, 4.3, 4.5, 4.6).
-// Mirrors existing detach / progress / throughput / generated-task list semantics.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,7 +51,7 @@ afterAll(async () => {
 });
 
 describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
-  it("GeneratedTaskAnchor value set equals CaseRelativeAnchor (Requirement 4.6; design GeneratedTaskAnchor)", () => {
+  it("GeneratedTaskAnchor の値セットが CaseRelativeAnchor と一致することを確認 (Requirement 4.6; design GeneratedTaskAnchor)", () => {
     const fromPrisma = Object.values(PrismaCaseRelativeAnchor) as CaseRelativeAnchor[];
     const fromRecurrenceTypeSamples: CaseRelativeAnchor[] = [
       "case_start",
@@ -68,7 +64,7 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     expect(new Set(GENERATED_TASK_ANCHORS)).toEqual(new Set(fromRecurrenceTypeSamples));
   });
 
-  it("does not import developmentStages / case / recurrence services (Requirement 1.1, 2.1, 2.2)", () => {
+  it("developmentStages / case / recurrence サービスをインポートしないことを確認 (Requirement 1.1, 2.1, 2.2)", () => {
     const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "task-integrity.service.ts");
     const source = readFileSync(sourcePath, "utf8");
     const importLines = source
@@ -93,7 +89,7 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     expect(codeWithoutComments).not.toMatch(/\b(?:db|client)\.task\b/);
   });
 
-  it("detachFromCase nulls caseId by case id only and leaves the task (Requirement 4.1)", async () => {
+  it("taskIntegrityService.detachFromCase で caseId をクリアし、タスクを残す (Requirement 4.1)", async () => {
     const caseRow = await db.case.create({
       data: {
         name: `detach-${randomUUID()}`,
@@ -120,8 +116,7 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     await hardDelete("cases", [caseRow.id]);
   });
 
-  it("detachFromCase updates by caseId only (no workspace filter; Requirement 4.1, 4.6)", async () => {
-    // Same caseId shape as current case.repository.delete: where: { caseId } only.
+  it("taskIntegrityService.detachFromCase で caseId のみで更新し、ワークスペースフィルターなし (Requirement 4.1, 4.6)", async () => {
     const caseRow = await db.case.create({
       data: {
         name: `detach-id-only-${randomUUID()}`,
@@ -129,8 +124,6 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
         workspaceId: workspaceA,
       },
     });
-    // Task in another workspace still sharing caseId is unrealistic via FK, but
-    // the where clause must remain ID-only (no workspaceId in updateMany).
     const linked = await db.task.create({
       data: {
         title: "id-only detach",
@@ -148,7 +141,7 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     await hardDelete("cases", [caseRow.id]);
   });
 
-  it("detachFromCase sees uncommitted rows via the TX client (Requirement 3.2)", async () => {
+  it("taskIntegrityService.detachFromCase で未コミットの行を TX クライアントで参照する (Requirement 3.2)", async () => {
     await expect(
       db.$transaction(async (tx) => {
         const caseRow = await tx.case.create({
@@ -177,7 +170,7 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     ).rejects.toThrow("rollback-detach-tx-proof");
   });
 
-  it("clearDevelopmentStage nulls developmentStageId by stage id only (Requirement 4.3)", async () => {
+  it("taskIntegrityService.clearDevelopmentStage で developmentStageId をクリアし、段階を残す (Requirement 4.3)", async () => {
     const stage = await db.developmentStage.create({
       data: {
         name: `clear-stage-${randomUUID()}`,
@@ -205,7 +198,7 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     await hardDelete("development_stages", [stage.id]);
   });
 
-  it("clearDevelopmentStage sees uncommitted rows via the TX client (Requirement 3.2)", async () => {
+  it("taskIntegrityService.clearDevelopmentStage で未コミットの行を TX クライアントで参照する (Requirement 3.2)", async () => {
     await expect(
       db.$transaction(async (tx) => {
         const stage = await tx.developmentStage.create({
@@ -235,7 +228,7 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     ).rejects.toThrow("rollback-clear-tx-proof");
   });
 
-  it("countRequiredForCaseProgress matches open∪completed / completed filters (Requirement 4.2)", async () => {
+  it("taskIntegrityService.countRequiredForCaseProgress で open∪completed と completed のフィルターに一致するタスク数をカウント (Requirement 4.2)", async () => {
     const caseRow = await db.case.create({
       data: {
         name: `progress-${randomUUID()}`,
@@ -320,7 +313,7 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     }
   });
 
-  it("countRequiredForCaseProgress scopes by workspace (Requirement 1.4, 4.2)", async () => {
+  it("taskIntegrityService.countRequiredForCaseProgress でワークスペーススコープを適用 (Requirement 1.4, 4.2)", async () => {
     const caseRow = await db.case.create({
       data: {
         name: `progress-scope-${randomUUID()}`,
@@ -337,9 +330,6 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
         workspaceId: workspaceA,
       },
     });
-    // Cross-workspace task with same caseId cannot be created under normal FK
-    // if case is workspace-scoped; create a sibling case+task in B and ensure
-    // counting workspaceA does not pick it up via workspace filter.
     const caseB = await db.case.create({
       data: {
         name: `progress-scope-b-${randomUUID()}`,
@@ -364,7 +354,7 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     await hardDelete("cases", [caseRow.id, caseB.id]);
   });
 
-  it("countCompletedWithPointsInPeriodIncludingDeleted includes soft-deleted tasks (Requirement 4.5)", async () => {
+  it("taskIntegrityService.countCompletedWithPointsInPeriodIncludingDeleted で削除されたタスクを含む (Requirement 4.5)", async () => {
     const periodStart = new Date("2024-01-01T00:00:00.000Z");
     const periodEnd = new Date("2024-01-07T23:59:59.999Z");
     const inPeriod = await db.task.create({
@@ -405,7 +395,7 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     await hardDelete("tasks", [inPeriod.id, outside.id]);
   });
 
-  it("listGeneratedByAnchors returns id/workspaceId for matching sourceAnchor (Requirement 1.4, 4.6)", async () => {
+  it("taskIntegrityService.listGeneratedByAnchors で sourceAnchor に一致する id/workspaceId を返す (Requirement 1.4, 4.6)", async () => {
     const caseRow = await db.case.create({
       data: {
         name: `gen-list-${randomUUID()}`,
@@ -456,7 +446,7 @@ describe("taskIntegrityService (module-boundary-cleanup 2.3)", () => {
     await hardDelete("cases", [caseRow.id]);
   });
 
-  it("listGeneratedByAnchors sees uncommitted rows via the TX client (Requirement 3.2)", async () => {
+  it("taskIntegrityService.listGeneratedByAnchors で未コミットの行を TX クライアントで参照する (Requirement 3.2)", async () => {
     await expect(
       db.$transaction(async (tx) => {
         const caseRow = await tx.case.create({
@@ -535,9 +525,7 @@ describe("taskIntegrityService aggregation (velocity-dashboard 1.3)", () => {
         periodEnd,
         workspaceA,
       );
-      // parent + leafChild + leafUnset
       expect(result.count).toBe(3);
-      // leafChild(5) + leafUnset(0); parent excluded (has active child)
       expect(result.points).toBe(5);
     } finally {
       await hardDelete("tasks", [leafChild.id, leafUnset.id, parent.id]);
@@ -720,9 +708,7 @@ describe("taskIntegrityService aggregation (velocity-dashboard 1.3)", () => {
 
     try {
       const result = await taskIntegrityService.countOpenTasksWithPoints(workspaceA, caseRow.id);
-      // openParent + openLeaf + openSiblingLeaf (completed/cancelled excluded)
       expect(result.count).toBe(3);
-      // openLeaf(3) + openSiblingLeaf(2); openParent excluded (has active child)
       expect(result.points).toBe(5);
     } finally {
       await hardDelete("tasks", [
@@ -775,7 +761,7 @@ describe("taskIntegrityService aggregation (velocity-dashboard 1.3)", () => {
     }
   });
 
-  it("removes legacy countCompletedInPeriodIncludingDeleted after throughput switch (Requirement 3.1)", async () => {
+  it("taskIntegrityService から古い countCompletedInPeriodIncludingDeleted を削除 (Requirement 3.1)", async () => {
     expect(taskIntegrityService).not.toHaveProperty("countCompletedInPeriodIncludingDeleted");
   });
 });

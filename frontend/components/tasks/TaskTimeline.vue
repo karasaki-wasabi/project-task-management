@@ -1,18 +1,4 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import CommentComposer from "../comments/CommentComposer.vue";
-import UserAvatar from "../shared/UserAvatar.vue";
-import {
-  useApiClient,
-  type Case,
-  type Comment,
-  type DevelopmentStage,
-  type Task,
-  type TaskTimelineChange,
-  type TaskTimelineEntry,
-  type TaskTimelineFilter,
-  type User,
-} from "../../composables/useApiClient";
 import {
   changeMessageSegments,
   formatTimelineTime,

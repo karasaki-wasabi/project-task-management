@@ -1,5 +1,3 @@
-// Pure helpers for RecurrenceFormModal (task 7.1, Requirements 2.1–2.5).
-
 import type {
   CaseRelativeAnchor,
   NonBusinessDayPolicy,

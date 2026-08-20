@@ -1,15 +1,4 @@
-<!--
-  Case-relative recurring template detail modal (task 7.1,
-  research.md「ビジュアルデザイン確定」, Requirements 2.6–2.8, 8.2, 8.3).
-  View + stop/resume toggle + delete. Delete uses an inline confirm step
-  (CaseDetailModal pattern) — never window.confirm.
-
-  Explicit Vue / useApiClient imports so vitest can mount without Nuxt
-  auto-import runtime (same approach as CaseDetailModal.vue).
--->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useApiClient, type RecurringTaskTemplate } from "../../composables/useApiClient";
 import {
   formatOffsetLabel,
   nonBusinessDayPolicyLabel,

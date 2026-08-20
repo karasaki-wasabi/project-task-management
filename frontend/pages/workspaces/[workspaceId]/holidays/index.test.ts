@@ -1,6 +1,3 @@
-// Mount tests for HolidaysPage (task 7.2): list / register / delete / sync.
-// Requirements 7.1, 7.3, 9.1, 9.2, 9.3, 9.4.
-// workspace-resource-scope task 7.2: empty state when currentId is null (Req 2.1, 2.2).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -79,7 +76,7 @@ function mountPage() {
   });
 }
 
-describe("HolidaysPage (task 7.2)", () => {
+describe("祝日マスタ (task 7.2)", () => {
   beforeEach(() => {
     listHolidays.mockReset();
     registerHoliday.mockReset();
@@ -99,7 +96,7 @@ describe("HolidaysPage (task 7.2)", () => {
     vi.clearAllMocks();
   });
 
-  it("loads holidays on mount and renders sorted rows with source badges (Req 9.1)", async () => {
+  it("祝日を読み込み、ソートされた行を表示 (Req 9.1)", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -111,7 +108,7 @@ describe("HolidaysPage (task 7.2)", () => {
     expect(badges).toEqual(["外部API", "手動"]);
   });
 
-  it("registers a holiday with date/label then reloads (Req 9.2)", async () => {
+  it("祝日を登録し、再読み込み (Req 9.2)", async () => {
     listHolidays.mockResolvedValueOnce([]).mockResolvedValueOnce([makeHoliday({ id: "h3", date: "2026-12-31", label: "年末休業", source: "manual" })]);
     const wrapper = mountPage();
     await flushPromises();
@@ -126,7 +123,7 @@ describe("HolidaysPage (task 7.2)", () => {
     expect(wrapper.text()).toContain("年末休業");
   });
 
-  it("deletes a holiday by id then reloads (Req 9.2)", async () => {
+  it("祝日を削除し、再読み込み (Req 9.2)", async () => {
     listHolidays
       .mockResolvedValueOnce([makeHoliday()])
       .mockResolvedValueOnce([]);
@@ -140,7 +137,7 @@ describe("HolidaysPage (task 7.2)", () => {
     expect(listHolidays).toHaveBeenCalledTimes(2);
   });
 
-  it("syncs external holidays and shows the result summary (Req 9.3)", async () => {
+  it("外部APIの祝日を同期し、結果の要約を表示 (Req 9.3)", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -153,7 +150,7 @@ describe("HolidaysPage (task 7.2)", () => {
     expect(listHolidays).toHaveBeenCalledTimes(2);
   });
 
-  it("does not expose recurring-template management controls (Req 7.3)", async () => {
+  it("繰り返しテンプレートの管理機能を公開しない (Req 7.3)", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
@@ -162,7 +159,7 @@ describe("HolidaysPage (task 7.2)", () => {
   });
 
 
-  it("scoped 配下では未選択空状態を出さない（workspace-url-routing 3.2）", async () => {
+  it("スコープ配下では未選択空状態を出さない（workspace-url-routing 3.2）", async () => {
     currentId.value = null;
     const mod = await import("./index.vue");
     const wrapper = mount(mod.default);

@@ -1,5 +1,3 @@
-// holidaysService workspace scope (workspace-resource-scope task 5.1;
-// Requirements 1.1, 1.2, 3.1, 3.2, 3.3) plus prior HolidaysService coverage.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, afterEach, describe, expect, it } from "vitest";
 import { db } from "../../shared/db.js";
@@ -64,7 +62,6 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
-  // Soft-deleted rows still hold workspace FK; purge by workspace before teardown.
   await db.$executeRawUnsafe(
     `DELETE FROM non_business_days WHERE workspace_id IN (?, ?)`,
     workspaceA,
@@ -76,7 +73,7 @@ afterAll(async () => {
 });
 
 describe("holidaysService (task 6.1 + workspace-resource-scope 5.1)", () => {
-  it("registers a non-business day in the given workspace (Requirements 1.1, 8.1)", async () => {
+  it("指定されたワークスペースに非営業日を登録 (Requirements 1.1, 8.1)", async () => {
     const date = trackedDate(1);
 
     const holiday = await registerTracked({ date, label: "文化の日" }, workspaceA);
@@ -87,13 +84,13 @@ describe("holidaysService (task 6.1 + workspace-resource-scope 5.1)", () => {
     expect(holiday.workspaceId).toBe(workspaceA);
   });
 
-  it("rejects an invalid date", async () => {
+  it("無効な日付を受け取った場合、400 エラーを返す", async () => {
     await expect(
       holidaysService.register({ date: "not-a-date", workspaceId: workspaceA }),
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("rejects registering the same active date twice in the same workspace (409)", async () => {
+  it("同じ日付を2回登録した場合、409 エラーを返す", async () => {
     const date = trackedDate(2);
     await registerTracked({ date }, workspaceA);
 
@@ -102,7 +99,7 @@ describe("holidaysService (task 6.1 + workspace-resource-scope 5.1)", () => {
     });
   });
 
-  it("allows the same date in a different workspace (Requirement 1.2 unique per workspace)", async () => {
+  it("別のワークスペースで同じ日付を登録できる (Requirement 1.2 unique per workspace)", async () => {
     const date = trackedDate(2);
     await registerTracked({ date }, workspaceA);
 
@@ -111,7 +108,7 @@ describe("holidaysService (task 6.1 + workspace-resource-scope 5.1)", () => {
     expect(inB.workspaceId).toBe(workspaceB);
   });
 
-  it("allows re-registering a date after the original record was removed", async () => {
+  it("元のレコードが削除された後に日付を再登録できる", async () => {
     const date = trackedDate(3);
     const first = await registerTracked({ date }, workspaceA);
     await holidaysService.remove(first.id, workspaceA);
@@ -122,7 +119,7 @@ describe("holidaysService (task 6.1 + workspace-resource-scope 5.1)", () => {
     expect(second.date).toBe(date);
   });
 
-  it("lists non-business days only for the current workspace (Requirements 3.1, 9.4)", async () => {
+  it("現在のワークスペースの非営業日のみを返す (Requirements 3.1, 9.4)", async () => {
     const kept = trackedDate(4);
     const removed = trackedDate(5);
     const foreign = trackedDate(6);
@@ -139,11 +136,11 @@ describe("holidaysService (task 6.1 + workspace-resource-scope 5.1)", () => {
     expect(list.some((h) => h.id === foreignHoliday.id)).toBe(false);
   });
 
-  it("returns not_found (404) when removing a non-existent holiday", async () => {
+  it("存在しない非営業日を削除した場合、404 エラーを返す", async () => {
     await expect(holidaysService.remove(randomUUID(), workspaceA)).rejects.toMatchObject({ statusCode: 404 });
   });
 
-  it("returns not_found (404) when removing a holiday in another workspace (Requirement 3.3)", async () => {
+  it("別のワークスペースの非営業日を削除した場合、404 エラーを返す (Requirement 3.3)", async () => {
     const holiday = await registerTracked({ date: trackedDate(8) }, workspaceB);
 
     await expect(holidaysService.remove(holiday.id, workspaceA)).rejects.toMatchObject({ statusCode: 404 });
@@ -152,7 +149,7 @@ describe("holidaysService (task 6.1 + workspace-resource-scope 5.1)", () => {
     expect(stillThere.some((h) => h.id === holiday.id)).toBe(true);
   });
 
-  it("isBusinessDay is scoped to the given workspace", async () => {
+  it("isBusinessDay は指定されたワークスペースでスコープされる", async () => {
     const holiday = trackedDate(9);
     const businessDay = trackedDate(10);
     await registerTracked({ date: holiday }, workspaceA);
@@ -162,7 +159,7 @@ describe("holidaysService (task 6.1 + workspace-resource-scope 5.1)", () => {
     expect(await holidaysService.isBusinessDay(businessDay, workspaceA)).toBe(true);
   });
 
-  it("nextBusinessDay skips over a single holiday in the workspace", async () => {
+  it("nextBusinessDay でワークスペース内の1つの非営業日をスキップ", async () => {
     const holiday = trackedDate(10);
     await registerTracked({ date: holiday }, workspaceA);
 
@@ -172,7 +169,7 @@ describe("holidaysService (task 6.1 + workspace-resource-scope 5.1)", () => {
     expect(next).toBe(trackedDate(11));
   });
 
-  it("nextBusinessDay steps over multiple consecutive holidays until a non-holiday day is found", async () => {
+  it("nextBusinessDay で連続する複数の非営業日をスキップし、非営業日が見つかるまで続ける", async () => {
     const inputDate = trackedDate(20);
     await registerTracked({ date: trackedDate(21) }, workspaceA);
     await registerTracked({ date: trackedDate(22) }, workspaceA);
@@ -183,7 +180,7 @@ describe("holidaysService (task 6.1 + workspace-resource-scope 5.1)", () => {
     expect(next).toBe(trackedDate(24));
   });
 
-  it("previousBusinessDay steps back over multiple consecutive holidays until a non-holiday day is found", async () => {
+  it("previousBusinessDay で連続する複数の非営業日をスキップし、非営業日が見つかるまで続ける", async () => {
     const inputDate = trackedDate(40);
     await registerTracked({ date: trackedDate(39) }, workspaceA);
     await registerTracked({ date: trackedDate(38) }, workspaceA);
@@ -195,8 +192,8 @@ describe("holidaysService (task 6.1 + workspace-resource-scope 5.1)", () => {
   });
 });
 
-describe("holidaysService.syncFromExternalApi (task 6.2 + workspace-resource-scope 5.1)", () => {
-  it("adds new holidays from the external API into the current workspace", async () => {
+describe("holidaysService.syncFromExternalApi 外部API同期 (task 6.2 + workspace-resource-scope 5.1)", () => {
+  it("外部APIから新しい非営業日を現在のワークスペースに追加", async () => {
     const a = trackedDate(100);
     const b = trackedDate(101);
     const fakeFetch = async () => [
@@ -213,7 +210,7 @@ describe("holidaysService.syncFromExternalApi (task 6.2 + workspace-resource-sco
     expect(result.added.every((h) => h.workspaceId === workspaceA)).toBe(true);
   });
 
-  it("skips dates that already exist in the same workspace and only adds the new ones", async () => {
+  it("同じワークスペース内に既に存在する日付をスキップし、新しいもののみを追加", async () => {
     const existing = trackedDate(110);
     const fresh = trackedDate(111);
     await registerTracked({ date: existing, label: "already there" }, workspaceA);
@@ -229,7 +226,7 @@ describe("holidaysService.syncFromExternalApi (task 6.2 + workspace-resource-sco
     expect(result.added.map((h) => h.date)).toEqual([fresh]);
   });
 
-  it("does not skip a date that exists only in another workspace", async () => {
+  it("別のワークスペースにのみ存在する日付をスキップしない", async () => {
     const sharedDate = trackedDate(115);
     await registerTracked({ date: sharedDate, label: "in B" }, workspaceB);
     const fakeFetch = async () => [{ date: sharedDate, label: "for A" }];
@@ -242,7 +239,7 @@ describe("holidaysService.syncFromExternalApi (task 6.2 + workspace-resource-sco
     expect(result.added[0]?.workspaceId).toBe(workspaceA);
   });
 
-  it("returns 502 and leaves the existing master unchanged when the external API fails", async () => {
+  it("外部APIが失敗した場合、502 エラーを返し、既存のマスターを変更しない", async () => {
     const existing = trackedDate(120);
     await registerTracked({ date: existing, label: "untouched" }, workspaceA);
     const failingFetch = async (): Promise<never> => {

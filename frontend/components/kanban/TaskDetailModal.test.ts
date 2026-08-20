@@ -1,5 +1,3 @@
-// Mount tests for TaskDetailModal stage/status display
-// (task-status-model 5.3, Requirements 4.5, 8.2; design.md TaskDetailModal.vue).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -169,7 +167,7 @@ describe("TaskDetailModal (task-status-model 5.3)", () => {
     vi.clearAllMocks();
   });
 
-  it("renders StageBadge with modal prefix instead of a plain Badge for the stage", async () => {
+  it("開発段階を表示するために、モーダル接頭辞を付けた StageBadge を表示する（通常の Badge とは異なる）", async () => {
     const wrapper = await mountDetail(makeTask({ developmentStageId: "s-normal" }));
 
     expect(wrapper.findComponent(StageBadge).exists()).toBe(true);
@@ -180,13 +178,13 @@ describe("TaskDetailModal (task-status-model 5.3)", () => {
     expect(stageLikeBadges).toHaveLength(0);
   });
 
-  it("shows unset StageBadge when developmentStageId is null", async () => {
+  it("開発段階が未設定の場合、未設定の StageBadge を表示する", async () => {
     const wrapper = await mountDetail(makeTask({ developmentStageId: null }));
     expect(wrapper.findComponent(StageBadge).exists()).toBe(true);
     expect(wrapper.text()).toContain("開発段階: 未設定");
   });
 
-  it("hides StatusBadge on completed stage", async () => {
+  it("完了の段階で StatusBadge を非表示にする", async () => {
     const wrapper = await mountDetail(
       makeTask({ id: "t-done", developmentStageId: "s-done", status: "not_started" }),
     );
@@ -195,7 +193,7 @@ describe("TaskDetailModal (task-status-model 5.3)", () => {
     expect(wrapper.text()).toContain("開発段階: 完了");
   });
 
-  it("hides StatusBadge on cancelled stage", async () => {
+  it("中止の段階で StatusBadge を非表示にする", async () => {
     const wrapper = await mountDetail(
       makeTask({ id: "t-cancel", developmentStageId: "s-cancel", status: "not_started" }),
     );
@@ -204,12 +202,12 @@ describe("TaskDetailModal (task-status-model 5.3)", () => {
     expect(wrapper.text()).toContain("開発段階: 中止");
   });
 
-  it("shows StatusBadge on open stages", async () => {
+  it("通常の段階で StatusBadge を表示する", async () => {
     const wrapper = await mountDetail(makeTask());
     expect(wrapper.find('[data-testid="status-badge"]').exists()).toBe(true);
   });
 
-  it("keeps StageBadge at the same position when status badge is omitted on terminal stages", async () => {
+  it("完了・中止の段階で StatusBadge が非表示の場合、StageBadge を同じ位置に保つ", async () => {
     const open = await mountDetail(makeTask({ id: "open", developmentStageId: "s-normal" }));
     const closed = await mountDetail(
       makeTask({ id: "closed", developmentStageId: "s-done", status: "not_started" }),
@@ -220,7 +218,7 @@ describe("TaskDetailModal (task-status-model 5.3)", () => {
     expect(stageIndexInBadges(open)).toBe(stageIndexInBadges(closed));
   });
 
-  it("links to the task detail page while keeping light edits and omitting comments and timeline", async () => {
+  it("タスク詳細ページへのリンクを表示し、軽量編集とコメント・タイムラインを除外する", async () => {
     const wrapper = await mountDetail(makeTask());
 
     const detailLink = wrapper.get('a[href="/workspaces/w1/tasks/t1"]');
@@ -237,7 +235,7 @@ describe("TaskDetailModal (task-status-model 5.3)", () => {
     expect(wrapper.find("#task-detail-detail").exists()).toBe(true);
   });
 
-  it("treats soft-deleted tasks as read-only and hides edit/delete actions", async () => {
+  it("軽量削除されたタスクを参照専用として扱い、編集・削除アクションを非表示にする", async () => {
     const wrapper = await mountDetail(
       makeTask({ deletedAt: "2026-08-12T00:00:00.000Z" }),
     );
@@ -251,7 +249,7 @@ describe("TaskDetailModal (task-status-model 5.3)", () => {
   });
 });
 
-describe("TaskDetailModal story points (velocity-dashboard 5.2)", () => {
+describe("TaskDetailModal ストーリーポイント（velocity-dashboard 5.2）", () => {
   beforeEach(() => {
     getTask.mockReset();
     listTasks.mockReset();
@@ -264,7 +262,7 @@ describe("TaskDetailModal story points (velocity-dashboard 5.2)", () => {
     vi.clearAllMocks();
   });
 
-  it("shows an editable story points input for a leaf task in edit mode", async () => {
+  it("リーフタスクの編集モードでストーリーポイントの編集可能な入力を表示する", async () => {
     const leaf = makeTask({ id: "leaf", storyPoints: 5 });
     const wrapper = await mountDetail(leaf, [leaf]);
     await enterEditMode(wrapper);
@@ -277,7 +275,7 @@ describe("TaskDetailModal story points (velocity-dashboard 5.2)", () => {
     expect(wrapper.text()).not.toContain("子の合計(自動計算)");
   });
 
-  it("shows readonly child-sum display instead of an input when the task has children", async () => {
+  it("子タスクが存在する場合、子の合計を表示するための読み取り専用の表示を入力の代わりに表示する", async () => {
     const parent = makeTask({ id: "parent", storyPoints: 13 });
     const child = makeTask({ id: "child", parentTaskId: "parent", storyPoints: 8 });
     const wrapper = await mountDetail(parent, [parent, child]);
@@ -289,7 +287,7 @@ describe("TaskDetailModal story points (velocity-dashboard 5.2)", () => {
     expect(wrapper.text()).toContain("子の合計(自動計算)");
   });
 
-  it("includes storyPoints in updateTask when saving a leaf task", async () => {
+  it("リーフタスクを保存するとき、updateTask にストーリーポイントを含める", async () => {
     const leaf = makeTask({ id: "leaf", storyPoints: 3 });
     updateTask.mockResolvedValue({ ...leaf, storyPoints: 8 });
     const wrapper = await mountDetail(leaf, [leaf]);
@@ -305,7 +303,7 @@ describe("TaskDetailModal story points (velocity-dashboard 5.2)", () => {
     );
   });
 
-  it("omits storyPoints from updateTask when saving a parent task but still sends other editable fields", async () => {
+  it("親タスクを保存するとき、updateTask からストーリーポイントを除外するが、他の編集可能なフィールドは送信する", async () => {
     const parent = makeTask({ id: "parent", title: "親タスク", storyPoints: 13, priority: "medium" });
     const child = makeTask({ id: "child", parentTaskId: "parent", storyPoints: 8 });
     updateTask.mockResolvedValue({ ...parent, title: "親を更新", priority: "high" });

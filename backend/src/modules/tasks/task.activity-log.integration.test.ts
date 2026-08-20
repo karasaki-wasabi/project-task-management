@@ -77,7 +77,7 @@ afterAll(async () => {
 });
 
 describe("tasksService activity log hooks", () => {
-  it("requires an actor for every logged write method at compile time", () => {
+  it("tasksService の各ログ書き込みメソッドに対してコンパイル時にアクターが必要であることを確認", () => {
     if (false) {
       // @ts-expect-error actor is required
       void tasksService.create({ title: "contract", priority: "low", workspaceId });
@@ -102,7 +102,7 @@ describe("tasksService activity log hooks", () => {
     expect(true).toBe(true);
   });
 
-  it("records task creation and deletion with the supplied user actor", async () => {
+  it("tasksService.create と tasksService.delete で作成されたタスクと削除されたタスクの両方に対してログを記録", async () => {
     const created = await tasksService.create(
       {
         title: "logged lifecycle",
@@ -139,7 +139,7 @@ describe("tasksService activity log hooks", () => {
     ]);
   });
 
-  it("records status and development-stage changes without reset or completedAt logs", async () => {
+  it("tasksService.updateStatus と tasksService.updateDevelopmentStage で状態と段階の変更を記録し、リセットや completedAt のログは記録しない", async () => {
     const task = await createTask("status and stage");
     const stage = await db.developmentStage.create({
       data: {
@@ -190,7 +190,7 @@ describe("tasksService activity log hooks", () => {
     ]);
   });
 
-  it("records every changed general field including case-clear required reset", async () => {
+  it("tasksService.update で変更されたすべての一般的なフィールドに対してログを記録し、ケースのクリアによるリセットも記録", async () => {
     const caseRecord = await db.case.create({
       data: {
         name: `activity-case-${randomUUID()}`,
@@ -240,7 +240,7 @@ describe("tasksService activity log hooks", () => {
     });
   });
 
-  it("records task_created separately for addChild and every split part", async () => {
+  it("tasksService.addChild と tasksService.splitTask で作成されたタスクと分割されたタスクの両方に対してログを記録", async () => {
     const parent = await createTask("parent");
 
     const child = await tasksService.addChild(
@@ -280,7 +280,7 @@ describe("tasksService activity log hooks", () => {
     }
   });
 
-  it("rolls back the task update when activity-log persistence fails", async () => {
+  it("tasksService.update でアクティビティログの永続化に失敗した場合、タスクの更新をロールバック", async () => {
     const task = await createTask("rollback before");
 
     const result = await tasksService.update(

@@ -1,6 +1,3 @@
-// Mount tests for WorkspaceSwitcher (task 6.2):
-// current workspace display, switch dropdown, create-modal / manage links,
-// and empty-state muted styling. Requirements 1.3, 2.1, 2.2, 2.3.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";

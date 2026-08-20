@@ -1,9 +1,3 @@
-<!--
-  Assignee filter select, reused by Tasks/Calendar lists (task 11.6, design.md
-  "Frontend/users", Requirement 7.2). Emits the selected userId (or empty
-  string for "all") so the parent page re-queries its own list endpoint with
-  `assigneeUserId`.
--->
 <script setup lang="ts">
 const modelValue = defineModel<string>({ default: "" });
 

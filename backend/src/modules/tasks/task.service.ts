@@ -1,14 +1,3 @@
-// TasksService (task 3.1 core + task 3.2 hierarchy/split + task 10.2
-// business event logging, design.md "Backend/tasks", Requirements 1.1-1.6,
-// 2.1-2.4, 7.2, 9.1-9.4, 10.2).
-// workspace-resource-scope task 3.1: create/list/get/update/delete are scoped
-// by VerifiedWorkspaceId; cross-workspace access yields not_found (404).
-// workspace-resource-scope task 3.2: assigneeUserId must be a current workspace
-// member (Requirement 4.2); non-members yield validation_error → 400.
-// workspace-resource-scope task 3.3: caseId / parentTaskId / developmentStageId
-// must resolve in the current workspace (Requirement 3.5); missing or
-// cross-workspace related IDs yield validation_error → 400 (same style as
-// assignee validation; FK alone cannot enforce workspace co-location).
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { businessEventLogger } from "../../shared/business-event-logger.js";
@@ -45,7 +34,6 @@ function isForeignKeyViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
 }
 
-// task-status-model 3.3: closed parents cannot receive open children (5.5, 5.6).
 async function assertParentCanTakeOpenChildren(
   parent: Task,
   workspaceId: VerifiedWorkspaceId,
@@ -134,9 +122,6 @@ async function assertRelatedResourcesInWorkspace(
   client: DbClient = db,
 ): Promise<Result<void, TaskError>> {
   if (refs.caseId != null) {
-    // Must use the same DbClient as the caller: caseService.create runs
-    // applyToCase inside an interactive TX, so an uncommitted case is only
-    // visible on that TX client (not the global `db`).
     const caseRecord = await caseReadService.findInWorkspace(refs.caseId, workspaceId, client);
     if (!caseRecord) {
       return err({
@@ -282,7 +267,6 @@ export const tasksService = {
           },
           writeClient as SoftDeleteTx,
         );
-        // velocity-dashboard 2.3: create with parent → recalc from that parent (2.1, 2.3).
         if (created.parentTaskId != null) {
           await taskRepository.recalculateAncestorStoryPoints(
             created.parentTaskId,
@@ -313,9 +297,6 @@ export const tasksService = {
     return ok(task);
   },
 
-  // task-status-model 3.2: status is stage-internal work state only.
-  // Does not stamp/clear completedAt or enforce parent/child constraints (2.4, 4.2).
-  // Rejects edits while the task sits on a terminal stage (4.5).
   async updateStatus(
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
@@ -357,12 +338,6 @@ export const tasksService = {
     }
   },
 
-  // design.md System Flows "開発段階の変更": resolve kind → child check only
-  // for completed → stamp/clear completedAt → reset status only when the stage
-  // actually changes. assigneeUserId is only applied when currently null
-  // (Requirements 12.6-12.8 / kanban move).
-  // task-status-model 3.1: aggregates completedAt, status reset, and parent
-  // completion constraints here (Requirements 2.1-2.3, 2.5, 4.4, 5.1-5.4).
   async updateDevelopmentStage(
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
@@ -458,10 +433,6 @@ export const tasksService = {
     }
   },
 
-  // General field edit (title/priority/detail/caseId/isRequiredForCase/
-  // assigneeUserId/parentTaskId/scheduledEndDate), distinct from the kanban-move-specific
-  // updateDevelopmentStage above: an explicit edit always overwrites
-  // assigneeUserId, it doesn't defer to "only if currently unassigned".
   async update(
     taskId: string,
     workspaceId: VerifiedWorkspaceId,
@@ -491,9 +462,6 @@ export const tasksService = {
       data.assigneeUserId = input.assigneeUserId;
     }
 
-    // design.md TasksService Implementation Notes: "caseId未指定時は
-    // isRequiredForCaseをfalse固定にする" — applied here on the merged
-    // (post-update) caseId, same rule as create.
     if (input.caseId !== undefined) {
       const relatedCheck = await assertRelatedResourcesInWorkspace(workspaceId, { caseId: input.caseId });
       if (!relatedCheck.ok) {
@@ -516,7 +484,6 @@ export const tasksService = {
       data.parentTaskId = input.parentTaskId;
     }
 
-    // velocity-dashboard 2.3: reject direct storyPoints on parents (1.5, 2.5).
     if (input.storyPoints !== undefined) {
       const hasChildren = await taskRepository.hasChildren(taskId, workspaceId);
       if (hasChildren) {
@@ -563,7 +530,6 @@ export const tasksService = {
           writeClient,
         );
 
-        // velocity-dashboard 2.3: recalc triggers (ancestor auto-updates are not logged).
         if (storyPointsChanging && updated.parentTaskId != null) {
           await taskRepository.recalculateAncestorStoryPoints(
             updated.parentTaskId,
@@ -651,7 +617,6 @@ export const tasksService = {
           },
           writeClient as SoftDeleteTx,
         );
-        // velocity-dashboard 2.3: addChild → recalc from parent (2.1, 2.3).
         await taskRepository.recalculateAncestorStoryPoints(parentTaskId, workspaceId, writeClient);
         return created;
       });
@@ -693,8 +658,6 @@ export const tasksService = {
       if (!assigneeCheck.ok) {
         return assigneeCheck;
       }
-      // Reject cross-workspace related IDs on part input even though case/
-      // parent are overwritten by inheritance below (Requirement 3.5).
       const relatedCheck = await assertRelatedResourcesInWorkspace(workspaceId, {
         caseId: part.caseId,
         parentTaskId: part.parentTaskId,
@@ -704,8 +667,6 @@ export const tasksService = {
       }
     }
 
-    // design.md TasksService Postconditions: parts inherit the original
-    // task's case link and priority, become its children.
     const inheritedParts = parts.map((part) => ({
       ...part,
       title: part.title.trim(),
@@ -728,7 +689,6 @@ export const tasksService = {
             writeClient as SoftDeleteTx,
           );
         }
-        // velocity-dashboard 2.3: splitTask → recalc from split source (2.1, 2.3).
         await taskRepository.recalculateAncestorStoryPoints(taskId, workspaceId, writeClient);
         return createdParts;
       });
@@ -763,7 +723,6 @@ export const tasksService = {
           },
           writeClient as SoftDeleteTx,
         );
-        // velocity-dashboard 2.3: delete → recalc deleted task's parent if any (2.1).
         if (parentTaskId != null) {
           await taskRepository.recalculateAncestorStoryPoints(parentTaskId, workspaceId, writeClient);
         }

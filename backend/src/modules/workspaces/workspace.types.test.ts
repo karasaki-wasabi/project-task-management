@@ -1,5 +1,3 @@
-// RED→GREEN: Workspace domain types & fixed color palette
-// (task 1.3, design.md WorkspaceService Service Interface; Requirements 1.1, 6.3, 6.4).
 import { describe, expect, it } from "vitest";
 import {
   WORKSPACE_COLORS,
@@ -9,7 +7,7 @@ import {
 } from "./workspace.types.js";
 
 describe("WORKSPACE_COLORS (task 1.3)", () => {
-  it("exports exactly six fixed identification colors", () => {
+  it("WORKSPACE_COLORS で exactly six fixed identification colors をエクスポート", () => {
     expect(WORKSPACE_COLORS).toEqual([
       "#2563eb",
       "#0f766e",
@@ -21,14 +19,14 @@ describe("WORKSPACE_COLORS (task 1.3)", () => {
     expect(WORKSPACE_COLORS).toHaveLength(6);
   });
 
-  it("narrows WorkspaceColor to the fixed palette", () => {
+  it("WORKSPACE_COLORS で WorkspaceColor を固定パレットに制限", () => {
     const color: WorkspaceColor = WORKSPACE_COLORS[0];
     expect(WORKSPACE_COLORS.includes(color)).toBe(true);
   });
 });
 
 describe("Workspace / WorkspaceUserSummary type shapes (task 1.3)", () => {
-  it("accepts a Workspace without deletedAt (domain shape per design)", () => {
+  it("Workspace / WorkspaceUserSummary 型で deletedAt がない Workspace を受け入れる (domain shape per design)", () => {
     const workspace: Workspace = {
       id: "ws-1",
       name: "Demo",
@@ -41,7 +39,7 @@ describe("Workspace / WorkspaceUserSummary type shapes (task 1.3)", () => {
     expect("deletedAt" in workspace).toBe(false);
   });
 
-  it("accepts a WorkspaceUserSummary with userId, name, email", () => {
+  it("Workspace / WorkspaceUserSummary 型で userId, name, email を持つ WorkspaceUserSummary を受け入れる", () => {
     const summary: WorkspaceUserSummary = {
       userId: "user-1",
       name: "Alice",

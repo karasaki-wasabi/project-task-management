@@ -1,16 +1,4 @@
-<!--
-  Nested confirm dialog for case template apply (task 6.1, design.md
-  CaseTemplateApplyConfirm, research.md「ビジュアルデザイン確定」).
-  Screens: A (create missing dates), B (edit checklist), C (final confirm).
-  Does not wire CaseFormModal / CaseDetailModal — those are tasks 6.2 / 6.3.
-
-  Pure flow/selection logic lives in CaseTemplateApplyConfirm.helpers.ts
-  (unit-tested). This SFC wires helpers to Modal + emits.
--->
 <script setup lang="ts">
-// Explicit Vue imports so vitest/@vue/test-utils can mount this SFC
-// without the Nuxt auto-import runtime (helpers tests stay node-friendly).
-import { computed, ref, watch } from "vue";
 import type { CaseTemplateApplyOperation } from "./caseTemplateApplyCandidates";
 import {
   buildCandidateRows,
@@ -29,24 +17,16 @@ import {
 const props = defineProps<{
   open: boolean;
   mode: ConfirmMode;
-  /** Screen A: which dates are unset (`start` / `end` / `both`). */
   missingDates?: MissingDates;
-  /** New (or create-form) start/end for summaries. */
   startDate?: string | null;
   endDate?: string | null;
-  /** Edit path: previous dates for strikethrough summary on B. */
   oldStartDate?: string | null;
   oldEndDate?: string | null;
-  /** Edit path: full candidate list from buildCaseTemplateApplyCandidates. */
   candidates?: CaseTemplateApplyOperation[];
 }>();
 
 const emit = defineEmits<{
   close: [];
-  /**
-   * create-missing: `null` → parent omits templateOperations.
-   * edit-apply: selected subset (may be `[]` for date-only save).
-   */
   approve: [operations: CaseTemplateApplyOperation[] | null];
 }>();
 
@@ -137,7 +117,6 @@ function onClose() {
 </script>
 
 <template>
-  <!-- Nuxt auto-imports Modal in app; component tests stub Modal with slots. -->
   <Modal
     :open="open"
     :ariaLabel="title"
@@ -145,7 +124,6 @@ function onClose() {
   >
     <template #title>{{ title }}</template>
 
-    <!-- Screen A: create missing-dates confirm -->
     <div v-if="state.screen === 'A'" class="space-y-3 text-sm text-slate-700">
       <p>{{ missingBody }}</p>
       <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -163,7 +141,6 @@ function onClose() {
       </p>
     </div>
 
-    <!-- Screen B: checklist -->
     <div v-else-if="state.screen === 'B'" class="space-y-3 text-sm text-slate-700">
       <div class="space-y-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
         <p class="text-xs font-medium text-slate-500">日付の変更</p>
@@ -205,7 +182,6 @@ function onClose() {
         </p>
       </div>
 
-      <!-- border-2 (not ring+offset) so selection highlight is not clipped by overflow-y-auto -->
       <ul class="max-h-64 space-y-2 overflow-y-auto py-0.5">
         <li
           v-for="row in candidateRows"
@@ -243,7 +219,6 @@ function onClose() {
       </p>
     </div>
 
-    <!-- Screen C: final confirm -->
     <div v-else class="space-y-3 text-sm text-slate-700">
       <ul v-if="selectedRows.length > 0" class="space-y-2">
         <li

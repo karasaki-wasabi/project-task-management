@@ -1,6 +1,3 @@
-// HTTP routes for ClientErrors (task 8.1, design.md "Backend/client-errors"
-// API Contract). Registered into the shared app in task 10.3; standalone
-// Fastify plugin here so this module stays testable in isolation.
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { badRequest } from "../../shared/http-errors.js";

@@ -1,7 +1,3 @@
-// Reads and validates the process environment variables the backend needs
-// at startup (Requirements: 10.6 — LOG_LEVEL must be switchable via config).
-// Authentication configuration is validated here so an incomplete deployment
-// fails before the server begins accepting requests.
 import { z } from "zod";
 
 const envSchema = z.object({

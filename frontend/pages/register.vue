@@ -1,8 +1,4 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { useApiClient } from "../composables/useApiClient";
-import { useAuth } from "../composables/useAuth";
-
 const api = useApiClient();
 const { user } = useAuth();
 const email = ref("");
@@ -54,9 +50,7 @@ async function submit(): Promise<void> {
     </aside>
     <main class="flex items-center justify-center p-8 max-[899px]:min-h-[calc(100vh-56px)] max-[899px]:px-6">
       <div class="w-full max-w-[360px]">
-        <p class="text-sm font-medium text-slate-500">はじめましょう</p>
         <h1 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">アカウント登録</h1>
-        <p class="mt-2 text-sm leading-6 text-slate-600">登録すると、すぐにタスク管理を始められます。</p>
 
         <form class="mt-8 space-y-5" @submit.prevent="submit">
           <ErrorAlert v-if="error" :message="error" />
@@ -84,6 +78,7 @@ async function submit(): Promise<void> {
               required
               class="mt-2 block w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
             />
+            <span class="mt-1.5 block text-xs leading-5 text-slate-500">システム上に主に表示される名前です。</span>
           </label>
 
           <label class="block">
@@ -107,7 +102,7 @@ async function submit(): Promise<void> {
                 {{ isPasswordVisible ? "隠す" : "表示" }}
               </button>
             </span>
-            <span class="mt-1.5 block text-xs text-slate-500">8文字以上</span>
+            <span class="mt-1.5 block text-xs text-slate-500">8文字以上で設定ください。</span>
           </label>
 
           <button

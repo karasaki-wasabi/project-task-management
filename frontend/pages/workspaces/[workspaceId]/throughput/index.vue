@@ -1,28 +1,7 @@
-<!--
-  Throughput dashboard (velocity-dashboard 4.5, design.md Frontend/throughput,
-  mock 1c/1d). Controls (periodType, rangeCount, CaseFilterSelect) apply
-  immediately — period/case on change, rangeCount after a short debounce.
-  ThroughputTrendChart + forecast summary + CaseOutlookPanel when a case is
-  selected. No workspace-empty-state — scoping is URL workspaceId and
-  x-workspace-id (Requirements 4.1-4.3, 5.1-5.2, 6.3, 7.1-7.6).
--->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import {
-  useApiClient,
-  type Case,
-  type PeriodType,
-  type ThroughputSummary,
-} from "../../../../composables/useApiClient";
-import { useCurrentWorkspace } from "../../../../composables/useCurrentWorkspace";
-import CaseFilterSelect from "../../../../components/throughput/CaseFilterSelect.vue";
-import CaseOutlookPanel from "../../../../components/throughput/CaseOutlookPanel.vue";
-import ThroughputTrendChart from "../../../../components/throughput/ThroughputTrendChart.vue";
-
 const FORECAST_INSUFFICIENT_MESSAGE =
   "実績データ不足のため、今後の目安（完了タスク数・完了ストーリーポイント）は表示できません。2 期間以上の実績が集まると表示されます。";
 
-/** backend ThroughputService.FORECAST_WINDOW と同じ窓幅。 */
 const FORECAST_WINDOW = 4;
 
 const RANGE_COUNT_DEBOUNCE_MS = 300;
@@ -101,8 +80,6 @@ watch(
       selectedCaseId.value = null;
       return;
     }
-    // Clear case filter before refresh when switching workspaces so a stale
-    // caseId from the previous workspace is not sent to getThroughput (400).
     if (previousId !== undefined && previousId !== null && previousId !== id) {
       selectedCaseId.value = null;
     }

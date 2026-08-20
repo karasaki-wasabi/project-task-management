@@ -1,5 +1,3 @@
-// Mount tests for landing `/` (workspace-url-routing task 3.1).
-// Requirements 2.1, 2.2, 8.1.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
