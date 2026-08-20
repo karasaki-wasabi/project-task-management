@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 import type { Task } from "../../../../composables/useApiClient";
 import TaskDetailPage from "./[taskId].vue";
 
@@ -14,9 +15,18 @@ const updateTaskStatus = vi.fn();
 const updateTaskDevelopmentStage = vi.fn();
 const createTask = vi.fn();
 const deleteTask = vi.fn();
-const navigateTo = vi.fn();
-const createError = vi.fn((input: object) => input);
-const showError = vi.fn();
+const { navigateTo, createError, showError } = vi.hoisted(() => ({
+  navigateTo: vi.fn(),
+  createError: vi.fn((input: object) => input),
+  showError: vi.fn(),
+}));
+
+mockNuxtImport("useRoute", () => () => ({
+  params: { workspaceId: "ws-1", taskId: "task-1" },
+}));
+mockNuxtImport("navigateTo", () => navigateTo);
+mockNuxtImport("createError", () => createError);
+mockNuxtImport("showError", () => showError);
 const currentUser = ref({
   id: "user-1",
   name: "山田",
@@ -122,13 +132,6 @@ function mountPage() {
 
 describe("タスク詳細ページ", () => {
   beforeEach(() => {
-    vi.stubGlobal("useRoute", () => ({
-      params: { workspaceId: "ws-1", taskId: "task-1" },
-    }));
-    vi.stubGlobal("navigateTo", navigateTo);
-    vi.stubGlobal("createError", createError);
-    vi.stubGlobal("showError", showError);
-
     getTask.mockResolvedValue(makeTask());
     listTasks.mockResolvedValue([
       makeTask({ id: "parent-1", title: "親タスク", parentTaskId: null }),

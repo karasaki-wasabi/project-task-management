@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 import { reactive, ref } from "vue";
 import App from "./app.vue";
 import UserAvatar from "./components/shared/UserAvatar.vue";
@@ -13,8 +14,7 @@ const WorkspaceSwitcherStub = {
   template: '<div data-testid="workspace-switcher-stub">切替</div>',
 };
 const route = reactive({ path: "/", meta: {} as Record<string, unknown> });
-const logout = vi.fn();
-const navigateTo = vi.fn();
+const { logout, navigateTo } = vi.hoisted(() => ({ logout: vi.fn(), navigateTo: vi.fn() }));
 const currentId = ref<string | null>(null);
 const auth = {
   user: ref<{ id: string; name: string } | null>(null),
@@ -29,6 +29,13 @@ vi.mock("./composables/useCurrentWorkspace", () => ({
     select: vi.fn(),
   }),
 }));
+
+vi.mock("./composables/useAuth", () => ({
+  useAuth: () => auth,
+}));
+
+mockNuxtImport("navigateTo", () => navigateTo);
+mockNuxtImport("useRoute", () => () => route);
 
 function mountApp(stubs: Record<string, unknown> = {}) {
   return mount(App, {

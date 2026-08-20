@@ -1,9 +1,10 @@
+// @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createErrorReportRateLimiter } from "../composables/useErrorReportRateLimit";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 
-const fetchMock = vi.fn();
-const showError = vi.fn();
-const runWithContext = vi.fn((fn: () => unknown) => fn());
+const fetchMock = vi.hoisted(() => vi.fn());
+const showError = vi.hoisted(() => vi.fn());
+const runWithContext = vi.hoisted(() => vi.fn((fn: () => unknown) => fn()));
 
 type ErrorReporter = {
   report: (message: string, stack?: string) => void;
@@ -13,6 +14,13 @@ type ErrorReporter = {
   handleUnhandledRejection: (event: PromiseRejectionEvent) => void;
 };
 
+mockNuxtImport("$fetch", () => fetchMock);
+mockNuxtImport("useRuntimeConfig", () => () => ({
+  public: { apiBaseUrl: "http://backend:3000" },
+}));
+mockNuxtImport("showError", () => showError);
+mockNuxtImport("defineNuxtPlugin", () => <T>(plugin: T) => plugin);
+
 beforeEach(() => {
   vi.resetModules();
   fetchMock.mockReset();
@@ -20,13 +28,6 @@ beforeEach(() => {
   showError.mockReset();
   runWithContext.mockReset();
   runWithContext.mockImplementation((fn: () => unknown) => fn());
-  vi.stubGlobal("$fetch", fetchMock);
-  vi.stubGlobal("useRuntimeConfig", () => ({
-    public: { apiBaseUrl: "http://backend:3000" },
-  }));
-  vi.stubGlobal("showError", showError);
-  vi.stubGlobal("defineNuxtPlugin", <T>(plugin: T) => plugin);
-  vi.stubGlobal("createErrorReportRateLimiter", createErrorReportRateLimiter);
 });
 
 async function createReporter(): Promise<ErrorReporter> {

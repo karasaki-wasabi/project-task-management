@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 import { defineComponent, ref } from "vue";
 import RegisterPage from "./register.vue";
 
 const register = vi.fn();
 const authUser = ref(null);
-const navigateTo = vi.fn();
+const navigateTo = vi.hoisted(() => vi.fn());
 
 vi.mock("../composables/useApiClient", () => ({
   useApiClient: () => ({ register }),
@@ -14,6 +15,8 @@ vi.mock("../composables/useApiClient", () => ({
 vi.mock("../composables/useAuth", () => ({
   useAuth: () => ({ user: authUser }),
 }));
+
+mockNuxtImport("navigateTo", () => navigateTo);
 
 const ErrorAlertStub = defineComponent({
   name: "ErrorAlert",
@@ -34,7 +37,6 @@ describe("RegisterPage (task 6.3)", () => {
     register.mockReset();
     navigateTo.mockReset();
     authUser.value = null;
-    vi.stubGlobal("navigateTo", navigateTo);
   });
 
   it("登録成功時は自動ログイン状態を保存してダッシュボードへ遷移する", async () => {

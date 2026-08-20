@@ -1,7 +1,9 @@
+// @vitest-environment happy-dom
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 import { ref } from "vue";
 import type {
   CaseOutlook,
@@ -20,7 +22,7 @@ import type {
 } from "./useApiClient";
 import { joinApiUrl, useApiClient } from "./useApiClient";
 
-const fetchMock = vi.fn();
+const fetchMock = vi.hoisted(() => vi.fn());
 const currentId = ref<string | null>(null);
 const workspaces = ref<{ id: string }[]>([]);
 const refresh = vi.fn();
@@ -30,6 +32,17 @@ const clientSource = readFileSync(
   "utf8",
 );
 
+mockNuxtImport("useRuntimeConfig", () => () => ({
+  public: { apiBaseUrl: "http://backend:3000" },
+}));
+mockNuxtImport("useCurrentWorkspace", () => () => ({
+  currentId,
+  workspaces,
+  refresh,
+  relocateAfterWorkspaceLost,
+}));
+mockNuxtImport("$fetch", () => fetchMock);
+
 beforeEach(() => {
   fetchMock.mockReset();
   fetchMock.mockResolvedValue(undefined);
@@ -38,16 +51,6 @@ beforeEach(() => {
   refresh.mockReset();
   relocateAfterWorkspaceLost.mockReset();
   refresh.mockResolvedValue(undefined);
-  vi.stubGlobal("$fetch", fetchMock);
-  vi.stubGlobal("useRuntimeConfig", () => ({
-    public: { apiBaseUrl: "http://backend:3000" },
-  }));
-  vi.stubGlobal("useCurrentWorkspace", () => ({
-    currentId,
-    workspaces,
-    refresh,
-    relocateAfterWorkspaceLost,
-  }));
 });
 
 describe("joinApiUrl (task 1.6)", () => {

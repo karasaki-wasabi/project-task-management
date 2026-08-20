@@ -1,4 +1,6 @@
+// @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 import type { Workspace, WorkspaceColor } from "./useApiClient";
 
 const colorA = "color-a" as WorkspaceColor;
@@ -23,12 +25,12 @@ const workspaces: Workspace[] = [
   },
 ];
 
-const state = new Map<string, { value: unknown }>();
-const api = {
+const state = vi.hoisted(() => new Map<string, { value: unknown }>());
+const api = vi.hoisted(() => ({
   listWorkspaces: vi.fn(),
-};
-const navigateTo = vi.fn();
-const route = { path: "/", fullPath: "/", query: {} as Record<string, string> };
+}));
+const navigateTo = vi.hoisted(() => vi.fn());
+const route = vi.hoisted(() => ({ path: "/", fullPath: "/", query: {} as Record<string, string> }));
 const localStorageMock = {
   store: new Map<string, string>(),
   getItem: vi.fn((key: string) => localStorageMock.store.get(key) ?? null),
@@ -39,6 +41,18 @@ const localStorageMock = {
     localStorageMock.store.delete(key);
   }),
 };
+
+mockNuxtImport("useState", () => {
+  return <T>(key: string, initializer: () => T) => {
+    if (!state.has(key)) {
+      state.set(key, { value: initializer() });
+    }
+    return state.get(key) as { value: T };
+  };
+});
+mockNuxtImport("useApiClient", () => () => api);
+mockNuxtImport("navigateTo", () => navigateTo);
+mockNuxtImport("useRoute", () => () => route);
 
 beforeEach(() => {
   vi.resetModules();
@@ -52,16 +66,7 @@ beforeEach(() => {
   localStorageMock.getItem.mockClear();
   localStorageMock.setItem.mockClear();
   localStorageMock.removeItem.mockClear();
-  vi.stubGlobal("useState", <T>(key: string, initializer: () => T) => {
-    if (!state.has(key)) {
-      state.set(key, { value: initializer() });
-    }
-    return state.get(key) as { value: T };
-  });
-  vi.stubGlobal("useApiClient", () => api);
   vi.stubGlobal("localStorage", localStorageMock);
-  vi.stubGlobal("navigateTo", navigateTo);
-  vi.stubGlobal("useRoute", () => route);
 });
 
 describe("useCurrentWorkspace (task 1.2)", () => {
@@ -141,16 +146,7 @@ describe("useCurrentWorkspace (task 1.2)", () => {
 
     state.clear();
     vi.resetModules();
-    vi.stubGlobal("useState", <T>(key: string, initializer: () => T) => {
-      if (!state.has(key)) {
-        state.set(key, { value: initializer() });
-      }
-      return state.get(key) as { value: T };
-    });
-    vi.stubGlobal("useApiClient", () => api);
     vi.stubGlobal("localStorage", localStorageMock);
-    vi.stubGlobal("navigateTo", navigateTo);
-    vi.stubGlobal("useRoute", () => route);
 
     const { useCurrentWorkspace: useCurrentWorkspaceAgain } = await import("./useCurrentWorkspace");
     const second = useCurrentWorkspaceAgain();

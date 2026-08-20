@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 import ErrorPage from "./error.vue";
 
-const clearError = vi.fn();
-const route = { fullPath: "/workspaces/ws-1/tasks/t-1" };
+const { clearError, route } = vi.hoisted(() => ({
+  clearError: vi.fn(),
+  route: { fullPath: "/workspaces/ws-1/tasks/t-1" },
+}));
+
+mockNuxtImport("clearError", () => clearError);
+mockNuxtImport("useRoute", () => () => route);
 
 const CASES = [
   {
@@ -66,8 +72,6 @@ describe("error.vue", () => {
   beforeEach(() => {
     clearError.mockReset();
     route.fullPath = "/workspaces/ws-1/tasks/t-1";
-    vi.stubGlobal("clearError", clearError);
-    vi.stubGlobal("useRoute", () => route);
   });
 
   it.each(CASES)(

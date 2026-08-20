@@ -99,14 +99,18 @@ describe("RecurrenceDetailModal (task 7.1)", () => {
     stopRecurringTemplate.mockResolvedValue(undefined);
     resumeRecurringTemplate.mockResolvedValue(undefined);
     deleteRecurringTemplate.mockResolvedValue(undefined);
-    vi.spyOn(window, "confirm").mockImplementation(() => {
-      throw new Error("window.confirm must not be used");
-    });
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => {
+        throw new Error("window.confirm must not be used");
+      }),
+    );
   });
 
   afterEach(() => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("テンプレートを読み込み、固定間隔のコントロールなしで表示フィールドを表示する", async () => {

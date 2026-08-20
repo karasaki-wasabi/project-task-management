@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 import { defineComponent, ref } from "vue";
 import LoginPage from "./login.vue";
 
 const login = vi.fn();
 const authUser = ref(null);
-const navigateTo = vi.fn();
-const route = { query: {} as Record<string, string | undefined> };
+const { navigateTo, route } = vi.hoisted(() => ({
+  navigateTo: vi.fn(),
+  route: { query: {} as Record<string, string | undefined> },
+}));
 
 vi.mock("../composables/useApiClient", () => ({
   useApiClient: () => ({ login }),
@@ -15,6 +18,9 @@ vi.mock("../composables/useApiClient", () => ({
 vi.mock("../composables/useAuth", () => ({
   useAuth: () => ({ user: authUser }),
 }));
+
+mockNuxtImport("navigateTo", () => navigateTo);
+mockNuxtImport("useRoute", () => () => route);
 
 const ErrorAlertStub = defineComponent({
   name: "ErrorAlert",
@@ -36,8 +42,6 @@ describe("LoginPage (task 6.3)", () => {
     navigateTo.mockReset();
     authUser.value = null;
     route.query = {};
-    vi.stubGlobal("useRoute", () => route);
-    vi.stubGlobal("navigateTo", navigateTo);
   });
 
   it("ログイン成功時は認証状態を保存し、redirect 先へ遷移する", async () => {

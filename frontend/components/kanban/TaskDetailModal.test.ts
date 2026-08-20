@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 import type { Case, DevelopmentStage, Task, User } from "../../composables/useApiClient";
 import StageBadge from "../shared/StageBadge.vue";
 import TaskDetailModal from "./TaskDetailModal.vue";
+
+mockNuxtImport("useRoute", () => () => ({ params: { workspaceId: "w1" } }));
 
 const getTask = vi.fn();
 const listTasks = vi.fn();
@@ -160,7 +163,6 @@ describe("TaskDetailModal (task-status-model 5.3)", () => {
     listTasks.mockReset();
     updateTask.mockReset();
     listTasks.mockResolvedValue([]);
-    vi.stubGlobal("useRoute", () => ({ params: { workspaceId: "w1" } }));
   });
 
   afterEach(() => {
@@ -255,7 +257,6 @@ describe("TaskDetailModal ストーリーポイント（velocity-dashboard 5.2�
     listTasks.mockReset();
     updateTask.mockReset();
     listTasks.mockResolvedValue([]);
-    vi.stubGlobal("useRoute", () => ({ params: { workspaceId: "w1" } }));
   });
 
   afterEach(() => {

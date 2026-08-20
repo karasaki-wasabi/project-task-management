@@ -1,4 +1,6 @@
+// @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
 import type { PublicUser } from "./useApiClient";
 
 const user: PublicUser = {
@@ -9,24 +11,27 @@ const user: PublicUser = {
   updatedAt: "2026-08-09T00:00:00.000Z",
 };
 
-const state = new Map<string, { value: unknown }>();
-const api = {
+const state = vi.hoisted(() => new Map<string, { value: unknown }>());
+const api = vi.hoisted(() => ({
   me: vi.fn(),
   logout: vi.fn(),
-};
+}));
+
+mockNuxtImport("useState", () => {
+  return <T>(key: string, initializer: () => T) => {
+    if (!state.has(key)) {
+      state.set(key, { value: initializer() });
+    }
+    return state.get(key) as { value: T };
+  };
+});
+mockNuxtImport("useApiClient", () => () => api);
 
 beforeEach(() => {
   vi.resetModules();
   state.clear();
   api.me.mockReset();
   api.logout.mockReset();
-  vi.stubGlobal("useState", <T>(key: string, initializer: () => T) => {
-    if (!state.has(key)) {
-      state.set(key, { value: initializer() });
-    }
-    return state.get(key) as { value: T };
-  });
-  vi.stubGlobal("useApiClient", () => api);
 });
 
 describe("useAuth (task 6.2)", () => {
