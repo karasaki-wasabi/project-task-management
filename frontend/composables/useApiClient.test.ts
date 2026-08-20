@@ -8,7 +8,7 @@ import { ref } from "vue";
 import type {
   CaseOutlook,
   CaseTemplateApplyOperation,
-  Comment,
+  TaskComment,
   CreateCaseInput,
   CreateTaskInput,
   RegisterTemplateInput,
@@ -214,7 +214,7 @@ describe("useApiClient のタスク詳細 (task-detail 8)", () => {
   });
 
   it("コメントを作成、更新、および削除", async () => {
-    const comment: Comment = {
+    const comment: TaskComment = {
       id: "comment-1",
       taskId: "task-1",
       authorUserId: "user-1",

@@ -163,12 +163,12 @@ function cancelEditing() {
   editingCommentId.value = null;
 }
 
-async function onEditSuccess(_comment: Comment) {
+async function onEditSuccess(_comment: TaskComment) {
   editingCommentId.value = null;
   await loadTimeline();
 }
 
-async function onCreateSuccess(_comment: Comment) {
+async function onCreateSuccess(_comment: TaskComment) {
   await loadTimeline();
 }
 

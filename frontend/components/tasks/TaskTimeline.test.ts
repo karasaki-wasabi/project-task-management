@@ -4,7 +4,7 @@ import type { ComponentMountingOptions } from "@vue/test-utils";
 import TaskTimeline from "./TaskTimeline.vue";
 import UserAvatar from "../shared/UserAvatar.vue";
 import type {
-  Comment,
+  TaskComment,
   TaskTimelineChange,
   TaskTimelineComment,
   TaskTimelineFilter,
@@ -14,9 +14,9 @@ import type {
 
 const getTaskTimeline =
   vi.fn<(taskId: string, options: TaskTimelineOptions) => Promise<TaskTimelinePage>>();
-const createComment = vi.fn<(taskId: string, body: string) => Promise<Comment>>();
+const createComment = vi.fn<(taskId: string, body: string) => Promise<TaskComment>>();
 const updateComment =
-  vi.fn<(taskId: string, commentId: string, body: string) => Promise<Comment>>();
+  vi.fn<(taskId: string, commentId: string, body: string) => Promise<TaskComment>>();
 const deleteComment = vi.fn<(taskId: string, commentId: string) => Promise<void>>();
 
 vi.mock("../../composables/useApiClient", async (importOriginal) => {

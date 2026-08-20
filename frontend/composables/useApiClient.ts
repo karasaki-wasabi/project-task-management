@@ -59,7 +59,7 @@ export interface TaskListFilter {
   excludeClosed?: boolean;
 }
 
-export interface Comment {
+export interface TaskComment {
   id: string;
   taskId: string;
   authorUserId: string;
@@ -78,7 +78,7 @@ export interface TaskTimelineOptions {
   limit?: number;
 }
 
-export interface TaskTimelineComment extends Comment {
+export interface TaskTimelineComment extends TaskComment {
   type: "comment";
   occurredAt: string;
 }
@@ -411,9 +411,9 @@ export function useApiClient() {
       }),
     deleteTask: (id: string) => request<void>(`/api/tasks/${id}`, { method: "DELETE" }),
     createComment: (taskId: string, body: string) =>
-      request<Comment>(`/api/tasks/${taskId}/comments`, { method: "POST", body: { body } }),
+      request<TaskComment>(`/api/tasks/${taskId}/comments`, { method: "POST", body: { body } }),
     updateComment: (taskId: string, commentId: string, body: string) =>
-      request<Comment>(`/api/tasks/${taskId}/comments/${commentId}`, {
+      request<TaskComment>(`/api/tasks/${taskId}/comments/${commentId}`, {
         method: "PATCH",
         body: { body },
       }),

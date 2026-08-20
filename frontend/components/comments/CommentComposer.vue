@@ -7,7 +7,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  success: [comment: Comment];
+  success: [comment: TaskComment];
   cancel: [];
 }>();
 
@@ -36,7 +36,7 @@ async function submit() {
 
   submitting.value = true;
   try {
-    let comment: Comment;
+    let comment: TaskComment;
     if (props.mode === "edit") {
       if (!props.commentId) {
         error.value = "編集するコメントを指定してください";
