@@ -84,3 +84,54 @@
 
 - [x] module-boundary-cleanup -- クロスモジュールの repository／Prisma 直呼びを、通常の service および読み取り／整合専用公開面（`caseReadService`／`taskIntegrityService`、必要なら `client?: DbClient`）へ寄せ、整合・集計・初期投入の所有を明示する。Dependencies: none（既存モジュール実装に対する修復。完了後は velocity-dashboard の集計公開面の前提になる）
 
+## Phase: API load testing and list performance
+
+カレンダーの `GET /api/tasks` が約 6000 件で固まる問題をきっかけに、一覧系 API のデータ量負荷と同時アクセス用ハーネスを整え、計測結果に基づいて一覧 GET を改善する。データ量を本丸とし、同時アクセスは本番寄り環境で回せるシナリオまでリポジトリに置く（ローカル Docker を本番級の同時負荷対象にはしない）。
+
+### Approach Decision（本 Phase）
+
+- Chosen
+  - Grafana k6 でシナリオ（データ量／同時アクセス）を記述
+  - 大量データは専用シード（専用ワークスペース、開発 seed / E2E と分離）
+  - 改善は計測後に `GET /api/tasks` を優先し、他の無制限一覧へ展開
+- Why
+  - 同時アクセス用ハーネスを本番寄り環境へ持ち運べる
+  - Cookie セッション + `X-Workspace-Id` の GET 負荷と相性が良い（変更系 CSRF は GET 負荷に不要）
+  - 計測と改善・データ投入のレビュー単位を分けられる
+- Rejected alternatives
+  - Node 内製（autocannon 等）のみ: Compose 内完結は楽だが、本番寄り同時アクセスの標準感で k6 に劣る
+  - Vitest の応答時間アサートのみ: 同時アクセス／本番寄り実行の土台にならない
+
+### Scope（本 Phase）
+
+- In
+  - 一覧 GET のデータ量計測と、必要に応じた改善
+  - 同時アクセス用 k6 シナリオと実行手順（実行自体は本番寄り環境向け）
+  - 規模データ投入コマンド（専用 WS）
+- Out
+  - フロント描画固まりの改善
+  - 書き込み API の負荷
+  - CI での毎回必須ゲート化
+  - AWS 上での実負荷実行そのもの（スクリプトと手順の整備は In）
+
+### Constraints（本 Phase）
+
+- k6 バイナリはホストまたは公式イメージ。スクリプトはリポジトリ管理（AGPL はバイナリ側。通常スクリプトは汚染しない）
+- 大規模 seed と負荷は専用ワークスペースに閉じ、Vitest / E2E 共有 DB 運用と衝突させない掃除方針を持つ
+- 凍結済み機能スペック文書は更新せず、コードと本 Phase の新スペックで進める
+
+### Boundary Strategy（本 Phase）
+
+- Why this split
+  - ハーネス、データ投入、API 改善は失敗モードとレビュー観点が異なる
+- Shared seams to watch
+  - 認証 setup（login Cookie / 必要なら CSRF 取得後の jar）と `X-Workspace-Id`
+  - seed 対象 WS と計測ターゲットの一致
+  - 一覧契約変更（日付範囲・ページネーション等）がカレンダー／カンバン／タスク一覧に与える影響
+
+### Specs (dependency order)
+
+- [x] scale-data-seed -- 一覧負荷用の大量データを専用ワークスペースへ投入するシード／コマンド。Dependencies: none
+- [ ] api-load-harness -- k6 による一覧 GET のデータ量・同時アクセスシナリオと実行手順。Dependencies: none（大規模シナリオの前提データは scale-data-seed）
+- [ ] list-api-performance -- 計測に基づく一覧 GET 改善（`GET /api/tasks` 優先、他一覧は必要に応じて）。Dependencies: scale-data-seed, api-load-harness
+
