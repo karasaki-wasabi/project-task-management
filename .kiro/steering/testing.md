@@ -36,7 +36,7 @@
   - 自プロジェクトの`composables/`配下の関数（`useApiClient`/`useCurrentWorkspace`/`useAuth`等）も同じ理由で`mockNuxtImport`が必要（`vi.mock("../composables/useXxx", ...)`による相対パス指定のモックは従来通り機能する）
 - **コンポーネントを`mount()`しないテストの環境オーバーライド**: 合成関数・middleware・pluginを直接呼ぶだけでコンポーネントを一切マウントしないテストファイルは、`@nuxt/test-utils`の内部セットアップ（ルーター初期化待ち）がハングすることがある。ファイル先頭に`// @vitest-environment happy-dom`を書いて環境を上書きすること（`mockNuxtImport`自体はコンパイル時マクロなので環境に関わらず機能し続ける）。参考: `frontend/composables/useApiClient.test.ts`、`frontend/middleware/auth.global.test.ts`
 - **happy-domの未実装API**: happy-domは`window.confirm`/`alert`/`prompt`を実装していない。`vi.spyOn(window, "confirm")`は「関数ではない」エラーになるので、`vi.stubGlobal("confirm", vi.fn(...))`で代替する
-- **ビルド先の分離**: `.nuxt/`の所有者不一致（[[local-dev-pitfalls]] 項目12）を避けるため、`environmentOptions.nuxt.overrides.buildDir`で`.nuxt-vitest/`という専用ディレクトリへ逃がしている
+- **ビルド先の分離**: `.nuxt/`の所有者不一致（[[local-dev-pitfalls]] 項目13）を避けるため、`environmentOptions.nuxt.overrides.buildDir`で`.nuxt-vitest/`という専用ディレクトリへ逃がしている
 
 ## 共有MySQLとテスト種別ごとの干渉リスク
 
@@ -48,7 +48,7 @@
 | Frontend Vitest | 低（DB非使用） | 特になし |
 | Playwright E2E | 高（実行間でデータ蓄積） | `globalSetup` で TRUNCATE、`workers: 1`、WS単位のfixture |
 
-Backend と E2E を同時に同じ DB へ向けないこと。E2E の globalSetup はアプリテーブルを空にする。
+Backend と E2E を同時に同じ DB へ向けないこと。E2E の globalSetup はアプリテーブルを空にする。負荷計測用の規模シード（`db:seed-scale` / `db:cleanup-scale`）も Vitest / E2E と同時に同じ共有 DB へ向けない（手順は [[local-dev-pitfalls]] §12）。
 
 ## 実MySQL共有による Backend テスト間干渉
 

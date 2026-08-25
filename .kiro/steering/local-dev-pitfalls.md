@@ -84,7 +84,37 @@ MySQLの`STORED GENERATED COLUMN`+`UNIQUE INDEX`のように、Prismaスキー�
 
 このシードは本番投入用ではない。E2E 専用の使い捨てデータとは別物として扱う。
 
-### 12. `frontend/.nuxt` の所有者不一致で typecheck / prepare が落ちる
+### 12. 負荷計測用規模シード
+一覧 API やカレンダーの負荷を手元／共有開発 DB で再現するための、デモシード（§11）とは別入口の規模データ投入。負荷シナリオ本体・閾値・一覧 API の改善内容は本手順の対象外（後続の `api-load-harness` / `list-api-performance` 側）。本番・共有ステージングへの無秩序な投入は禁止する。
+
+- 投入
+  - `docker compose run --rm -T backend npm run db:seed-scale`
+  - 件数を変えるとき
+    - `docker compose run --rm -T -e SCALE_TASK_COUNT=8000 backend npm run db:seed-scale`
+  - `SCALE_TASK_COUNT` 未設定時の既定は 6000（`backend/src/prisma/scale-data.constants.ts` の `SCALE_DEFAULT_TASK_COUNT`）
+  - 正の整数以外は失敗終了する
+  - デモ用 `db:seed` のような全表消去は行わない。同一専用 WS への再実行は累積せず、指定件数に整える
+- 計測用資格情報とワークスペース ID
+  - 正本は `backend/src/prisma/scale-data.constants.ts`
+  - メール
+    - `scale-load@example.com`（`SCALE_LOGIN_EMAIL`）
+  - パスワード
+    - `scale-load@example.com`（`SCALE_LOGIN_PASSWORD`）
+  - 専用ワークスペース ID
+    - `99999999-9999-4999-8999-999999999902`（`SCALE_WORKSPACE_ID`）
+  - 成功時の stdout サマリにも WS ID・件数・メールが出る。後続計測は専用 WS 上の規模タスクを前提にする
+- 計測完了後の片付け（推奨）
+  - 既存の確認用デモへ戻す `db:seed`（§11）を使う
+  - 内部で全表消去のうえ少数デモを再投入する。規模データも、デモ以外の手動データも消える
+  - 意図した片付けとしても使える。E2E の全表リセット（`db:reset-for-e2e` / Playwright globalSetup）でも規模データは消える
+- 任意の WS スコープ掃除
+  - 全表消去せず規模 WS だけ外したいとき: `docker compose run --rm -T backend npm run db:cleanup-scale`
+  - 日常の「計測終わり」は上記の `db:seed` を推奨する
+- 共有 DB 上の注意
+  - Backend Vitest / Playwright E2E と同時に、同じ共有 DB へ規模投入・掃除を向けない（[[testing]] の共有 MySQL 節も参照）
+  - 開発用 `db:seed` や E2E リセットを実行すると規模データも消える前提で運用する
+
+### 13. `frontend/.nuxt` の所有者不一致で typecheck / prepare が落ちる
 `docker compose` の frontend サービス（しばしば root）と `docker compose run ... frontend`（イメージ既定の `node`）が同じ bind-mount の `frontend/.nuxt/` を共有する。どちらかが `nuxt prepare` / `nuxt typecheck` / `nuxt dev` で再生成すると、もう一方のユーザーから書き込めず `EACCES` や `tsconfig.json` 欠落で失敗する。ホストから直接 `npm run typecheck` しても同様に起きうる。
 → 型チェックは原則 `docker compose run --rm --no-deps -T frontend npm run typecheck` で実行する。壊れたら常駐 frontend 側で `docker compose exec frontend npx nuxt prepare` し、所有者を揃えてから再実行する。
 
